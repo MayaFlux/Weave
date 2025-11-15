@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #1d1d1f;
+        }
+
+        p {
+            color: #6e6e73;
+            line-height: 1.6;
+        }
+
+        code {
+            background: #f5f5f7;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .highlight-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 12px 16px;
+            margin: 16px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Installation Complete!</h1>
+    <p>MayaFlux has been successfully installed via Weave.</p>
+
+    <div class="highlight-box">
+        <p><strong>🎉 Create Your First Project</strong></p>
+        <p>Weave will launch automatically. Use it to create your first MayaFlux project with a custom name and
+            location.</p>
+        <p>You can also find Weave later in <code>/Applications/Weave.app</code></p>
+    </div>
+
+    <p><strong>Alternative: Using the CLI</strong></p>
+    <ol>
+        <li>Open a new Terminal window</li>
+        <li>Create a project:
+            <pre><code>weave new MyFirstProject ~/Projects/</code></pre>
+        </li>
+        <li>Build and run:
+            <pre><code>cd ~/Projects/MyFirstProject
+                    mkdir build && cd build
+                    cmake .. && make
+                    ./MyFirstProject</code></pre>
+        </li>
+    </ol>
+
+    <p><strong>Documentation:</strong> <a href="https://github.com/MayaFlux/MayaFlux">github.com/MayaFlux/MayaFlux</a>
+    </p>
+</body>
+
+</html>
