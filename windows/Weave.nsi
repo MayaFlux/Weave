@@ -33,6 +33,7 @@ Var MayaFluxDownloadUrl
 Var SkipDownload
 Var TempDir
 Var ScriptsDir
+Var ASSET_NAME
 
 ; ============================================================================
 ; MODERN UI2 SETUP
@@ -172,31 +173,64 @@ Function DownloadMayaFlux
   ${If} $SkipDownload == "true"
     Return
   ${EndIf}
-  
-  Push "Downloading latest MayaFlux release"
+
+  Push "Fetching latest MayaFlux release info..."
   Call LogMessage
-  
-  ; TODO: Parse actual release from GitHub API
-  ; For now, use hardcoded version - update when releases are available
+
   StrCpy $MayaFluxRepo "MayaFlux/MayaFlux"
-  StrCpy $MayaFluxTag "v0.1.0"
-  StrCpy $MayaFluxDownloadUrl "https://github.com/$MayaFluxRepo/releases/download/$MayaFluxTag/MayaFlux-$MayaFluxTag-windows-x64.zip"
-  
+
+  ; -----------------------------------------
+  ; 1. Get release tag via PowerShell
+  ; -----------------------------------------
+  nsExec::ExecToStack 'powershell -NoProfile -Command "(Invoke-WebRequest ''https://github.com/MayaFlux/MayaFlux/releases'').Content | Select-String -Pattern ''/MayaFlux/MayaFlux/releases/tag/([^\"\""]+)'' | Select-Object -First 1 | ForEach-Object { $_.Matches[0].Groups[1].Value }"'
+  Pop $0
+  Pop $MayaFluxTag
+
+  ${If} $MayaFluxTag == ""
+    Push "ERROR: Could not detect latest release tag"
+    Call LogError
+    Return
+  ${EndIf}
+
   Push "Latest release: $MayaFluxTag"
   Call LogMessage
-  
+
+  ; -----------------------------------------
+  ; 2. Get Windows asset name
+  ; -----------------------------------------
+  nsExec::ExecToStack 'powershell -NoProfile -Command "$u=''https://github.com/MayaFlux/MayaFlex/releases/expanded_assets/' + ''$MayaFluxTag''; (Invoke-WebRequest $u).Content | Select-String -Pattern ''MayaFlux-.*windows.*\.zip'' | Select-Object -First 1 | ForEach-Object { $_.Matches[0].Value }"'
+  Pop $0
+  Pop $ASSET_NAME
+
+  ${If} $ASSET_NAME == ""
+    Push "ERROR: No Windows asset found for $MayaFluxTag"
+    Call LogError
+    Return
+  ${EndIf}
+
+  Push "Found asset: $ASSET_NAME"
+  Call LogMessage
+
+  ; -----------------------------------------
+  ; 3. Build final download URL
+  ; -----------------------------------------
+  StrCpy $MayaFluxDownloadUrl "https://github.com/MayaFlux/MayaFlux/releases/download/$MayaFluxTag/$ASSET_NAME"
+
   DetailPrint "Downloading: $MayaFluxDownloadUrl"
   Push "Downloading from: $MayaFluxDownloadUrl"
   Call LogMessage
-  
+
+  ; -----------------------------------------
+  ; 4. Download the asset
+  ; -----------------------------------------
   NSISdl::download "$MayaFluxDownloadUrl" "$TempDir\mayaflux.zip"
   Pop $0
-  
+
   ${If} $0 != "success"
     Push "Download failed: $0"
     Call LogError
   ${EndIf}
-  
+
   Push "Download successful"
   Call LogMessage
 FunctionEnd
