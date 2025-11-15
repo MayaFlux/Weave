@@ -50,6 +50,11 @@ jobs:
           chmod +x macos/scripts/build_weave_app.sh
           chmod +x macos/Weave.sh
 
+      - name: Make verification scripts executable
+        run: |
+          chmod +x .github/scripts/verify-macos-build.sh
+          chmod +x .github/scripts/generate-release-body.sh
+
       - name: Build installer package (includes Swift app)
         run: |
           ./macos/scripts/create_pkg.sh ${{ steps.version.outputs.VERSION }}
@@ -157,6 +162,25 @@ jobs:
 
           if ($LASTEXITCODE -ne 0) {
             Write-Host "[ERROR] Build failed" -ForegroundColor Red
+            exit 1
+          }
+
+      - name: Rename installer for distribution
+        shell: powershell
+        run: |
+          $buildDir = "build\windows"
+          $version = "${{ steps.version.outputs.VERSION }}"
+          $source = Join-Path $buildDir "Weave.exe"
+          $dest = Join-Path $buildDir "Weave-$version.exe"
+
+          if (Test-Path $source) {
+            Move-Item $source $dest -Force
+            Write-Host "[OK] Renamed to: $dest" -ForegroundColor Green
+          } else {
+            Write-Host "[ERROR] Source file not found: $source" -ForegroundColor Red
+            # List what's actually in the directory
+            Write-Host "Contents of $buildDir :" -ForegroundColor Yellow
+            Get-ChildItem $buildDir -Recurse | Format-Table Name, Length
             exit 1
           }
 
