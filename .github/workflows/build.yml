@@ -1,0 +1,219 @@
+name: Build Weave Installers
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [macos-14, windows-latest]
+        include:
+          - os: macos-14
+            installer_extension: pkg
+            build_script: macos/scripts/create_pkg.sh
+            output_pattern: build/macos/Weave-*.pkg
+          - os: windows-latest
+            installer_extension: exe
+            build_script: windows/scripts/create_installer.ps1
+            output_pattern: build/windows/Weave-*.exe
+
+    runs-on: ${{ matrix.os }}
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+      sha256_${{ matrix.os }}: ${{ steps.hash.outputs.SHA256 }}
+      installer_path_${{ matrix.os }}: ${{ steps.version.outputs.INSTALLER_PATH }}
+
+    steps:
+      - name: Checkout Weave
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION="0.1.0-$(git rev-parse --short HEAD)"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "INSTALLER_PATH=build/${{ matrix.os }}/Weave-${VERSION}.${{ matrix.installer_extension }}" >> $GITHUB_OUTPUT
+
+      - name: Setup build environment (macOS)
+        if: matrix.os == 'macos-14'
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Verify Swift toolchain (macOS)
+        if: matrix.os == 'macos-14'
+        run: |
+          echo "=== Swift Version ==="
+          swift --version
+          echo ""
+          echo "=== Xcode SDK Path ==="
+          xcrun --show-sdk-path
+          echo ""
+          echo "=== Available SDKs ==="
+          xcodebuild -showsdks
+
+      - name: Install NSIS (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: powershell
+        run: |
+          Write-Host "Installing NSIS..." -ForegroundColor Cyan
+          choco install nsis -y --no-progress
+          Write-Host "NSIS installed successfully" -ForegroundColor Green
+
+      - name: Verify NSIS installation (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: powershell
+        run: |
+          $nsis = "C:\Program Files (x86)\NSIS\makensis.exe"
+          if (Test-Path $nsis) {
+            Write-Host "[OK] NSIS found at: $nsis" -ForegroundColor Green
+            & $nsis -VERSION
+          } else {
+            Write-Host "[ERROR] NSIS not found" -ForegroundColor Red
+            exit 1
+          }
+
+      - name: Make scripts executable (macOS)
+        if: matrix.os == 'macos-14'
+        run: |
+          chmod +x macos/scripts/create_pkg.sh
+          chmod +x macos/scripts/build_weave_app.sh
+          chmod +x macos/Weave.sh
+
+      - name: Verify source files (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: powershell
+        run: |
+          .\.github\scripts\verify-windows-files.ps1
+
+      - name: Build installer
+        run: |
+          if [ "${{ matrix.os }}" = "macos-14" ]; then
+            ./${{ matrix.build_script }} ${{ steps.version.outputs.VERSION }}
+          else
+            pwsh -Command ".\${{ matrix.build_script }} -Version ${{ steps.version.outputs.VERSION }}"
+          fi
+
+      - name: Verify build outputs
+        run: |
+          if [ "${{ matrix.os }}" = "macos-14" ]; then
+            ./.github/scripts/verify-macos-build.sh ${{ steps.version.outputs.VERSION }}
+          else
+            pwsh -Command "\.\.github\scripts\verify-windows-build.ps1 -Version ${{ steps.version.outputs.VERSION }}"
+          fi
+
+      - name: Test Weave.app (macOS smoke test)
+        if: matrix.os == 'macos-14'
+        run: |
+          echo "=== Testing Weave.app bundle structure ==="
+          if [ ! -f "build/macos/WeaveApp/Weave.app/Contents/MacOS/Weave" ]; then
+            echo "❌ Weave executable not found in app bundle"
+            exit 1
+          fi
+          echo "✅ Weave executable exists"
+
+          if [ ! -f "build/macos/WeaveApp/Weave.app/Contents/Info.plist" ]; then
+            echo "❌ Info.plist not found"
+            exit 1
+          fi
+          echo "✅ Info.plist exists"
+
+          echo ""
+          echo "=== Verifying code signature ==="
+          codesign -vv build/macos/WeaveApp/Weave.app || echo "⚠️ Code signature verification failed (expected for ad-hoc signing)"
+
+      - name: Generate SHA256 hash
+        id: hash
+        run: |
+          if [ "${{ matrix.os }}" = "macos-14" ]; then
+            SHA256=$(shasum -a 256 "${{ steps.version.outputs.INSTALLER_PATH }}" | cut -d ' ' -f 1)
+          else
+            SHA256=$(pwsh -Command "(Get-FileHash '${{ steps.version.outputs.INSTALLER_PATH }}' -Algorithm SHA256).Hash")
+          fi
+          echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Weave-${{ steps.version.outputs.VERSION }}-${{ matrix.os }}
+          path: ${{ steps.version.outputs.INSTALLER_PATH }}
+          retention-days: 30
+
+      - name: Upload debug artifacts (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-debug-${{ steps.version.outputs.VERSION }}-${{ matrix.os }}
+          path: |
+            build/${{ matrix.os }}/
+          retention-days: 7
+
+  publish-release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Weave-${{ needs.build.outputs.version }}-macos-14
+          path: ./packages/macos
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Weave-${{ needs.build.outputs.version }}-windows-latest
+          path: ./packages/windows
+
+      - name: Verify artifacts
+        run: |
+          echo "=== macOS Artifact ==="
+          ls -lh ./packages/macos/ || echo "No macOS artifact"
+          echo ""
+          echo "=== Windows Artifact ==="
+          ls -lh ./packages/windows/ || echo "No Windows artifact"
+          echo ""
+
+          # Check that at least one artifact exists
+          if [ ! -f "./packages/macos/Weave-${{ needs.build.outputs.version }}.pkg" ] && [ ! -f "./packages/windows/Weave-${{ needs.build.outputs.version }}.exe" ]; then
+            echo "❌ No artifacts found!"
+            exit 1
+          fi
+
+      - name: Generate release body
+        id: generate_release_body
+        run: |
+          # Generate release body from template
+          ./.github/scripts/generate-release-body.sh \
+            --version "${{ needs.build.outputs.version }}" \
+            --macos-sha256 "${{ needs.build.outputs.sha256_macos-14 }}" \
+            --windows-sha256 "${{ needs.build.outputs.sha256_windows-latest }}" \
+            --output release-body.md
+
+          echo "Generated release body:"
+          cat release-body.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            packages/macos/Weave-*.pkg
+            packages/windows/Weave-*.exe
+          body_path: release-body.md
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
