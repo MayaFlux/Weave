@@ -11,9 +11,14 @@ static class Program
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
 
-        var modeDetector = new ModeDetector();
-        var mode = modeDetector.DetectMode();
+        var modeSelector = new ModeSelector();
+        if (modeSelector.ShowDialog() != DialogResult.OK || modeSelector.SelectedMode == null)
+        {
+            Application.Exit();
+            return;
+        }
 
+        var mode = modeSelector.SelectedMode.Value;
         var mainWindow = new MainWindow(mode);
         Application.Run(mainWindow);
     }

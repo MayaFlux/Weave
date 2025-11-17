@@ -1,13 +1,16 @@
+using System;
+using System.Windows.Forms;
 using Weave.Shared.Models;
 using Weave.Modes;
+using Weave.UI.Pages;
 
 namespace Weave.UI;
 
 public partial class MainWindow : Form
 {
     private WeaveMode currentMode;
-    private IWeaveMode modeHandler;
-    private Panel contentPanel;
+    private IWeaveMode? modeHandler;
+    private Panel? contentPanel;
 
     public MainWindow(WeaveMode mode)
     {
@@ -15,6 +18,11 @@ public partial class MainWindow : Form
         InitializeComponent();
         SetupUI();
         ShowMode();
+    }
+
+    private void InitializeComponent()
+    {
+        // WinForms designer - can be empty if not using designer
     }
 
     private void SetupUI()
@@ -28,7 +36,6 @@ public partial class MainWindow : Form
         MinimizeBox = true;
         Icon = SystemIcons.Application;
 
-        // Content panel (will be replaced by mode-specific UI)
         contentPanel = new Panel
         {
             Dock = DockStyle.Fill,
@@ -39,6 +46,9 @@ public partial class MainWindow : Form
 
     private void ShowMode()
     {
+        if (contentPanel == null)
+            return;
+
         switch (currentMode)
         {
             case WeaveMode.Installation:
@@ -51,6 +61,9 @@ public partial class MainWindow : Form
                 throw new InvalidOperationException($"Unknown mode: {currentMode}");
         }
 
-        modeHandler.Initialize(contentPanel);
+        if (modeHandler != null)
+        {
+            modeHandler.Initialize(contentPanel);
+        }
     }
 }

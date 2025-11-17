@@ -9,6 +9,12 @@
     <Nullable>enable</Nullable>
     <AssemblyName>Weave</AssemblyName>
     <LangVersion>latest</LangVersion>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <!-- Root namespace for all classes -->
+  <PropertyGroup>
+    <RootNamespace>Weave</RootNamespace>
   </PropertyGroup>
 
   <!-- Embed templates from root (shared across platforms) -->

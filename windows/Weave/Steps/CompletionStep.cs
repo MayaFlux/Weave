@@ -1,5 +1,10 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Windows.Forms;
 using Weave.Shared.Models;
 using Weave.Modes;
+using Weave.Utils;
 
 namespace Weave.UI.Pages;
 
