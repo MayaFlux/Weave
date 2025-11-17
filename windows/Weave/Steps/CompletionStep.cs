@@ -1,94 +1,117 @@
 using System;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
-using Weave.Shared.Models;
 using Weave.Modes;
+using Weave.Shared.Models;
+using Weave.Theme;
+using Weave.UI.Layout;
 using Weave.Utils;
 
 namespace Weave.UI.Pages;
 
 public class CompletionStep : IInstallationStep
 {
-    public Panel CreateUI(InstallationConfig config, Action<string> logCallback, Action nextCallback, InstallationMode parent)
+    private Logger logger = new();
+
+    public void BuildUI(
+        LayoutManager layout,
+        InstallationConfig config,
+        Action<string> logCallback,
+        Action nextCallback)
     {
-        var panel = new Panel { BackColor = Color.White, Padding = new Padding(20) };
+        layout.AddTitle("Installation Complete!");
 
-        var titleLabel = new Label
-        {
-            Text = "Installation Complete!",
-            Font = new Font("Segoe UI", 16, FontStyle.Bold),
-            AutoSize = true,
-            Location = new Point(0, 20),
-            ForeColor = Color.FromArgb(16, 124, 16)
-        };
-        panel.Controls.Add(titleLabel);
+        layout.AddSubtitle("MayaFlux has been successfully installed.");
 
-        var messageLabel = new Label
+        var detailsLabel = new Label
         {
-            Text = "MayaFlux has been successfully installed.",
-            Font = new Font("Segoe UI", 11),
-            AutoSize = true,
-            Location = new Point(0, 60)
+            Text = "Installation Details:",
+            Font = new Font("Segoe UI", 10, FontStyle.Bold),
+            ForeColor = ThemeColors.TextPrimary,
+            BackColor = ThemeColors.BackgroundDark,
+            AutoSize = true
         };
-        panel.Controls.Add(messageLabel);
+        layout.AddToStack(detailsLabel, LayoutConstants.SpacingSmall);
+
+        var detailsBox = new TextBox
+        {
+            Multiline = true,
+            ReadOnly = true,
+            Font = new Font("Consolas", 9),
+            BackColor = ThemeColors.BackgroundMedium,
+            ForeColor = ThemeColors.TextPrimary,
+            BorderStyle = BorderStyle.FixedSingle,
+            Height = 80,
+            Width = layout.GetUsableWidth(),
+            Text = $"Location: {config.MayaFluxRoot}\nTemplates: {config.TemplatesDirectory}\nScripts: {config.ScriptsDirectory}"
+        };
+        layout.AddToStack(detailsBox,  LayoutConstants.SpacingLarge);
+
+        var stepsLabel = new Label
+        {
+            Text = "Next Steps:",
+            Font = new Font("Segoe UI", 10, FontStyle.Bold),
+            ForeColor = ThemeColors.TextPrimary,
+            BackColor = ThemeColors.BackgroundDark,
+            AutoSize = true
+        };
+        layout.AddToStack(stepsLabel,  LayoutConstants.SpacingSmall);
 
         var instructionsBox = new TextBox
         {
             Multiline = true,
             ReadOnly = true,
             Font = new Font("Consolas", 9),
-            BackColor = Color.FromArgb(240, 240, 240),
-            Location = new Point(0, 100),
-            Width = panel.Width - 40,
-            Height = 200,
-            Text = $@"Installation Details:
-Location: {config.MayaFluxRoot}
-Templates: {config.TemplatesDirectory}
+            BackColor = ThemeColors.BackgroundMedium,
+            ForeColor = ThemeColors.TextPrimary,
+            BorderStyle = BorderStyle.FixedSingle,
+            Height = 140,
+            Width = layout.GetUsableWidth(),
+            Text = @"1. Restart your terminal/PowerShell completely
 
-Next Steps:
-1. Restart your terminal completely
-2. Verify installation: cmake --version
-3. Create a new project: weave new MyProject
-4. Build: cd MyProject && mkdir build && cd build && cmake .. && cmake --build . --config Release
+2. Verify installation:
+   cmake --version
+   weave --version
+
+3. Create a new project:
+   weave new MyProject C:\MyProjects
+
+4. Build and run:
+   cd MyProject\build
+   cmake .. -DCMAKE_BUILD_TYPE=Release
+   cmake --build . --config Release
 
 Documentation: https://github.com/MayaFlux/MayaFlux"
         };
-        panel.Controls.Add(instructionsBox);
+        layout.AddToStack(instructionsBox,  LayoutConstants.SpacingLarge);
 
-        var exitButton = new Button
-        {
-            Text = "Exit",
-            Width = 100,
-            Height = 40,
-            Location = new Point(panel.Width - 120, panel.Height - 60),
-            BackColor = Color.FromArgb(0, 120, 215),
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat
-        };
-        exitButton.Click += (s, e) => Application.Exit();
-        panel.Controls.Add(exitButton);
+        layout.AddFlexibleSpacer();
 
-        var logButton = new Button
+        var viewLogBtn = layout.AddButton("View Log", ThemeColors.ButtonSecondary);
+        viewLogBtn.Click += (s, e) =>
         {
-            Text = "View Log",
-            Width = 100,
-            Height = 40,
-            Location = new Point(panel.Width - 240, panel.Height - 60),
-            BackColor = Color.FromArgb(100, 100, 100),
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat
-        };
-        logButton.Click += (s, e) =>
-        {
-            var logPath = new Logger().GetLogFile();
+            var logPath = logger.GetLogFile();
             if (File.Exists(logPath))
             {
-                System.Diagnostics.Process.Start("notepad", logPath);
+                try
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "notepad.exe",
+                        Arguments = logPath,
+                        UseShellExecute = true
+                    });
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Failed to open log: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             }
         };
-        panel.Controls.Add(logButton);
 
-        return panel;
+        var exitBtn = layout.AddButton("Exit", ThemeColors.ButtonPrimary);
+        exitBtn.Click += (s, e) => Application.Exit();
     }
 }

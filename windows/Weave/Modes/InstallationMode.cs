@@ -1,6 +1,10 @@
+using System;
+using System.Windows.Forms;
 using Weave.Shared;
 using Weave.Shared.Models;
 using Weave.UI.Pages;
+using Weave.UI.Layout;
+using Weave.Theme;
 
 namespace Weave.Modes;
 
@@ -8,6 +12,7 @@ public class InstallationMode : IWeaveMode
 {
     private InstallationConfig config = new();
     private Panel? containerPanel;
+    private LayoutManager? layoutManager;
     private int currentStep = 0;
     private IInstallationStep[] steps = Array.Empty<IInstallationStep>();
 
@@ -15,8 +20,10 @@ public class InstallationMode : IWeaveMode
     {
         containerPanel = container;
         containerPanel.Controls.Clear();
+        containerPanel.BackColor = ThemeColors.BackgroundDark;
 
-        // Initialize steps
+        layoutManager = new LayoutManager(containerPanel);
+
         steps = new IInstallationStep[]
         {
             new SystemCheckStep(),
@@ -32,25 +39,28 @@ public class InstallationMode : IWeaveMode
 
     private void ShowStep(int stepIndex)
     {
-        if (stepIndex >= steps.Length)
+        if (stepIndex >= steps.Length || layoutManager == null)
             return;
 
         currentStep = stepIndex;
-        containerPanel?.Controls.Clear();
+
+        layoutManager.Clear();
 
         var step = steps[stepIndex];
-        var stepPanel = step.CreateUI(config, LogCallback, NextStepCallback, this);
+        step.BuildUI(
+            layoutManager,
+            config,
+            LogCallback,
+            NextStepCallback
+        );
 
-        if (stepPanel != null && containerPanel != null)
-        {
-            stepPanel.Dock = DockStyle.Fill;
-            containerPanel.Controls.Add(stepPanel);
-        }
+        layoutManager.RefreshLayout();
     }
 
     private void LogCallback(string message)
     {
-        // Will be implemented in step UI
+        // Log messages are handled by individual steps updating their textboxes
+        // This callback could be used for central logging if needed
     }
 
     private void NextStepCallback()

@@ -1,6 +1,12 @@
+using System;
+using System.Drawing;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using Weave.Modes;
 using Weave.Shared;
 using Weave.Shared.Models;
-using Weave.Modes;
+using Weave.Theme;
+using Weave.UI.Layout;
 using Weave.Utils;
 
 namespace Weave.UI.Pages;
@@ -9,117 +15,125 @@ public class EnvironmentSetupStep : IInstallationStep
 {
     private Logger logger = new();
     private bool setupSuccess = false;
+    private TextBox? logBox;
+    private Button? nextButton;
 
-    public Panel CreateUI(InstallationConfig config, Action<string> logCallback, Action nextCallback, InstallationMode parent)
+    public void BuildUI(
+        LayoutManager layout,
+        InstallationConfig config,
+        Action<string> logCallback,
+        Action nextCallback)
     {
-        var panel = new Panel { BackColor = Color.White, Padding = new Padding(20) };
+        layout.AddTitle("Step 4: Environment Setup");
 
-        var titleLabel = new Label
-        {
-            Text = "Step 4: Environment Setup",
-            Font = new Font("Segoe UI", 14, FontStyle.Bold),
-            AutoSize = true,
-            Location = new Point(0, 0)
-        };
-        panel.Controls.Add(titleLabel);
+        var statusLabel = layout.AddStatusLabel("Configuring environment variables...");
 
-        var statusLabel = new Label
-        {
-            Text = "Configuring environment variables...",
-            Font = new Font("Segoe UI", 10),
-            AutoSize = true,
-            Location = new Point(0, 40)
-        };
-        panel.Controls.Add(statusLabel);
+        logBox = layout.AddLogBox(LayoutConstants.LogBoxMaxHeight);
 
-        var logBox = new TextBox
-        {
-            Multiline = true,
-            ReadOnly = true,
-            Font = new Font("Consolas", 9),
-            BackColor = Color.FromArgb(31, 31, 31),
-            ForeColor = Color.FromArgb(220, 220, 220),
-            Location = new Point(0, 70),
-            Width = panel.Width - 40,
-            Height = 300,
-            ScrollBars = ScrollBars.Vertical
-        };
-        panel.Controls.Add(logBox);
+        layout.AddFlexibleSpacer();
 
-        var nextButton = new Button
-        {
-            Text = "Next >",
-            Width = 100,
-            Height = 40,
-            Location = new Point(panel.Width - 120, panel.Height - 60),
-            BackColor = Color.FromArgb(0, 120, 215),
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat,
-            Enabled = false
-        };
+        (nextButton, var cancelButton) = layout.AddButtonPair("Next >", "Cancel");
+        nextButton.Enabled = false;
         nextButton.Click += (s, e) => nextCallback();
-        panel.Controls.Add(nextButton);
+        cancelButton.Click += (s, e) => Application.Exit();
 
-        Task.Run(() => SetupEnvironmentAsync(
-            config,
-            msg =>
-            {
-                panel.Invoke(new Action(() =>
-                {
-                    logBox.AppendText(msg + Environment.NewLine);
-                    logCallback(msg);
-                }));
-            },
-            () =>
-            {
-                panel.Invoke(new Action(() =>
-                {
-                    nextButton.Enabled = true;
-                    statusLabel.Text = setupSuccess ? "Environment configured!" : "Setup completed with warnings";
-                    statusLabel.ForeColor = setupSuccess ? Color.Green : Color.Orange;
-                }));
-            }
-        ));
-
-        return panel;
+        Task.Run(() => SetupEnvironmentAsync(config, statusLabel, logCallback));
     }
 
-    private async Task SetupEnvironmentAsync(InstallationConfig config, Action<string> log, Action onComplete)
+    private async Task SetupEnvironmentAsync(InstallationConfig config, Label statusLabel, Action<string> logCallback)
     {
         try
         {
-            log("Setting MAYAFLUX_ROOT environment variable...");
+            await LogAsync("=== Environment Setup ===");
+            await LogAsync("");
+
+            await LogAsync("Setting MAYAFLUX_ROOT environment variable...");
             if (ProcessRunner.SetEnvironmentVariable(WeaveConstants.ENV_MAYAFLUX_ROOT, config.MayaFluxRoot, logger))
             {
-                log($"[OK] MAYAFLUX_ROOT={config.MayaFluxRoot}");
+                await LogAsync($"[OK] MAYAFLUX_ROOT={config.MayaFluxRoot}");
+            }
+            else
+            {
+                await LogAsync($"[WARN] Failed to set MAYAFLUX_ROOT");
             }
 
-            log("");
-            log("Adding MayaFlux to PATH...");
+            await LogAsync("");
+
+            await LogAsync("Adding MayaFlux to PATH...");
             if (ProcessRunner.AddToPath(config.BinDirectory, logger))
             {
-                log($"[OK] Added to PATH: {config.BinDirectory}");
+                await LogAsync($"[OK] Added to PATH: {config.BinDirectory}");
+            }
+            else
+            {
+                await LogAsync($"[WARN] Failed to add to PATH");
             }
 
-            log("");
-            log("Setting CMAKE_PREFIX_PATH...");
+            await LogAsync("");
+
+            await LogAsync("Setting CMAKE_PREFIX_PATH...");
             if (ProcessRunner.SetEnvironmentVariable(WeaveConstants.ENV_CMAKE_PREFIX_PATH, config.MayaFluxRoot, logger))
             {
-                log($"[OK] CMAKE_PREFIX_PATH={config.MayaFluxRoot}");
+                await LogAsync($"[OK] CMAKE_PREFIX_PATH={config.MayaFluxRoot}");
+            }
+            else
+            {
+                await LogAsync($"[WARN] Failed to set CMAKE_PREFIX_PATH");
             }
 
-            log("");
-            log("[OK] Environment variables configured");
-            log("[WARN] You must restart your terminal for changes to take effect");
+            await LogAsync("");
+            await LogAsync("=== Environment Setup Complete ===");
+            await LogAsync("");
+            await LogAsync("[WARN] You must restart your terminal/PowerShell for environment changes to take effect");
+            await LogAsync("[INFO] Run: $env:MAYAFLUX_ROOT to verify after restart");
+            await LogAsync("");
+
             setupSuccess = true;
+            UpdateStatus(statusLabel, "Environment configured", ThemeColors.Success);
         }
         catch (Exception ex)
         {
-            log($"[ERROR] {ex.Message}");
+            await LogAsync($"[ERROR] {ex.Message}");
+            UpdateStatus(statusLabel, "Setup failed", ThemeColors.Error);
         }
         finally
         {
-            onComplete?.Invoke();
+            EnableButton();
+        }
+    }
+
+    private async Task LogAsync(string message)
+    {
+        if (logBox?.Parent != null)
+        {
+            await logBox.Invoke(new Func<Task>(async () =>
+            {
+                logBox.AppendText(message + Environment.NewLine);
+                await Task.CompletedTask;
+            }));
+        }
+    }
+
+    private void UpdateStatus(Label statusLabel, string text, Color color)
+    {
+        if (statusLabel.Parent != null)
+        {
+            statusLabel.Invoke(new Action(() =>
+            {
+                statusLabel.Text = text;
+                statusLabel.ForeColor = color;
+            }));
+        }
+    }
+
+    private void EnableButton()
+    {
+        if (nextButton?.Parent != null)
+        {
+            nextButton.Invoke(new Action(() =>
+            {
+                nextButton.Enabled = true;
+            }));
         }
     }
 }

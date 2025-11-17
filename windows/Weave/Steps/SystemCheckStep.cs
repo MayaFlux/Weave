@@ -1,7 +1,15 @@
-using Weave.Shared.Models;
+using System;
+using System.Drawing;
+using System.IO;
+using System.Linq;
+using System.Security.Principal;
+using System.Threading.Tasks;
+using System.Windows.Forms;
 using Weave.Modes;
-using Weave.Utils;
+using Weave.Shared.Models;
 using Weave.Theme;
+using Weave.UI.Layout;
+using Weave.Utils;
 
 namespace Weave.UI.Pages;
 
@@ -9,106 +17,55 @@ public class SystemCheckStep : IInstallationStep
 {
     private Logger logger = new();
     private bool checksPass = false;
+    private TextBox? logBox;
+    private Button? nextButton;
 
-    public Panel CreateUI(InstallationConfig config, Action<string> logCallback, Action nextCallback, InstallationMode parent)
+    public void BuildUI(
+        LayoutManager layout,
+        InstallationConfig config,
+        Action<string> logCallback,
+        Action nextCallback)
     {
-        var panel = new Panel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = ThemeColors.BackgroundDark
-        };
-        panel.ApplyDarkTheme();
+        layout.AddTitle("Step 1: System Check");
 
-        int margin = 20;
-        int buttonHeight = 50;
-        int usableWidth = panel.Width - (margin * 2);
-        int usableHeight = panel.Height - buttonHeight - (margin * 3);
+        var statusLabel = layout.AddStatusLabel("Verifying system requirements...");
 
-        var titleLabel = new Label
-        {
-            Text = "Step 1: System Check",
-            Font = new Font("Segoe UI", 14, FontStyle.Bold),
-            AutoSize = true,
-            ForeColor = ThemeColors.TextPrimary,
-            BackColor = ThemeColors.BackgroundDark,
-            Location = new Point(margin, margin)
-        };
-        panel.Controls.Add(titleLabel);
+        logBox = layout.AddLogBox(LayoutConstants.LogBoxMaxHeight);
 
-        var statusLabel = new Label
-        {
-            Text = "Verifying system requirements...",
-            Font = new Font("Segoe UI", 10),
-            ForeColor = ThemeColors.TextSecondary,
-            BackColor = ThemeColors.BackgroundDark,
-            AutoSize = true,
-            Location = new Point(margin, margin + 40)
-        };
-        panel.Controls.Add(statusLabel);
+        layout.AddFlexibleSpacer();
 
-        var logBox = new TextBox
-        {
-            Multiline = true,
-            ReadOnly = true,
-            Font = new Font("Consolas", 9),
-            BackColor = ThemeColors.BackgroundMedium,
-            ForeColor = ThemeColors.TextPrimary,
-            ScrollBars = ScrollBars.Vertical,
-            Location = new Point(margin, margin + 70),
-            Width = usableWidth,
-            Height = usableHeight - 70
-        };
-        panel.Controls.Add(logBox);
-
-        var nextButton = new Button
-        {
-            Text = "Next >",
-            Width = 100,
-            Height = 40,
-            BackColor = ThemeColors.ButtonPrimary,
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat,
-            Enabled = false,
-            Location = new Point(usableWidth + margin - 100, panel.Height - 50)
-        };
+        (nextButton, var cancelButton) = layout.AddButtonPair("Next >", "Cancel");
+        nextButton.Enabled = false;
         nextButton.Click += (s, e) => nextCallback();
-        panel.Controls.Add(nextButton);
-
-        var cancelButton = new Button
-        {
-            Text = "Cancel",
-            Width = 100,
-            Height = 40,
-            BackColor = ThemeColors.ButtonSecondary,
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat,
-            Location = new Point(usableWidth + margin - 210, panel.Height - 50)
-        };
         cancelButton.Click += (s, e) => Application.Exit();
-        panel.Controls.Add(cancelButton);
 
         Task.Run(() => PerformChecks(
             msg =>
             {
-                panel.Invoke(new Action(() =>
+                if (logBox?.Parent != null) // Check if control still exists
                 {
-                    logBox.AppendText(msg + Environment.NewLine);
-                    logCallback(msg);
-                }));
+                    logBox.Invoke(new Action(() =>
+                    {
+                        logBox.AppendText(msg + Environment.NewLine);
+                        logCallback(msg);
+                    }));
+                }
             },
             () =>
             {
-                panel.Invoke(new Action(() =>
+                if (statusLabel.Parent != null)
                 {
-                    nextButton.Enabled = checksPass;
-                    statusLabel.Text = checksPass ? "All checks passed!" : "Some checks failed.";
-                    statusLabel.ForeColor = checksPass ? ThemeColors.Success : ThemeColors.Error;
-                }));
+                    statusLabel.Invoke(new Action(() =>
+                    {
+                        nextButton.Enabled = checksPass;
+                        statusLabel.Text = checksPass ? "All checks passed!" : "Some checks failed.";
+                        statusLabel.ForeColor = checksPass ? ThemeColors.Success : ThemeColors.Error;
+                    }));
+                }
             }
         ));
-
-        return panel;
     }
+
     private void PerformChecks(Action<string> log, Action onComplete)
     {
         checksPass = true;
@@ -168,9 +125,9 @@ public class SystemCheckStep : IInstallationStep
     {
         try
         {
-            var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
-            var principal = new System.Security.Principal.WindowsPrincipal(identity);
-            return principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+            var identity = WindowsIdentity.GetCurrent();
+            var principal = new WindowsPrincipal(identity);
+            return principal.IsInRole(WindowsBuiltInRole.Administrator);
         }
         catch
         {

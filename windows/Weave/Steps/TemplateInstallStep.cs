@@ -1,5 +1,12 @@
-using Weave.Shared.Models;
+using System;
+using System.Drawing;
+using System.IO;
+using System.Threading.Tasks;
+using System.Windows.Forms;
 using Weave.Modes;
+using Weave.Shared.Models;
+using Weave.Theme;
+using Weave.UI.Layout;
 using Weave.Utils;
 
 namespace Weave.UI.Pages;
@@ -8,110 +15,126 @@ public class TemplatesInstallStep : IInstallationStep
 {
     private Logger logger = new();
     private bool extractSuccess = false;
+    private TextBox? logBox;
+    private Button? nextButton;
 
-    public Panel CreateUI(InstallationConfig config, Action<string> logCallback, Action nextCallback, InstallationMode parent)
+    public void BuildUI(
+        LayoutManager layout,
+        InstallationConfig config,
+        Action<string> logCallback,
+        Action nextCallback)
     {
-        var panel = new Panel { BackColor = Color.White, Padding = new Padding(20) };
+        layout.AddTitle("Step 5: Install Templates & Tools");
 
-        var titleLabel = new Label
-        {
-            Text = "Step 5: Install Templates & Tools",
-            Font = new Font("Segoe UI", 14, FontStyle.Bold),
-            AutoSize = true,
-            Location = new Point(0, 0)
-        };
-        panel.Controls.Add(titleLabel);
+        var statusLabel = layout.AddStatusLabel("Extracting project templates and tools...");
 
-        var statusLabel = new Label
-        {
-            Text = "Extracting project templates and tools...",
-            Font = new Font("Segoe UI", 10),
-            AutoSize = true,
-            Location = new Point(0, 40)
-        };
-        panel.Controls.Add(statusLabel);
+        logBox = layout.AddLogBox(LayoutConstants.LogBoxMaxHeight);
 
-        var logBox = new TextBox
-        {
-            Multiline = true,
-            ReadOnly = true,
-            Font = new Font("Consolas", 9),
-            BackColor = Color.FromArgb(31, 31, 31),
-            ForeColor = Color.FromArgb(220, 220, 220),
-            Location = new Point(0, 70),
-            Width = panel.Width - 40,
-            Height = 300,
-            ScrollBars = ScrollBars.Vertical
-        };
-        panel.Controls.Add(logBox);
+        layout.AddFlexibleSpacer();
 
-        var nextButton = new Button
-        {
-            Text = "Next >",
-            Width = 100,
-            Height = 40,
-            Location = new Point(panel.Width - 120, panel.Height - 60),
-            BackColor = Color.FromArgb(0, 120, 215),
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat,
-            Enabled = false
-        };
+        (nextButton, var cancelButton) = layout.AddButtonPair("Next >", "Cancel");
+        nextButton.Enabled = false;
         nextButton.Click += (s, e) => nextCallback();
-        panel.Controls.Add(nextButton);
+        cancelButton.Click += (s, e) => Application.Exit();
 
-        Task.Run(() => ExtractResourcesAsync(
-            config,
-            msg =>
-            {
-                panel.Invoke(new Action(() =>
-                {
-                    logBox.AppendText(msg + Environment.NewLine);
-                    logCallback(msg);
-                }));
-            },
-            () =>
-            {
-                panel.Invoke(new Action(() =>
-                {
-                    nextButton.Enabled = true;
-                    statusLabel.Text = extractSuccess ? "Templates extracted!" : "Extraction completed with warnings";
-                    statusLabel.ForeColor = extractSuccess ? Color.Green : Color.Orange;
-                }));
-            }
-        ));
-
-        return panel;
+        Task.Run(() => ExtractResourcesAsync(config, statusLabel, logCallback));
     }
 
-    private async Task ExtractResourcesAsync(InstallationConfig config, Action<string> log, Action onComplete)
+    private async Task ExtractResourcesAsync(InstallationConfig config, Label statusLabel, Action<string> logCallback)
     {
-        await Task.Run(() =>
+        try
         {
-            try
+            await LogAsync("=== Template & Tool Installation ===");
+            await LogAsync("");
+            await LogAsync("Extracting embedded resources...");
+            await LogAsync($"Target directory: {config.MayaFluxRoot}");
+            await LogAsync("");
+
+            await Task.Run(() =>
             {
-                log("Extracting embedded resources...");
                 ResourceExtractor.ExtractAllResources(config.MayaFluxRoot);
+            });
 
-                log($"[OK] Templates extracted to: {config.TemplatesDirectory}");
-                log($"[OK] Scripts extracted to: {config.ScriptsDirectory}");
+            await LogAsync("[OK] Resource extraction complete");
+            await LogAsync("");
 
-                // Verify
-                if (Directory.Exists(config.TemplatesDirectory))
-                {
-                    var templateFiles = Directory.GetFiles(config.TemplatesDirectory, "*", SearchOption.AllDirectories);
-                    log($"[OK] Found {templateFiles.Length} template files");
-                }
-
-                extractSuccess = true;
-            }
-            catch (Exception ex)
+            await LogAsync("Verifying templates installation...");
+            if (Directory.Exists(config.TemplatesDirectory))
             {
-                log($"[ERROR] {ex.Message}");
+                var templateFiles = Directory.GetFiles(config.TemplatesDirectory, "*", SearchOption.AllDirectories);
+                await LogAsync($"[OK] Templates directory: {config.TemplatesDirectory}");
+                await LogAsync($"[OK] Found {templateFiles.Length} template files");
             }
-            finally
+            else
             {
-                onComplete?.Invoke();
+                await LogAsync($"[WARN] Templates directory not found: {config.TemplatesDirectory}");
             }
-        });
+
+            await LogAsync("");
+
+            await LogAsync("Verifying scripts installation...");
+            if (Directory.Exists(config.ScriptsDirectory))
+            {
+                var scriptFiles = Directory.GetFiles(config.ScriptsDirectory, "*.ps1", SearchOption.AllDirectories);
+                await LogAsync($"[OK] Scripts directory: {config.ScriptsDirectory}");
+                await LogAsync($"[OK] Found {scriptFiles.Length} PowerShell scripts");
+            }
+            else
+            {
+                await LogAsync($"[WARN] Scripts directory not found: {config.ScriptsDirectory}");
+            }
+
+            await LogAsync("");
+            await LogAsync("=== Template & Tool Installation Complete ===");
+            await LogAsync("");
+
+            extractSuccess = true;
+            UpdateStatus(statusLabel, "Templates & tools installed", ThemeColors.Success);
+        }
+        catch (Exception ex)
+        {
+            await LogAsync($"[ERROR] {ex.Message}");
+            await LogAsync("[ERROR] Failed to extract templates and tools");
+            UpdateStatus(statusLabel, "Extraction failed", ThemeColors.Error);
+        }
+        finally
+        {
+            EnableButton();
+        }
+    }
+
+    private async Task LogAsync(string message)
+    {
+        if (logBox?.Parent != null)
+        {
+            await logBox.Invoke(new Func<Task>(async () =>
+            {
+                logBox.AppendText(message + Environment.NewLine);
+                await Task.CompletedTask;
+            }));
+        }
+    }
+
+    private void UpdateStatus(Label statusLabel, string text, Color color)
+    {
+        if (statusLabel.Parent != null)
+        {
+            statusLabel.Invoke(new Action(() =>
+            {
+                statusLabel.Text = text;
+                statusLabel.ForeColor = color;
+            }));
+        }
+    }
+
+    private void EnableButton()
+    {
+        if (nextButton?.Parent != null)
+        {
+            nextButton.Invoke(new Action(() =>
+            {
+                nextButton.Enabled = true;
+            }));
+        }
     }
 }
