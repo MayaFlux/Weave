@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Windows.Forms;
+using System.Drawing;  // Add this for SystemIcons
 
 namespace Weave
 {
@@ -298,7 +299,7 @@ namespace Weave
             }
 
             string mayaFluxCmakePath = Path.Combine(mayaFluxRoot, "lib", "cmake", "MayaFlux");
-            Log($"  → Using MAYAFLUX_ROOT: {mayaFluxRoot}");
+            Log($"  ↳ Using MAYAFLUX_ROOT: {mayaFluxRoot}");
 
             // ============================================================================
             // GENERATE CMakeLists.txt
@@ -394,228 +395,67 @@ See [MayaFlux Documentation](https://github.com/MayaFlux/MayaFlux)
             Log("  ✓ Generated README.md");
         }
 
+        private string LoadTemplate(string templateName)
+        {
+            // Templates are installed by the installer
+            // Locations: C:\MayaFlux\share\weave\templates\ (installed)
+            //           or ./templates/ (during development)
+            
+            string[] possiblePaths = new string[]
+            {
+                Path.Combine(Environment.GetEnvironmentVariable("MAYAFLUX_ROOT") ?? "C:\\MayaFlux", 
+                    "share", "weave", "templates", templateName),
+                Path.Combine("templates", templateName)
+            };
+
+            foreach (string path in possiblePaths)
+            {
+                if (File.Exists(path))
+                {
+                    return File.ReadAllText(path);
+                }
+            }
+
+            throw new FileNotFoundException($"Template not found: {templateName}. Searched in: {string.Join(", ", possiblePaths)}");
+        }
+
         private string GenerateCMakeLists(string projectName, string mayaFluxCmakePath, string lilaBlock)
         {
-            return $@"cmake_minimum_required(VERSION 3.25)
-project({projectName} VERSION 0.1.0 LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-# Find MayaFlux
-set(MAYAFLUX_SEARCH_PATHS ""{mayaFluxCmakePath}"")
-if(DEFINED ENV{{MAYAFLUX_ROOT}})
-    list(APPEND MAYAFLUX_SEARCH_PATHS ""$ENV{{MAYAFLUX_ROOT}}/lib/cmake/MayaFlux"")
-endif()
-
-find_package(MayaFlux REQUIRED PATHS ${{MAYAFLUX_SEARCH_PATHS}} NO_DEFAULT_PATH)
-
-if(NOT MayaFlux_FOUND)
-    message(FATAL_ERROR ""MayaFlux not found! Please set MAYAFLUX_ROOT environment variable."")
-endif()
-
-message(STATUS ""Found MayaFlux ${{MayaFlux_VERSION}}: ${{MayaFlux_DIR}}"")
-
-# Create executable
-add_executable(${{PROJECT_NAME}}
-    src/main.cpp
-    src/user_project.hpp
-)
-
-# Link MayaFlux
-target_link_libraries(${{PROJECT_NAME}} PRIVATE MayaFlux::MayaFluxLib)
-
-# Optional: Lila support
-{lilaBlock}
-
-# Platform-specific settings
-if(WIN32)
-    set_target_properties(${{PROJECT_NAME}} PROPERTIES
-        MSVC_RUNTIME_LIBRARY ""MultiThreaded$<$<CONFIG:Debug>:Debug>DLL""
-    )
-endif()
-";
+            string template = LoadTemplate("CMakeLists.txt");
+            template = template.Replace("@PROJECT_NAME@", projectName);
+            template = template.Replace("@MAYAFLUX_CMAKE_PATH@", mayaFluxCmakePath);
+            template = template.Replace("@LILA_LINK_BLOCK@", lilaBlock);
+            template = template.Replace("@LILA_DLL_COPY@", "# Lila DLL copy not needed in GUI");
+            return template;
         }
 
         private string GenerateMainCpp()
         {
-            return @"#ifdef __has_include
-#if __has_include(""user_project.hpp"")
-#include ""user_project.hpp""
-#define HAS_USER_PROJECT
-#else
-#define MAYASIMPLE
-#include ""MayaFlux/MayaFlux.hpp""
-#endif
-#endif
-
-void initialize()
-{
-#ifdef HAS_USER_PROJECT
-    try {
-        settings();
-    } catch (const std::exception& e) {
-        MF_ERROR(MayaFlux::Journal::Component::USER, MayaFlux::Journal::Context::Init, 
-                 ""Error during initialization: {}"", e.what());
-    }
-#endif
-}
-
-void run()
-{
-#ifdef HAS_USER_PROJECT
-    try {
-        compose();
-    } catch (const std::exception& e) {
-        MF_ERROR(MayaFlux::Journal::Component::USER, MayaFlux::Journal::Context::Runtime, 
-                 ""Error during execution: {}"", e.what());
-    }
-#endif
-}
-
-int main()
-{
-    try {
-        initialize();
-        MayaFlux::Init();
-        MayaFlux::Start();
-        run();
-        
-        std::cout << ""Press any key to stop...\\n"";
-        std::cin.get();
-        
-        MayaFlux::End();
-    } catch (const std::exception& e) {
-        std::cerr << ""Error: "" << e.what() << std::flush;
-        return 1;
-    }
-    return 0;
-}
-";
+            return LoadTemplate("main.cpp.in");
         }
 
         private string GenerateUserProjectHpp()
         {
-            return @"#pragma once
-#define MAYASIMPLE
-#include ""MayaFlux/MayaFlux.hpp""
-
-/**
- * @brief Configure engine preferences
- * 
- * This function runs BEFORE the engine starts. Set up:
- * - Sample rate: 48000 (pro), 44100 (CD), 96000 (studio)
- * - Buffer size: 128 (low latency), 512 (default), 1024 (high quality)
- * - Graphics: target_frame_rate, graphics API
- */
-void settings()
-{
-    // Your MayaFlux configuration here
-}
-
-/**
- * @brief Create and run your audio/graphics pipeline
- * 
- * This is where you create nodes, buffers, and processing chains.
- */
-void compose()
-{
-    // Your MayaFlux code here
-}
-";
+            return LoadTemplate("user_project.hpp.in");
         }
 
         private string GenerateVsCodeSettings()
         {
-            return @"{
-    ""C_Cpp.default.cppStandard"": ""c++23"",
-    ""C_Cpp.default.compilerPath"": ""cl.exe"",
-    ""C_Cpp.default.includePath"": [
-        ""${workspaceFolder}/src"",
-        ""${env:MAYAFLUX_ROOT}/include""
-    ],
-    ""C_Cpp.default.compileCommands"": ""${workspaceFolder}/build/compile_commands.json"",
-    ""C_Cpp.intelliSenseEngine"": ""default"",
-    ""cmake.configureOnOpen"": true,
-    ""cmake.buildDirectory"": ""${workspaceFolder}/build"",
-    ""editor.formatOnSave"": false
-}
-";
+            return LoadTemplate("vscode\\settings.json.in");
         }
 
         private string GenerateVsCodeTasks(string projectName)
         {
-            return $@"{{
-    ""version"": ""2.0.0"",
-    ""tasks"": [
-        {{
-            ""label"": ""Configure CMake"",
-            ""type"": ""shell"",
-            ""command"": ""cmake"",
-            ""args"": [
-                ""-B"", ""build"",
-                ""-S"", ""."",
-                ""-DCMAKE_BUILD_TYPE=Release"",
-                ""-DCMAKE_EXPORT_COMPILE_COMMANDS=ON""
-            ],
-            ""group"": ""build"",
-            ""problemMatcher"": []
-        }},
-        {{
-            ""label"": ""Build Project"",
-            ""type"": ""shell"",
-            ""command"": ""cmake"",
-            ""args"": [
-                ""--build"", ""build"",
-                ""--config"", ""Release"",
-                ""--parallel""
-            ],
-            ""group"": {{
-                ""kind"": ""build"",
-                ""isDefault"": true
-            }},
-            ""dependsOn"": [""Configure CMake""],
-            ""problemMatcher"": [""$msCompile""]
-        }},
-        {{
-            ""label"": ""Run {projectName}"",
-            ""type"": ""shell"",
-            ""command"": ""build/Release/{projectName}.exe"",
-            ""group"": ""test"",
-            ""dependsOn"": [""Build Project""],
-            ""problemMatcher"": []
-        }}
-    ]
-}}
-";
+            string template = LoadTemplate("vscode\\tasks.json.in");
+            template = template.Replace("@PROJECT_NAME@", projectName);
+            return template;
         }
 
         private string GenerateVsCodeLaunch(string projectName)
         {
-            return $@"{{
-    ""version"": ""0.2.0"",
-    ""configurations"": [
-        {{
-            ""name"": ""Debug {projectName}"",
-            ""type"": ""cppvsdbg"",
-            ""request"": ""launch"",
-            ""program"": ""${{workspaceFolder}}/build/Debug/{projectName}.exe"",
-            ""args"": [],
-            ""stopAtEntry"": false,
-            ""cwd"": ""${{workspaceFolder}}"",
-            ""environment"": [
-                {{
-                    ""name"": ""MAYAFLUX_ROOT"",
-                    ""value"": ""${{env:MAYAFLUX_ROOT}}""
-                }}
-            ],
-            ""externalConsole"": false,
-            ""preLaunchTask"": ""Build Project""
-        }}
-    ]
-}}
-";
+            string template = LoadTemplate("vscode\\launch.json.in");
+            template = template.Replace("@PROJECT_NAME@", projectName);
+            return template;
         }
 
         private void Log(string message)
