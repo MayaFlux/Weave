@@ -115,41 +115,43 @@ fi
 
 if [ "$SKIP_DOWNLOAD" = false ]; then
     log "Downloading latest MayaFlux release..."
-    log "Fetching releases page..."
-
-    RELEASES_HTML=$(curl -fsSL "https://github.com/${MAYAFLUX_REPO}/releases" 2>&1) || error "Failed to fetch releases. Check internet connection."
-
-    # Extract the first release tag from the page
-    # Pattern: href="/MayaFlux/MayaFlux/releases/tag/vX.X.X-XXXXXXXX"
-    TAG_NAME=$(echo "$RELEASES_HTML" | grep -o "/${MAYAFLUX_REPO}/releases/tag/[^\"]*" | head -1 | sed "s|/${MAYAFLUX_REPO}/releases/tag/||")
-
-    if [ -z "$TAG_NAME" ]; then
-        error "Could not find any releases. Check: https://github.com/${MAYAFLUX_REPO}/releases"
-    fi
-
-    log "Latest release: $TAG_NAME"
-    log "Fetching assets..."
-
-    RELEASE_HTML=$(curl -fsSL "https://github.com/${MAYAFLUX_REPO}/releases/expanded_assets/${TAG_NAME}" 2>&1) || error "Failed to fetch release assets"
-
-    # Find macOS asset (tar.gz preferred, then zip)
-    ASSET_NAME=$(echo "$RELEASE_HTML" | grep -o 'MayaFlux-[^"]*macos[^"]*\.tar\.gz' | head -1)
-
-    if [ -z "$ASSET_NAME" ]; then
-        ASSET_NAME=$(echo "$RELEASE_HTML" | grep -o 'MayaFlux-[^"]*macos[^"]*\.zip' | head -1)
-    fi
-
-    if [ -z "$ASSET_NAME" ]; then
-        error "No macOS asset found for release $TAG_NAME. Check: https://github.com/${MAYAFLUX_REPO}/releases/tag/${TAG_NAME}"
-    fi
-
-    ASSET_URL="https://github.com/${MAYAFLUX_REPO}/releases/download/${TAG_NAME}/${ASSET_NAME}"
-
-    log "Asset: $ASSET_NAME"
-    log "Downloading from: $ASSET_URL"
 
     TMPDIR_DOWNLOAD=$(mktemp -d) || error "Failed to create temp directory"
     trap 'rm -rf "$TMPDIR_DOWNLOAD"' EXIT
+
+    # Fetch releases from GitHub API
+    log "Fetching from GitHub API..."
+    RELEASES=$(curl -fsSL "https://api.github.com/repos/MayaFlux/MayaFlux/releases" 2>&1) || error "Failed to fetch releases"
+
+    TAG_NAME=$(echo "$RELEASES" | grep -o '"tag_name": *"[^"]*"' | head -1 | sed 's/"tag_name": *"\([^"]*\)"/\1/')
+    
+    if [ -z "$TAG_NAME" ]; then
+        error "Could not find release tag"
+    fi
+
+    log "Latest release: $TAG_NAME"
+
+    # Find macOS asset (tar.gz preferred, then zip)
+    ASSET_NAME=$(echo "$RELEASES" | grep -o '"name": *"MayaFlux-[^"]*macos[^"]*\.tar\.gz"' | head -1 | sed 's/"name": *"\([^"]*\)"/\1/')
+
+    if [ -z "$ASSET_NAME" ]; then
+        ASSET_NAME=$(echo "$RELEASES" | grep -o '"name": *"MayaFlux-[^"]*macos[^"]*\.zip"' | head -1 | sed 's/"name": *"\([^"]*\)"/\1/')
+    fi
+
+    if [ -z "$ASSET_NAME" ]; then
+        error "No macOS asset found for release $TAG_NAME"
+    fi
+
+    log "Asset: $ASSET_NAME"
+
+    # Extract download URL from JSON
+    ASSET_URL=$(echo "$RELEASES" | grep -A 2 "\"name\": \"$ASSET_NAME\"" | grep -o '"browser_download_url": *"[^"]*"' | head -1 | sed 's/"browser_download_url": *"\([^"]*\)"/\1/')
+
+    if [ -z "$ASSET_URL" ]; then
+        error "Could not find download URL for asset: $ASSET_NAME"
+    fi
+
+    log "Downloading from: $ASSET_URL"
 
     # Determine file extension
     if [[ "$ASSET_NAME" == *.tar.gz ]]; then
@@ -160,14 +162,13 @@ if [ "$SKIP_DOWNLOAD" = false ]; then
         error "Unsupported archive format: $ASSET_NAME"
     fi
 
-    # Download the asset
     log "Downloading (this may take a few minutes)..."
     if ! curl -fL --progress-bar "$ASSET_URL" -o "$DOWNLOAD_FILE" 2>&1 | tee -a "$INSTALLER_LOG"; then
         error "Download failed. URL: $ASSET_URL"
     fi
 
     if [ ! -f "$DOWNLOAD_FILE" ]; then
-        error "Download file not created at $DOWNLOAD_FILE"
+        error "Download file not created"
     fi
 
     DOWNLOAD_SIZE=$(ls -lh "$DOWNLOAD_FILE" | awk '{print $5}')
@@ -178,29 +179,31 @@ if [ "$SKIP_DOWNLOAD" = false ]; then
 
     # Extract based on file type
     if [[ "$DOWNLOAD_FILE" == *.tar.gz ]]; then
-        if ! tar -xzf "$DOWNLOAD_FILE" -C "$MAYAFLUX_INSTALL_DIR" --strip-components=1 2>&1 | tee -a "$INSTALLER_LOG"; then
+        if ! tar -xzf "$DOWNLOAD_FILE" -C "$TMPDIR_DOWNLOAD" 2>&1 | tee -a "$INSTALLER_LOG"; then
             error "Extraction failed"
         fi
     else
-        if ! unzip -q "$DOWNLOAD_FILE" -d "$TMPDIR_DOWNLOAD/extracted" 2>&1 | tee -a "$INSTALLER_LOG"; then
+        if ! unzip -q "$DOWNLOAD_FILE" -d "$TMPDIR_DOWNLOAD" 2>&1 | tee -a "$INSTALLER_LOG"; then
             error "Extraction failed"
         fi
+    fi
 
-        # Move contents (handling potential wrapper directory)
-        CONTENT_DIR=$(find "$TMPDIR_DOWNLOAD/extracted" -mindepth 1 -maxdepth 1 -type d | head -1)
-        if [ -n "$CONTENT_DIR" ] && [ -d "$CONTENT_DIR" ]; then
-            cp -R "$CONTENT_DIR/"* "$MAYAFLUX_INSTALL_DIR/" || error "Failed to copy extracted files"
-        else
-            cp -R "$TMPDIR_DOWNLOAD/extracted/"* "$MAYAFLUX_INSTALL_DIR/" || error "Failed to copy extracted files"
-        fi
+    # Move dist_staging contents to final location
+    DIST_STAGING=$(find "$TMPDIR_DOWNLOAD" -type d -name "dist_staging" | head -1)
+    
+    if [ -z "$DIST_STAGING" ]; then
+        error "dist_staging folder not found in archive"
+    fi
+
+    if ! cp -R "$DIST_STAGING"/* "$MAYAFLUX_INSTALL_DIR/" 2>&1 | tee -a "$INSTALLER_LOG"; then
+        error "Failed to copy extracted files"
     fi
 
     # Verify installation
     if [ ! -f "$MAYAFLUX_INSTALL_DIR/lib/libMayaFluxLib.dylib" ]; then
-        error "Verification failed - libMayaFluxLib.dylib not found. Check download integrity."
+        error "Verification failed - libMayaFluxLib.dylib not found"
     fi
 
-    # Save version info
     echo "$TAG_NAME" >"$MAYAFLUX_INSTALL_DIR/.version" || error "Failed to write version file"
 
     log "✅ MayaFlux $TAG_NAME installed"
