@@ -1,8 +1,9 @@
 using System;
+using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
-using System.Drawing;
 using Weave.Theme;
+using Weave.UI.Layout;
 
 namespace Weave.UI.Project;
 
@@ -17,178 +18,80 @@ public partial class ProjectCreatorView : UserControl
     private CheckBox withLilaCheckbox;
     private CheckBox withVscodeCheckbox;
     private string templatesDir;
+    private LayoutManager layoutManager;
 
     public ProjectCreatorView(string templatesDirectory)
     {
         templatesDir = templatesDirectory;
+        InitializeComponent();
         InitializeUI();
+    }
+
+    private void InitializeComponent()
+    {
+        BackColor = ThemeColors.BackgroundDark;
+        Dock = DockStyle.Fill;
     }
 
     private void InitializeUI()
     {
-        BackColor = ThemeColors.BackgroundDark;
-        Padding = new Padding(20);
-
-        // ============================================================================
-        // TITLE LABEL
-        // ============================================================================
-        var titleLabel = new Label
+        var scrollPanel = new Panel
         {
-            Text = "Create a New MayaFlux Project",
-            Font = new Font("Segoe UI", 14, FontStyle.Bold),
-            Location = new Point(0, 0),
-            AutoSize = true,
-            ForeColor = ThemeColors.TextPrimary,
-            BackColor = ThemeColors.BackgroundDark
+            Dock = DockStyle.Fill,
+            BackColor = ThemeColors.BackgroundDark,
+            AutoScroll = true
         };
-        Controls.Add(titleLabel);
+        Controls.Add(scrollPanel);
 
-        // ============================================================================
-        // PROJECT NAME
-        // ============================================================================
-        var nameLabel = new Label
-        {
-            Text = "Project Name:",
-            Location = new Point(0, 40),
-            AutoSize = true,
-            ForeColor = ThemeColors.TextSecondary,
-            BackColor = ThemeColors.BackgroundDark
-        };
-        Controls.Add(nameLabel);
+        layoutManager = new LayoutManager(scrollPanel);
 
-        projectNameInput = new TextBox
-        {
-            Location = new Point(0, 60),
-            Width = Width - 40,
-            Height = 30,
-            Text = "MyProject",
-            Font = new Font("Segoe UI", 10),
-            BackColor = ThemeColors.BackgroundMedium,
-            ForeColor = ThemeColors.TextPrimary
-        };
-        Controls.Add(projectNameInput);
+        layoutManager.AddTitle("Create a New MayaFlux Project");
 
-        // ============================================================================
-        // PROJECT PATH
-        // ============================================================================
-        var pathLabel = new Label
-        {
-            Text = "Project Location:",
-            Location = new Point(0, 100),
-            AutoSize = true,
-            ForeColor = ThemeColors.TextSecondary,
-            BackColor = ThemeColors.BackgroundDark
-        };
-        Controls.Add(pathLabel);
+        var nameInput = layoutManager.AddLabeledInput("Project Name:", "MyProject");
+        projectNameInput = nameInput;
 
-        projectPathInput = new TextBox
-        {
-            Location = new Point(0, 120),
-            Width = Width - 110,
-            Height = 30,
-            Text = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            Font = new Font("Segoe UI", 10),
-            BackColor = ThemeColors.BackgroundMedium,
-            ForeColor = ThemeColors.TextPrimary
-        };
-        Controls.Add(projectPathInput);
+        var pathInput = layoutManager.AddLabeledInput("Project Location:",
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
+        projectPathInput = pathInput;
 
-        browseButton = new Button
-        {
-            Text = "Browse...",
-            Location = new Point(Width - 100, 120),
-            Width = 85,
-            Height = 30,
-            BackColor = ThemeColors.ButtonPrimary,
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI", 9)
-        };
+        browseButton = layoutManager.AddButton("Browse...", ThemeColors.ButtonSecondary);
         browseButton.Click += BrowseButton_Click;
-        Controls.Add(browseButton);
 
-        // ============================================================================
-        // OPTIONS
-        // ============================================================================
-        withLilaCheckbox = new CheckBox
-        {
-            Text = "Enable Live Coding (Lila)",
-            Location = new Point(0, 170),
-            AutoSize = true,
-            Checked = false,
-            BackColor = ThemeColors.BackgroundDark,
-            ForeColor = ThemeColors.TextPrimary
-        };
-        Controls.Add(withLilaCheckbox);
+        withLilaCheckbox = layoutManager.AddCheckbox("Enable Live Coding (Lila)");
+        withVscodeCheckbox = layoutManager.AddCheckbox("Configure for VS Code");
+        withVscodeCheckbox.Checked = true;
 
-        withVscodeCheckbox = new CheckBox
-        {
-            Text = "Configure for VS Code",
-            Location = new Point(0, 195),
-            AutoSize = true,
-            Checked = true,
-            BackColor = ThemeColors.BackgroundDark,
-            ForeColor = ThemeColors.TextPrimary
-        };
-        Controls.Add(withVscodeCheckbox);
-
-        // ============================================================================
-        // OUTPUT LOG
-        // ============================================================================
         var outputLabel = new Label
         {
             Text = "Output:",
-            Location = new Point(0, 230),
-            AutoSize = true,
+            Font = new Font("Segoe UI", 9, FontStyle.Bold),
             ForeColor = ThemeColors.TextSecondary,
             BackColor = ThemeColors.BackgroundDark,
-            Font = new Font("Segoe UI", 9, FontStyle.Bold)
+            AutoSize = true
         };
-        Controls.Add(outputLabel);
+        layoutManager.AddToStack(outputLabel, LayoutConstants.SpacingSmall);
 
         outputLog = new RichTextBox
         {
-            Location = new Point(0, 250),
-            Width = Width - 40,
-            Height = Height - 350,
             ReadOnly = true,
             BackColor = ThemeColors.BackgroundMedium,
             ForeColor = ThemeColors.TextPrimary,
             Font = new Font("Consolas", 9),
-            BorderStyle = BorderStyle.Fixed3D
+            BorderStyle = BorderStyle.FixedSingle,
+            Height = 200,
+            Width = layoutManager.GetUsableWidth()
         };
-        Controls.Add(outputLog);
+        layoutManager.AddToStack(outputLog, LayoutConstants.SpacingLarge);
 
-        // ============================================================================
-        // BUTTONS
-        // ============================================================================
-        createButton = new Button
-        {
-            Text = "Create Project",
-            Location = new Point(Width - 200, Height - 50),
-            Width = 180,
-            Height = 40,
-            BackColor = ThemeColors.ButtonSuccess,
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI", 10, FontStyle.Bold)
-        };
+        layoutManager.AddFlexibleSpacer();
+
+        createButton = layoutManager.AddButton("Create Project", ThemeColors.ButtonSuccess);
         createButton.Click += CreateButton_Click;
-        Controls.Add(createButton);
 
-        cancelButton = new Button
-        {
-            Text = "Cancel",
-            Location = new Point(0, Height - 50),
-            Width = 100,
-            Height = 40,
-            BackColor = ThemeColors.ButtonSecondary,
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI", 10)
-        };
+        cancelButton = layoutManager.AddButton("Cancel", ThemeColors.ButtonSecondary);
         cancelButton.Click += (s, e) => ParentForm?.Close();
-        Controls.Add(cancelButton);
+
+        layoutManager.RefreshLayout();
     }
 
     private void BrowseButton_Click(object sender, EventArgs e)
@@ -240,13 +143,13 @@ public partial class ProjectCreatorView : UserControl
         try
         {
             CreateProject(projectName, projectPath);
-            Log("\n✓ Project created successfully!");
+            Log("\nProject created successfully!");
             MessageBox.Show($"Project '{projectName}' created at:\n{projectPath}", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
             ParentForm?.Close();
         }
         catch (Exception ex)
         {
-            Log($"\n✗ Error: {ex.Message}");
+            Log($"\nError: {ex.Message}");
             MessageBox.Show($"Failed to create project:\n{ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
@@ -273,17 +176,17 @@ public partial class ProjectCreatorView : UserControl
         }
 
         Directory.CreateDirectory(srcDir);
-        Log($"  ✓ Created src directory");
+        Log($"  Created src directory");
 
         if (withVscodeCheckbox.Checked)
         {
             Directory.CreateDirectory(vsCodeDir);
-            Log($"  ✓ Created .vscode directory");
+            Log($"  Created .vscode directory");
         }
 
         var mayaFluxRoot = Environment.GetEnvironmentVariable("MAYAFLUX_ROOT") ?? "C:\\MayaFlux";
         var mayaFluxCmakePath = Path.Combine(mayaFluxRoot, "lib", "cmake", "MayaFlux");
-        Log($"  ↳ Using MAYAFLUX_ROOT: {mayaFluxRoot}");
+        Log($"  Using MAYAFLUX_ROOT: {mayaFluxRoot}");
 
         Log("Generating CMakeLists.txt");
         var lilaBlock = withLilaCheckbox.Checked
@@ -297,32 +200,32 @@ endif()"
 
         var cmakelists = GenerateCMakeLists(projectName, mayaFluxCmakePath, lilaBlock);
         File.WriteAllText(Path.Combine(projectDir, "CMakeLists.txt"), cmakelists);
-        Log("  ✓ Generated CMakeLists.txt");
+        Log("  Generated CMakeLists.txt");
 
         Log("Generating source files");
-        var mainCpp = LoadTemplate("main.cpp.in");
+        var mainCpp = LoadTemplate("main.cpp");
         File.WriteAllText(Path.Combine(srcDir, "main.cpp"), mainCpp);
-        Log("  ✓ Generated main.cpp");
+        Log("  Generated main.cpp");
 
-        var userProject = LoadTemplate("user_project.hpp.in");
+        var userProject = LoadTemplate("user_project.hpp");
         File.WriteAllText(Path.Combine(srcDir, "user_project.hpp"), userProject);
-        Log("  ✓ Generated user_project.hpp");
+        Log("  Generated user_project.hpp");
 
         if (withVscodeCheckbox.Checked)
         {
             Log("Generating VS Code configuration");
 
-            var settings = LoadTemplate("vscode/settings.json.in");
+            var settings = LoadTemplate("vscode/settings.json");
             File.WriteAllText(Path.Combine(vsCodeDir, "settings.json"), settings);
-            Log("  ✓ Generated settings.json");
+            Log("  Generated settings.json");
 
-            var tasks = LoadTemplate("vscode/tasks.json.in").Replace("@PROJECT_NAME@", projectName);
+            var tasks = LoadTemplate("vscode/tasks.json").Replace("@PROJECT_NAME@", projectName);
             File.WriteAllText(Path.Combine(vsCodeDir, "tasks.json"), tasks);
-            Log("  ✓ Generated tasks.json");
+            Log("  Generated tasks.json");
 
-            var launch = LoadTemplate("vscode/launch.json.in").Replace("@PROJECT_NAME@", projectName);
+            var launch = LoadTemplate("vscode/launch.json").Replace("@PROJECT_NAME@", projectName);
             File.WriteAllText(Path.Combine(vsCodeDir, "launch.json"), launch);
-            Log("  ✓ Generated launch.json");
+            Log("  Generated launch.json");
         }
 
         Log("Generating README.md");
@@ -361,7 +264,7 @@ See [MayaFlux Documentation](https://github.com/MayaFlux/MayaFlux)
 ";
 
         File.WriteAllText(Path.Combine(projectDir, "README.md"), readme);
-        Log("  ✓ Generated README.md");
+        Log("  Generated README.md");
     }
 
     private string GenerateCMakeLists(string projectName, string mayaFluxCmakePath, string lilaBlock)
@@ -370,7 +273,7 @@ See [MayaFlux Documentation](https://github.com/MayaFlux/MayaFlux)
         template = template.Replace("@PROJECT_NAME@", projectName);
         template = template.Replace("@MAYAFLUX_CMAKE_PATH@", mayaFluxCmakePath);
         template = template.Replace("@LILA_LINK_BLOCK@", lilaBlock);
-        template = template.Replace("@LILA_DLL_COPY@", "# Lila DLL copy not needed in GUI");
+        template = template.Replace("@LILA_DLL_COPY@", "");
         return template;
     }
 

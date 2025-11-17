@@ -371,12 +371,12 @@ Weave/
 ├── linux/ (coming soon)
 ├── templates/
 │   ├── CMakeLists.txt               # Project template
-│   ├── main.cpp.in
-│   ├── user_project.hpp.in
+│   ├── main.cpp
+│   ├── user_project.hpp
 │   └── vscode/
-│       ├── settings.json.in
-│       ├── tasks.json.in
-│       └── launch.json.in
+│       ├── settings.json
+│       ├── tasks.json
+│       └── launch.json
 ├── .github/workflows/
 │   ├── build-macos.yml              # macOS CI/CD
 │   └── build-windows.yml            # Windows CI/CD

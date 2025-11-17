@@ -16,17 +16,11 @@
     <RootNamespace>Weave</RootNamespace>
   </PropertyGroup>
 
-  <ItemGroup>
-    <EmbeddedResource Include="..\..\templates\**\*">
-      <Link>Resources/templates/%(Filename)%(Extension)</Link>
-    </EmbeddedResource>
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="..\scripts\*">
-      <Link>Resources/scripts/%(Filename)%(Extension)</Link>
-    </EmbeddedResource>
-  </ItemGroup>
+<ItemGroup>
+  <EmbeddedResource Include="..\..\templates\**\*">
+    <Link>Resources/templates/%(RecursiveDir)%(Filename)%(Extension)</Link>
+  </EmbeddedResource>
+</ItemGroup>
 
   <ItemGroup>
     <None Include="..\scripts\install_package.ps1">
