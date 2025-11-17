@@ -54,16 +54,47 @@ public class DependenciesStep : IInstallationStep
         {
             await LogAsync("=== Dependency Installation ===");
 
-            var scriptDir = Path.Combine(config.MayaFluxRoot, "share", "weave", "scripts");
-            var scriptPath = Path.Combine(scriptDir, "install_package.ps1");
-            var packagesFile = Path.Combine(scriptDir, "packages.psd1");
+            string scriptPath = "";
+            string packagesFile = "";
 
-            if (!File.Exists(scriptPath))
+            var searchPaths = new[]
             {
-                await LogAsync("[ERROR] Dependency installer not found at: " + scriptPath);
-                await LogAsync("[INFO] Extracted scripts may not be available yet");
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "scripts", "install_package.ps1"),
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "scripts", "install_package.ps1"),
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "scripts", "install_package.ps1"),
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "scripts", "install_package.ps1"),
+            };
+
+            foreach (var path in searchPaths)
+            {
+                var fullPath = Path.GetFullPath(path);
+                if (File.Exists(fullPath))
+                {
+                    scriptPath = fullPath;
+                    packagesFile = Path.Combine(Path.GetDirectoryName(fullPath), "packages.psd1");
+                    break;
+                }
+            }
+
+            if (string.IsNullOrEmpty(scriptPath) || !File.Exists(scriptPath))
+            {
+                await LogAsync("[ERROR] Dependency installer not found");
+                await LogAsync("[INFO] Searched locations:");
+                foreach (var path in searchPaths)
+                {
+                    await LogAsync($"  - {Path.GetFullPath(path)}");
+                }
                 await LogAsync("[INFO] Skipping dependency installation");
                 UpdateStatus(statusLabel, "Dependencies not found - skipping", ThemeColors.Warning);
+                EnableButtons();
+                return;
+            }
+
+            if (!File.Exists(packagesFile))
+            {
+                await LogAsync("[ERROR] Packages file not found at: " + packagesFile);
+                await LogAsync("[INFO] Skipping dependency installation");
+                UpdateStatus(statusLabel, "Packages file not found - skipping", ThemeColors.Warning);
                 EnableButtons();
                 return;
             }
@@ -99,7 +130,7 @@ public class DependenciesStep : IInstallationStep
                 await LogAsync($"[WARN] Dependency installation exited with code: {exitCode}");
                 await LogAsync("[INFO] You may need to manually install dependencies");
                 await LogAsync("[INFO] Continuing with installation anyway...");
-                installSuccess = true; // Don't block installation
+                installSuccess = true;
                 UpdateStatus(statusLabel, "Dependencies installation completed with warnings", ThemeColors.Warning);
             }
         }
@@ -107,7 +138,7 @@ public class DependenciesStep : IInstallationStep
         {
             await LogAsync($"[ERROR] {ex.Message}");
             await LogAsync("[INFO] Continuing with installation anyway...");
-            installSuccess = true; // Don't block installation
+            installSuccess = true;
             UpdateStatus(statusLabel, "Dependencies skipped - continuing", ThemeColors.Warning);
         }
         finally

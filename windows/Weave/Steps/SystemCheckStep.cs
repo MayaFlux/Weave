@@ -18,6 +18,7 @@ public class SystemCheckStep : IInstallationStep
     private Logger logger = new();
     private bool checksPass = false;
     private TextBox? logBox;
+    private Label? statusLabel;
     private Button? nextButton;
 
     public void BuildUI(
@@ -28,7 +29,7 @@ public class SystemCheckStep : IInstallationStep
     {
         layout.AddTitle("Step 1: System Check");
 
-        var statusLabel = layout.AddStatusLabel("Verifying system requirements...");
+        statusLabel = layout.AddStatusLabel("Verifying system requirements...");
 
         logBox = layout.AddLogBox(LayoutConstants.LogBoxMaxHeight);
 
@@ -39,75 +40,86 @@ public class SystemCheckStep : IInstallationStep
         nextButton.Click += (s, e) => nextCallback();
         cancelButton.Click += (s, e) => Application.Exit();
 
-        Task.Run(() => PerformChecks(
-            msg =>
-            {
-                if (logBox?.Parent != null) // Check if control still exists
-                {
-                    logBox.Invoke(new Action(() =>
-                    {
-                        logBox.AppendText(msg + Environment.NewLine);
-                        logCallback(msg);
-                    }));
-                }
-            },
-            () =>
-            {
-                if (statusLabel.Parent != null)
-                {
-                    statusLabel.Invoke(new Action(() =>
-                    {
-                        nextButton.Enabled = checksPass;
-                        statusLabel.Text = checksPass ? "All checks passed!" : "Some checks failed.";
-                        statusLabel.ForeColor = checksPass ? ThemeColors.Success : ThemeColors.Error;
-                    }));
-                }
-            }
-        ));
+        Task.Delay(500).ContinueWith(_ => PerformChecksAsync());
     }
 
-    private void PerformChecks(Action<string> log, Action onComplete)
+    private async Task PerformChecksAsync()
     {
         checksPass = true;
 
-        log("Checking Windows architecture...");
+        await LogAsync("Checking Windows architecture...");
+        await Task.Delay(200);
+
         if (IntPtr.Size == 8)
         {
-            log("[OK] 64-bit Windows detected");
+            await LogAsync("[OK] 64-bit Windows detected");
         }
         else
         {
-            log("[ERROR] 64-bit Windows required");
+            await LogAsync("[ERROR] 64-bit Windows required");
             checksPass = false;
         }
 
-        log("");
-        log("Checking for 7-Zip...");
+        await LogAsync("");
+        await LogAsync("Checking for 7-Zip...");
+        await Task.Delay(200);
+
         var sevenZipPath = Find7zPath();
         if (!string.IsNullOrEmpty(sevenZipPath))
         {
-            log($"[OK] 7-Zip found at: {sevenZipPath}");
+            await LogAsync($"[OK] 7-Zip found at: {sevenZipPath}");
         }
         else
         {
-            log("[WARN] 7-Zip not found - please install from https://www.7-zip.org/");
+            await LogAsync("[WARN] 7-Zip not found - please install from https://www.7-zip.org/");
             checksPass = false;
         }
 
-        log("");
-        log("Checking for administrator privileges...");
+        await LogAsync("");
+        await LogAsync("Checking for administrator privileges...");
+        await Task.Delay(200);
+
         if (IsAdministrator())
         {
-            log("[OK] Running as administrator");
+            await LogAsync("[OK] Running as administrator");
         }
         else
         {
-            log("[WARN] Not running as administrator - installation may fail");
+            await LogAsync("[WARN] Not running as administrator - installation may fail");
         }
 
-        log("");
-        log("[OK] System check complete");
-        onComplete?.Invoke();
+        await LogAsync("");
+        await LogAsync("[OK] System check complete");
+
+        if (statusLabel != null && statusLabel.Parent != null)
+        {
+            statusLabel.Invoke(new Action(() =>
+            {
+                statusLabel.Text = checksPass ? "All checks passed!" : "Some checks failed.";
+                statusLabel.ForeColor = checksPass ? ThemeColors.Success : ThemeColors.Error;
+            }));
+        }
+
+        if (nextButton != null && nextButton.Parent != null)
+        {
+            nextButton.Invoke(new Action(() =>
+            {
+                nextButton.Enabled = true;
+            }));
+        }
+    }
+
+    private async Task LogAsync(string message)
+    {
+        if (logBox != null && logBox.Parent != null)
+        {
+            await logBox.Invoke(new Func<Task>(async () =>
+            {
+                logBox.AppendText(message + Environment.NewLine);
+                logBox.Refresh();
+                await Task.CompletedTask;
+            }));
+        }
     }
 
     private string? Find7zPath()

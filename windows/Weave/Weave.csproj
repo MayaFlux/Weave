@@ -12,23 +12,31 @@
     <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
-  <!-- Root namespace for all classes -->
   <PropertyGroup>
     <RootNamespace>Weave</RootNamespace>
   </PropertyGroup>
 
-  <!-- Embed templates from root (shared across platforms) -->
   <ItemGroup>
     <EmbeddedResource Include="..\..\templates\**\*">
       <Link>Resources/templates/%(Filename)%(Extension)</Link>
     </EmbeddedResource>
   </ItemGroup>
 
-  <!-- Embed scripts from windows/scripts -->
   <ItemGroup>
     <EmbeddedResource Include="..\scripts\*">
       <Link>Resources/scripts/%(Filename)%(Extension)</Link>
     </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\scripts\install_package.ps1">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>scripts\install_package.ps1</Link>
+    </None>
+    <None Include="..\scripts\packages.psd1">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>scripts\packages.psd1</Link>
+    </None>
   </ItemGroup>
 
   <ItemGroup>

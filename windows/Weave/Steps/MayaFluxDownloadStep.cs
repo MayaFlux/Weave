@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Net.Http;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Weave.Modes;
@@ -25,21 +28,28 @@ public class MayaFluxDownloadStep : IInstallationStep
         Action<string> logCallback,
         Action nextCallback)
     {
+        // Title
         layout.AddTitle("Step 2: Download MayaFlux");
 
+        // Status label
         var statusLabel = layout.AddStatusLabel("Preparing download...");
 
+        // Progress bar
         progressBar = layout.AddProgressBar();
 
+        // Log box
         logBox = layout.AddLogBox(LayoutConstants.LogBoxMaxHeight);
 
+        // Spacer
         layout.AddFlexibleSpacer();
 
+        // Buttons
         (nextButton, var cancelButton) = layout.AddButtonPair("Next >", "Cancel");
         nextButton.Enabled = false;
         nextButton.Click += (s, e) => nextCallback();
         cancelButton.Click += (s, e) => Application.Exit();
 
+        // Start async download
         Task.Run(() => DownloadMayaFluxAsync(config, statusLabel, logCallback));
     }
 
@@ -48,65 +58,132 @@ public class MayaFluxDownloadStep : IInstallationStep
         try
         {
             await LogAsync("=== MayaFlux Download ===");
+
+            if (FileOperations.VerifyInstallation(config.MayaFluxRoot, logger))
+            {
+                await LogAsync("[OK] MayaFlux already installed at: " + config.MayaFluxRoot);
+                await LogAsync("Skipping download...");
+                await LogAsync("");
+                await LogAsync("=== Download Complete ===");
+                downloadSuccess = true;
+                UpdateStatus(statusLabel, "Already installed", ThemeColors.Success);
+
+                if (nextButton != null && nextButton.Parent != null)
+                {
+                    nextButton.Invoke(new Action(() =>
+                    {
+                        nextButton.Enabled = true;
+                    }));
+                }
+                return;
+            }
+
             await LogAsync("Fetching latest release from GitHub API...");
 
-            var api = new GithubApi(logger);
-            var release = await api.GetLatestReleaseAsync();
-
-            if (release == null)
-            {
-                await LogAsync("[ERROR] Failed to fetch latest release");
-                UpdateStatus(statusLabel, "Download failed", ThemeColors.Error);
-                return;
-            }
-
-            await LogAsync($"[OK] Latest release: {release.TagName}");
-
-            var asset = release.GetWindowsAsset();
-            if (asset == null)
-            {
-                await LogAsync("[ERROR] No Windows asset found in release");
-                await LogAsync($"Available assets: {string.Join(", ", release.Assets.Select(a => a.Name))}");
-                UpdateStatus(statusLabel, "Download failed", ThemeColors.Error);
-                return;
-            }
-
-            await LogAsync($"[OK] Asset found: {asset.Name}");
-            await LogAsync("");
-            await LogAsync("Downloading MayaFlux...");
-            UpdateStatus(statusLabel, "Downloading...", ThemeColors.TextSecondary);
-
             Directory.CreateDirectory(config.TempDirectory);
-            var downloadPath = Path.Combine(config.TempDirectory, asset.Name);
 
-            var success = await FileOperations.DownloadFileAsync(
-                asset.DownloadUrl,
-                downloadPath,
-                logger,
-                (downloaded, total) =>
-                {
-                    var percent = (int)((downloaded * 100) / total);
-                    UpdateProgress(percent);
-                    UpdateStatus(statusLabel, $"Downloading... {percent}%", ThemeColors.TextSecondary);
-                }
-            );
-
-            if (!success)
+            // Fetch releases
+            using (var client = new HttpClient())
             {
-                await LogAsync("[ERROR] Download failed");
-                UpdateStatus(statusLabel, "Download failed", ThemeColors.Error);
-                return;
+                client.DefaultRequestHeaders.Add("User-Agent", "PowerShell/7.0");
+
+                var response = await client.GetAsync("https://api.github.com/repos/MayaFlux/MayaFlux/releases");
+                response.EnsureSuccessStatusCode();
+
+                var json = await response.Content.ReadAsStringAsync();
+                using (var doc = JsonDocument.Parse(json))
+                {
+                    var root = doc.RootElement;
+
+                    if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() == 0)
+                    {
+                        throw new Exception("No releases found");
+                    }
+
+                    var release = root[0];
+                    var tag = release.GetProperty("tag_name").GetString();
+
+                    await LogAsync($"Tag: {tag}");
+
+                    // Find windows-x64.7z asset
+                    var assets = release.GetProperty("assets");
+                    JsonElement? targetAsset = null;
+
+                    foreach (var asset in assets.EnumerateArray())
+                    {
+                        var name = asset.GetProperty("name").GetString();
+                        if (name != null && name.EndsWith("windows-x64.7z"))
+                        {
+                            targetAsset = asset;
+                            break;
+                        }
+                    }
+
+                    if (targetAsset == null)
+                    {
+                        var assetNames = new List<string>();
+                        foreach (var asset in assets.EnumerateArray())
+                        {
+                            assetNames.Add(asset.GetProperty("name").GetString() ?? "");
+                        }
+                        throw new Exception($"No Windows .7z asset found. Available: {string.Join(", ", assetNames)}");
+                    }
+
+                    var assetName = targetAsset.Value.GetProperty("name").GetString();
+                    var downloadUrl = targetAsset.Value.GetProperty("browser_download_url").GetString();
+
+                    await LogAsync($"Found: {assetName}");
+
+                    // Write tag and URL to files
+                    File.WriteAllText(Path.Combine(config.TempDirectory, "tag.txt"), tag);
+                    File.WriteAllText(Path.Combine(config.TempDirectory, "url.txt"), downloadUrl);
+
+                    await LogAsync("Downloading...");
+                    var outfile = Path.Combine(config.TempDirectory, "mayaflux.7z");
+
+                    using (var downloadResponse = await client.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead))
+                    {
+                        downloadResponse.EnsureSuccessStatusCode();
+
+                        var totalBytes = downloadResponse.Content.Headers.ContentLength ?? -1L;
+                        var canReportProgress = totalBytes != -1;
+
+                        using (var contentStream = await downloadResponse.Content.ReadAsStreamAsync())
+                        using (var fileStream = new FileStream(outfile, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true))
+                        {
+                            var totalRead = 0L;
+                            var buffer = new byte[8192];
+                            int read;
+
+                            while ((read = await contentStream.ReadAsync(buffer, 0, buffer.Length)) != 0)
+                            {
+                                await fileStream.WriteAsync(buffer, 0, read);
+                                totalRead += read;
+
+                                if (canReportProgress)
+                                {
+                                    var progressPercent = (int)((totalRead * 100) / totalBytes);
+                                    UpdateProgress(progressPercent);
+                                }
+                            }
+                        }
+                    }
+
+                    await LogAsync($"Downloaded: {outfile}");
+                    await LogAsync("Success");
+                }
             }
 
-            var fileSize = new FileInfo(downloadPath).Length;
-            await LogAsync($"[OK] Downloaded: {FormatBytes(fileSize)}");
             await LogAsync("");
             await LogAsync("Extracting MayaFlux...");
             UpdateStatus(statusLabel, "Extracting...", ThemeColors.TextSecondary);
 
+            // Create installation directory
             Directory.CreateDirectory(config.MayaFluxRoot);
 
-            if (!FileOperations.Extract7z(downloadPath, config.MayaFluxRoot, logger))
+            // Extract archive
+            var mayafluxFile = Path.Combine(config.TempDirectory, "mayaflux.7z");
+            if (!FileOperations.Extract7z(mayafluxFile, config.MayaFluxRoot, logger))
             {
                 await LogAsync("[ERROR] Extraction failed");
                 UpdateStatus(statusLabel, "Extraction failed", ThemeColors.Error);
@@ -117,6 +194,7 @@ public class MayaFluxDownloadStep : IInstallationStep
             await LogAsync("");
             await LogAsync("Verifying installation...");
 
+            // Verify installation
             if (!FileOperations.VerifyInstallation(config.MayaFluxRoot, logger))
             {
                 await LogAsync("[ERROR] Installation verification failed");
@@ -130,15 +208,12 @@ public class MayaFluxDownloadStep : IInstallationStep
             downloadSuccess = true;
             UpdateStatus(statusLabel, "Download successful", ThemeColors.Success);
 
-            if (nextButton != null)
+            if (nextButton != null && nextButton.Parent != null)
             {
-                if (nextButton.Parent != null)
+                nextButton.Invoke(new Action(() =>
                 {
-                    nextButton.Invoke(new Action(() =>
-                    {
-                        nextButton.Enabled = true;
-                    }));
-                }
+                    nextButton.Enabled = true;
+                }));
             }
         }
         catch (Exception ex)
@@ -181,18 +256,5 @@ public class MayaFluxDownloadStep : IInstallationStep
                 statusLabel.ForeColor = color;
             }));
         }
-    }
-
-    private string FormatBytes(long bytes)
-    {
-        string[] sizes = { "B", "KB", "MB", "GB" };
-        double len = bytes;
-        int order = 0;
-        while (len >= 1024 && order < sizes.Length - 1)
-        {
-            order++;
-            len = len / 1024;
-        }
-        return $"{len:0.##} {sizes[order]}";
     }
 }
