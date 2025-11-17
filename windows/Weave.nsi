@@ -169,25 +169,52 @@ Function CheckExistingInstallation
   ${EndIf}
 FunctionEnd
 
+; -----------------------------------------
+; Download MayaFlux
+; -----------------------------------------
+
 Function DownloadMayaFlux
   ${If} $SkipDownload == "true"
     Return
   ${EndIf}
 
-  Push "Fetching latest MayaFlux release info..."
+  Push "Fetching latest MayaFlux release..."
   Call LogMessage
 
-  StrCpy $MayaFluxRepo "MayaFlux/MayaFlux"
-
-  ; -----------------------------------------
-  ; 1. Get release tag via PowerShell
-  ; -----------------------------------------
-  nsExec::ExecToStack 'powershell -NoProfile -Command "(Invoke-WebRequest ''https://github.com/MayaFlux/MayaFlux/releases'').Content | Select-String -Pattern ''/MayaFlux/MayaFlux/releases/tag/([^\"\""]+)'' | Select-Object -First 1 | ForEach-Object { $_.Matches[0].Groups[1].Value }"'
+  ; Call PowerShell script to fetch and download release
+  nsExec::ExecToStack 'powershell -NoProfile -ExecutionPolicy Bypass -File "$EXEDIR\..\windows\scripts\get_mayaflux_release.ps1" -OutputDir "$TempDir" -Download'
   Pop $0
-  Pop $MayaFluxTag
+
+  ${If} $0 != 0
+    ${If} ${FileExists} "$TempDir\error.txt"
+      FileOpen $1 "$TempDir\error.txt" r
+      FileRead $1 $1
+      FileClose $1
+      Push "ERROR: $1"
+    ${Else}
+      Push "ERROR: PowerShell script failed (exit code $0)"
+    ${EndIf}
+    Call LogError
+    Return
+  ${EndIf}
+
+  ; Read tag and URL from files
+  FileOpen $0 "$TempDir\tag.txt" r
+  FileRead $0 $MayaFluxTag
+  FileClose $0
+
+  FileOpen $0 "$TempDir\url.txt" r
+  FileRead $0 $MayaFluxDownloadUrl
+  FileClose $0
 
   ${If} $MayaFluxTag == ""
-    Push "ERROR: Could not detect latest release tag"
+    Push "ERROR: Could not parse release tag"
+    Call LogError
+    Return
+  ${EndIf}
+
+  ${If} $MayaFluxDownloadUrl == ""
+    Push "ERROR: Could not parse download URL"
     Call LogError
     Return
   ${EndIf}
@@ -195,45 +222,13 @@ Function DownloadMayaFlux
   Push "Latest release: $MayaFluxTag"
   Call LogMessage
 
-  ; -----------------------------------------
-  ; 2. Get Windows asset name
-  ; -----------------------------------------
-  nsExec::ExecToStack 'powershell -NoProfile -Command "$u=''https://github.com/MayaFlux/MayaFlex/releases/expanded_assets/' + ''$MayaFluxTag''; (Invoke-WebRequest $u).Content | Select-String -Pattern ''MayaFlux-.*windows.*\.zip'' | Select-Object -First 1 | ForEach-Object { $_.Matches[0].Value }"'
-  Pop $0
-  Pop $ASSET_NAME
-
-  ${If} $ASSET_NAME == ""
-    Push "ERROR: No Windows asset found for $MayaFluxTag"
-    Call LogError
-    Return
-  ${EndIf}
-
-  Push "Found asset: $ASSET_NAME"
-  Call LogMessage
-
-  ; -----------------------------------------
-  ; 3. Build final download URL
-  ; -----------------------------------------
-  StrCpy $MayaFluxDownloadUrl "https://github.com/MayaFlux/MayaFlux/releases/download/$MayaFluxTag/$ASSET_NAME"
-
-  DetailPrint "Downloading: $MayaFluxDownloadUrl"
-  Push "Downloading from: $MayaFluxDownloadUrl"
-  Call LogMessage
-
-  ; -----------------------------------------
-  ; 4. Download the asset
-  ; -----------------------------------------
-  NSISdl::download "$MayaFluxDownloadUrl" "$TempDir\mayaflux.zip"
-  Pop $0
-
-  ${If} $0 != "success"
-    Push "Download failed: $0"
-    Call LogError
-  ${EndIf}
-
   Push "Download successful"
   Call LogMessage
 FunctionEnd
+
+; -----------------------------------------
+; Extract MayaFlux
+; -----------------------------------------
 
 Function ExtractMayaFlux
   ${If} $SkipDownload == "true"
@@ -244,17 +239,15 @@ Function ExtractMayaFlux
   Call LogMessage
   
   CreateDirectory "$INSTDIR"
+  CreateDirectory "$TempDir\extract"
   
-  ; Try 7-Zip first (better for large archives)
   ${If} ${FileExists} "$PROGRAMFILES64\7-Zip\7z.exe"
     DetailPrint "Using 7-Zip for extraction"
-    nsExec::ExecToStack '"$PROGRAMFILES64\7-Zip\7z.exe" x "$TempDir\mayaflux.zip" -o"$INSTDIR" -y'
+    nsExec::ExecToStack '"$PROGRAMFILES64\7-Zip\7z.exe" x "$TempDir\mayaflux.7z" -o"$TempDir\extract" -y'
     Pop $0
   ${Else}
-    ; Fall back to PowerShell Expand-Archive
-    DetailPrint "Using PowerShell for extraction"
-    nsExec::ExecToStack 'powershell -Command "Expand-Archive -Path ''$TempDir\mayaflux.zip'' -DestinationPath ''$INSTDIR'' -Force"'
-    Pop $0
+    Push "ERROR: 7-Zip not found. Please install from https://www.7-zip.org/"
+    Call LogError
   ${EndIf}
   
   ${If} $0 != 0
@@ -262,17 +255,26 @@ Function ExtractMayaFlux
     Call LogError
   ${EndIf}
   
-  ; Verify extraction
-  ${IfNot} ${FileExists} "$INSTDIR\lib\MayaFluxLib.dll"
-    Push "Verification failed - MayaFluxLib.dll not found at $INSTDIR\lib"
+  ; Use xcopy to move dist_staging contents to $INSTDIR
+  nsExec::ExecToStack 'xcopy "$TempDir\extract\dist_staging\*" "$INSTDIR\" /E /Y /I'
+  Pop $0
+  
+  ${If} $0 != 0
+    Push "Copy failed with exit code: $0"
     Call LogError
   ${EndIf}
   
-  Push "MayaFlux extracted successfully"
+  ; Verify
+  ${IfNot} ${FileExists} "$INSTDIR\lib\MayaFluxLib.lib"
+    Push "Verification failed - MayaFluxLib.lib not found at $INSTDIR\lib"
+    Call LogError
+  ${EndIf}
+  
+  Push "MayaFlux extracted and verified successfully"
   Call LogMessage
   
-  ; Cleanup download
-  Delete "$TempDir\mayaflux.zip"
+  Delete "$TempDir\mayaflux.7z"
+  RMDir /r "$TempDir\extract"
 FunctionEnd
 
 Function InstallDependencies
