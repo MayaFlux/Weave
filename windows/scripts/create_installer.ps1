@@ -119,7 +119,7 @@ else {
 }
 
 # Step 4: Copy installer files to build directory
-Write-Host "`nCopying installer files..." -ForegroundColor Yellow
+Write-Host "`nCopying installer files to build directory..." -ForegroundColor Yellow
 
 # Copy NSI
 Copy-Item $NSI_FILE -Destination (Join-Path $BUILD_DIR "Weave.nsi") -Force
@@ -144,7 +144,7 @@ if (Test-Path $templatesDest) {
 }
 
 Copy-Item $TEMPLATES_DIR -Destination $templatesDest -Recurse -Force
-Write-Host "[OK] Copied templates directory" -ForegroundColor Green
+Write-Host "[OK] Copied templates directory to: $templatesDest" -ForegroundColor Green
 
 # Copy resources (HTML files, etc.)
 $resourcesSource = Join-Path $WINDOWS_DIR "resources"

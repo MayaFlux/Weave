@@ -155,6 +155,52 @@ Section "Weave Tools" SectionTools
   
 SectionEnd
 
+Section "Weave GUI Application" SectionWeaveGui
+  SectionIn RO
+  
+  Push "Installing Weave GUI application"
+  Call LogMessage
+  
+  CreateDirectory "$INSTDIR\gui"
+  CreateDirectory "$SMPROGRAMS\Weave"
+  
+  ; Copy GUI executable
+  ${If} ${FileExists} "$EXEDIR\..\WeaveGUI\Weave.exe"
+    SetOutPath "$INSTDIR\gui"
+    File "$EXEDIR\..\WeaveGUI\Weave.exe"
+    
+    Push "Weave.exe installed to $INSTDIR\gui"
+    Call LogMessage
+    
+    ; Create Start Menu shortcut
+    CreateShortCut "$SMPROGRAMS\Weave\Weave Project Creator.lnk" \
+      "$INSTDIR\gui\Weave.exe" \
+      "" \
+      "$INSTDIR\gui\Weave.exe" \
+      0 \
+      SW_SHOWNORMAL \
+      "" \
+      "Create new MayaFlux projects"
+    
+    Push "Start Menu shortcut created"
+    Call LogMessage
+    
+    ; Create Desktop shortcut (optional)
+    CreateShortCut "$DESKTOP\Weave.lnk" \
+      "$INSTDIR\gui\Weave.exe" \
+      "" \
+      "$INSTDIR\gui\Weave.exe" \
+      0
+    
+    Push "Desktop shortcut created"
+    Call LogMessage
+  ${Else}
+    Push "WARNING: Weave.exe not found at $EXEDIR\..\WeaveGUI\Weave.exe"
+    Call LogMessage
+  ${EndIf}
+  
+SectionEnd
+
 ; ============================================================================
 ; IMPLEMENTATION FUNCTIONS
 ; ============================================================================
@@ -247,7 +293,8 @@ Function ExtractMayaFlux
     Pop $0
   ${Else}
     Push "ERROR: 7-Zip not found. Please install from https://www.7-zip.org/"
-    Call LogError
+    Call LogMessage
+    Return
   ${EndIf}
   
   ${If} $0 != 0
@@ -284,31 +331,25 @@ Function InstallDependencies
   StrCpy $ScriptsDir "$EXEDIR\..\windows\scripts"
   
   ${If} ${FileExists} "$ScriptsDir\install_package.ps1"
-    Push "Found install_package.ps1 at: $ScriptsDir"
-    Call LogMessage
-    
-    Push "Running PowerShell package installer"
+    Push "Found install_package.ps1"
     Call LogMessage
     
     DetailPrint "Installing dependencies (this may take several minutes)..."
     
-    nsExec::ExecToStack 'powershell -ExecutionPolicy Bypass -NoProfile -File "$ScriptsDir\install_package.ps1" -PackagesFile "$ScriptsDir\packages.psd1"'
+    ; Set env var so PowerShell can find the script
+    nsExec::ExecToStack 'cmd /c "set SCRIPTS_DIR=$ScriptsDir && powershell -ExecutionPolicy Bypass -NoProfile -File "$ScriptsDir\install_package.ps1" -PackagesFile "$ScriptsDir\packages.psd1""'
     Pop $0
     
-    ${If} $0 != 0
-      Push "WARNING: Dependency installation completed with exit code: $0. Some packages may need manual installation."
-      Call LogMessage
-    ${Else}
+    ${If} $0 == 0
       Push "All dependencies installed successfully"
       Call LogMessage
+    ${Else}
+      Push "ERROR: Dependency installation failed with exit code: $0"
+      Call LogError
     ${EndIf}
   ${Else}
-    Push "WARNING: install_package.ps1 not found at $ScriptsDir"
-    Call LogMessage
-    Push "WARNING: Dependencies were not automatically installed. You can run setup later:"
-    Call LogMessage
-    Push "WARNING:   powershell -ExecutionPolicy Bypass $ScriptsDir\install_package.ps1"
-    Call LogMessage
+    Push "ERROR: install_package.ps1 not found"
+    Call LogError
   ${EndIf}
 FunctionEnd
 
@@ -353,32 +394,51 @@ FunctionEnd
 Function InstallWeaveTools
   CreateDirectory "$INSTDIR\share\weave\templates"
   
-  StrCpy $ScriptsDir "$EXEDIR\..\windows\scripts"
+  ; Try multiple possible locations for templates
+  ; Build dir structure: build/windows/Weave.exe
+  ; So EXEDIR = build/windows
+  ; Templates should be at: build/windows/templates (copied during build)
   
-  IfFileExists "$EXEDIR\..\templates\*.*" TemplatesFound TemplatesNotFound
+  Push "Installing project templates..."
+  Call LogMessage
   
-  TemplatesFound:
-    Push "Installing project templates"
+  ; Try: build/templates (copied during installer build)
+  ${If} ${FileExists} "$EXEDIR\templates\*.*"
+    Push "Found templates at: $EXEDIR\templates"
     Call LogMessage
     
-    nsExec::ExecToStack 'xcopy "$EXEDIR\..\templates\*" "$INSTDIR\share\weave\templates\" /E /Y /I'
+    nsExec::ExecToStack 'xcopy "$EXEDIR\templates\*" "$INSTDIR\share\weave\templates\" /E /Y /I'
     Pop $0
     
-    StrCmp $0 "0" TemplatesSuccess TemplatesWarning
+    ${If} $0 == "0"
+      Push "Project templates installed successfully"
+      Call LogMessage
+      Return
+    ${EndIf}
+  ${EndIf}
   
-  TemplatesSuccess:
-    Push "Project templates installed"
+  ; Try: repo root/templates (if running from repo)
+  ${If} ${FileExists} "$EXEDIR\..\..\..\templates\*.*"
+    Push "Found templates at: $EXEDIR\..\..\..\templates"
     Call LogMessage
-    Goto ToolsComplete
+    
+    nsExec::ExecToStack 'xcopy "$EXEDIR\..\..\..\templates\*" "$INSTDIR\share\weave\templates\" /E /Y /I'
+    Pop $0
+    
+    ${If} $0 == "0"
+      Push "Project templates installed successfully"
+      Call LogMessage
+      Return
+    ${EndIf}
+  ${EndIf}
   
-  TemplatesWarning:
-    Push "WARNING: Template installation may have completed with warnings"
-    Call LogMessage
-    Goto ToolsComplete
-  
-  TemplatesNotFound:
-    Push "WARNING: Templates directory not found at $EXEDIR\..\templates"
-    Call LogMessage
+  ; If we get here, templates weren't found but don't fail the install
+  Push "WARNING: Project templates not found during installation"
+  Call LogMessage
+  Push "WARNING: GUI may not work correctly until templates are manually copied to: $INSTDIR\share\weave\templates"
+  Call LogMessage
+  Push "WARNING: You can copy from: <repo>\templates to the above location"
+  Call LogMessage
   
   ToolsComplete:
     Push "Weave tools installation complete"
@@ -413,6 +473,19 @@ Function .onInstSuccess
   
   ; Open log file
   ExecShell "open" "$InstallLog"
+
+ Push "Installation succeeded. Launching Weave GUI..."
+  Call LogMessage
+  
+  ; Launch the GUI application
+  ExecShell "open" "$INSTDIR\gui\Weave.exe"
+  
+  DetailPrint ""
+  DetailPrint "Weave Project Creator is launching..."
+  DetailPrint ""
+  DetailPrint "Documentation: https://github.com/MayaFlux/MayaFlux"
+  DetailPrint "Installation log: $InstallLog"
+  DetailPrint ""
 FunctionEnd
 
 Function .onInstFailed
