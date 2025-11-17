@@ -28,28 +28,21 @@ public class MayaFluxDownloadStep : IInstallationStep
         Action<string> logCallback,
         Action nextCallback)
     {
-        // Title
         layout.AddTitle("Step 2: Download MayaFlux");
 
-        // Status label
         var statusLabel = layout.AddStatusLabel("Preparing download...");
 
-        // Progress bar
         progressBar = layout.AddProgressBar();
 
-        // Log box
         logBox = layout.AddLogBox(LayoutConstants.LogBoxMaxHeight);
 
-        // Spacer
         layout.AddFlexibleSpacer();
 
-        // Buttons
         (nextButton, var cancelButton) = layout.AddButtonPair("Next >", "Cancel");
         nextButton.Enabled = false;
         nextButton.Click += (s, e) => nextCallback();
         cancelButton.Click += (s, e) => Application.Exit();
 
-        // Start async download
         Task.Run(() => DownloadMayaFluxAsync(config, statusLabel, logCallback));
     }
 
@@ -82,7 +75,6 @@ public class MayaFluxDownloadStep : IInstallationStep
 
             Directory.CreateDirectory(config.TempDirectory);
 
-            // Fetch releases
             using (var client = new HttpClient())
             {
                 client.DefaultRequestHeaders.Add("User-Agent", "PowerShell/7.0");
@@ -105,7 +97,6 @@ public class MayaFluxDownloadStep : IInstallationStep
 
                     await LogAsync($"Tag: {tag}");
 
-                    // Find windows-x64.7z asset
                     var assets = release.GetProperty("assets");
                     JsonElement? targetAsset = null;
 
@@ -134,7 +125,6 @@ public class MayaFluxDownloadStep : IInstallationStep
 
                     await LogAsync($"Found: {assetName}");
 
-                    // Write tag and URL to files
                     File.WriteAllText(Path.Combine(config.TempDirectory, "tag.txt"), tag);
                     File.WriteAllText(Path.Combine(config.TempDirectory, "url.txt"), downloadUrl);
 
@@ -178,10 +168,8 @@ public class MayaFluxDownloadStep : IInstallationStep
             await LogAsync("Extracting MayaFlux...");
             UpdateStatus(statusLabel, "Extracting...", ThemeColors.TextSecondary);
 
-            // Create installation directory
             Directory.CreateDirectory(config.MayaFluxRoot);
 
-            // Extract archive
             var mayafluxFile = Path.Combine(config.TempDirectory, "mayaflux.7z");
             if (!FileOperations.Extract7z(mayafluxFile, config.MayaFluxRoot, logger))
             {
@@ -194,7 +182,6 @@ public class MayaFluxDownloadStep : IInstallationStep
             await LogAsync("");
             await LogAsync("Verifying installation...");
 
-            // Verify installation
             if (!FileOperations.VerifyInstallation(config.MayaFluxRoot, logger))
             {
                 await LogAsync("[ERROR] Installation verification failed");
