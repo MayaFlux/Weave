@@ -1,6 +1,7 @@
 using Weave.Shared.Models;
 using Weave.Modes;
 using Weave.Utils;
+using Weave.Theme;
 
 namespace Weave.UI.Pages;
 
@@ -11,14 +12,26 @@ public class SystemCheckStep : IInstallationStep
 
     public Panel CreateUI(InstallationConfig config, Action<string> logCallback, Action nextCallback, InstallationMode parent)
     {
-        var panel = new Panel { BackColor = Color.White, Padding = new Padding(20) };
+        var panel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = ThemeColors.BackgroundDark
+        };
+        panel.ApplyDarkTheme();
+
+        int margin = 20;
+        int buttonHeight = 50;
+        int usableWidth = panel.Width - (margin * 2);
+        int usableHeight = panel.Height - buttonHeight - (margin * 3);
 
         var titleLabel = new Label
         {
             Text = "Step 1: System Check",
             Font = new Font("Segoe UI", 14, FontStyle.Bold),
             AutoSize = true,
-            Location = new Point(0, 0)
+            ForeColor = ThemeColors.TextPrimary,
+            BackColor = ThemeColors.BackgroundDark,
+            Location = new Point(margin, margin)
         };
         panel.Controls.Add(titleLabel);
 
@@ -26,8 +39,10 @@ public class SystemCheckStep : IInstallationStep
         {
             Text = "Verifying system requirements...",
             Font = new Font("Segoe UI", 10),
+            ForeColor = ThemeColors.TextSecondary,
+            BackColor = ThemeColors.BackgroundDark,
             AutoSize = true,
-            Location = new Point(0, 40)
+            Location = new Point(margin, margin + 40)
         };
         panel.Controls.Add(statusLabel);
 
@@ -36,12 +51,12 @@ public class SystemCheckStep : IInstallationStep
             Multiline = true,
             ReadOnly = true,
             Font = new Font("Consolas", 9),
-            BackColor = Color.FromArgb(31, 31, 31),
-            ForeColor = Color.FromArgb(220, 220, 220),
-            Location = new Point(0, 80),
-            Width = panel.Width - 40,
-            Height = 300,
-            ScrollBars = ScrollBars.Vertical
+            BackColor = ThemeColors.BackgroundMedium,
+            ForeColor = ThemeColors.TextPrimary,
+            ScrollBars = ScrollBars.Vertical,
+            Location = new Point(margin, margin + 70),
+            Width = usableWidth,
+            Height = usableHeight - 70
         };
         panel.Controls.Add(logBox);
 
@@ -50,29 +65,28 @@ public class SystemCheckStep : IInstallationStep
             Text = "Next >",
             Width = 100,
             Height = 40,
-            Location = new Point(panel.Width - 120, panel.Height - 60),
-            BackColor = Color.FromArgb(0, 120, 215),
+            BackColor = ThemeColors.ButtonPrimary,
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
-            Enabled = false
+            Enabled = false,
+            Location = new Point(usableWidth + margin - 100, panel.Height - 50)
         };
         nextButton.Click += (s, e) => nextCallback();
         panel.Controls.Add(nextButton);
 
-        var skipButton = new Button
+        var cancelButton = new Button
         {
             Text = "Cancel",
             Width = 100,
             Height = 40,
-            Location = new Point(panel.Width - 240, panel.Height - 60),
-            BackColor = Color.FromArgb(200, 200, 200),
-            ForeColor = Color.Black,
-            FlatStyle = FlatStyle.Flat
+            BackColor = ThemeColors.ButtonSecondary,
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Location = new Point(usableWidth + margin - 210, panel.Height - 50)
         };
-        skipButton.Click += (s, e) => Application.Exit();
-        panel.Controls.Add(skipButton);
+        cancelButton.Click += (s, e) => Application.Exit();
+        panel.Controls.Add(cancelButton);
 
-        // Run checks asynchronously
         Task.Run(() => PerformChecks(
             msg =>
             {
@@ -88,14 +102,13 @@ public class SystemCheckStep : IInstallationStep
                 {
                     nextButton.Enabled = checksPass;
                     statusLabel.Text = checksPass ? "All checks passed!" : "Some checks failed.";
-                    statusLabel.ForeColor = checksPass ? Color.Green : Color.Red;
+                    statusLabel.ForeColor = checksPass ? ThemeColors.Success : ThemeColors.Error;
                 }));
             }
         ));
 
         return panel;
     }
-
     private void PerformChecks(Action<string> log, Action onComplete)
     {
         checksPass = true;

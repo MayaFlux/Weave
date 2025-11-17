@@ -1,6 +1,12 @@
+using System;
+using System.IO;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using System.Drawing;
 using Weave.Shared.Models;
 using Weave.Modes;
 using Weave.Utils;
+using Weave.Theme;
 
 namespace Weave.UI.Pages;
 
@@ -11,44 +17,48 @@ public class MayaFluxDownloadStep : IInstallationStep
 
     public Panel CreateUI(InstallationConfig config, Action<string> logCallback, Action nextCallback, InstallationMode parent)
     {
-        var panel = new Panel { BackColor = Color.White, Padding = new Padding(20) };
-
-        var titleLabel = new Label
+        var panel = new Panel
         {
-            Text = "Step 2: Download MayaFlux",
-            Font = new Font("Segoe UI", 14, FontStyle.Bold),
-            AutoSize = true,
-            Location = new Point(0, 0)
+            Padding = new Padding(LayoutConstants.MarginMedium),
+            AutoScroll = true
         };
-        panel.Controls.Add(titleLabel);
+        panel.ApplyDarkTheme();
+
+        int currentY = LayoutConstants.MarginMedium;
+
+        currentY = LayoutHelper.AddTitle(panel, "Step 2: Download MayaFlux", currentY);
 
         var statusLabel = new Label
         {
             Text = "Downloading...",
             Font = new Font("Segoe UI", 10),
+            ForeColor = ThemeColors.TextSecondary,
+            BackColor = ThemeColors.BackgroundDark,
             AutoSize = true,
-            Location = new Point(0, 40)
+            Location = new Point(LayoutConstants.MarginMedium, currentY)
         };
         panel.Controls.Add(statusLabel);
+        currentY += statusLabel.Height + LayoutConstants.SpacingLarge;
 
         var progressBar = new ProgressBar
         {
-            Location = new Point(0, 70),
-            Width = panel.Width - 40,
+            Location = new Point(LayoutConstants.MarginMedium, currentY),
+            Width = panel.Width - (LayoutConstants.MarginMedium * 2),
             Height = 20
         };
         panel.Controls.Add(progressBar);
+        currentY += progressBar.Height + LayoutConstants.SpacingLarge;
 
         var logBox = new TextBox
         {
             Multiline = true,
             ReadOnly = true,
             Font = new Font("Consolas", 9),
-            BackColor = Color.FromArgb(31, 31, 31),
-            ForeColor = Color.FromArgb(220, 220, 220),
-            Location = new Point(0, 100),
-            Width = panel.Width - 40,
-            Height = 270,
+            BackColor = ThemeColors.BackgroundMedium,
+            ForeColor = ThemeColors.TextPrimary,
+            Location = new Point(LayoutConstants.MarginMedium, currentY),
+            Width = panel.Width - (LayoutConstants.MarginMedium * 2),
+            Height = LayoutConstants.LogBoxMaxHeight,
             ScrollBars = ScrollBars.Vertical
         };
         panel.Controls.Add(logBox);
@@ -57,41 +67,43 @@ public class MayaFluxDownloadStep : IInstallationStep
         {
             Text = "Next >",
             Width = 100,
-            Height = 40,
-            Location = new Point(panel.Width - 120, panel.Height - 60),
-            BackColor = Color.FromArgb(0, 120, 215),
+            Height = LayoutConstants.ButtonHeight,
+            BackColor = ThemeColors.ButtonPrimary,
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
             Enabled = false
         };
         nextButton.Click += (s, e) => nextCallback();
-        panel.Controls.Add(nextButton);
 
-        var skipButton = new Button
+        var cancelButton = new Button
         {
             Text = "Cancel",
             Width = 100,
-            Height = 40,
-            Location = new Point(panel.Width - 240, panel.Height - 60),
-            BackColor = Color.FromArgb(200, 200, 200),
-            ForeColor = Color.Black,
+            Height = LayoutConstants.ButtonHeight,
+            BackColor = ThemeColors.ButtonSecondary,
+            ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat
         };
-        skipButton.Click += (s, e) => Application.Exit();
-        panel.Controls.Add(skipButton);
+        cancelButton.Click += (s, e) => Application.Exit();
 
-        // Check if already installed
+        LayoutHelper.PositionButtonsAtBottom(panel, LayoutConstants.ButtonHeight,
+            (nextButton, 0),
+            (cancelButton, 1)
+        );
+
+        panel.Controls.Add(nextButton);
+        panel.Controls.Add(cancelButton);
+
         if (File.Exists(Path.Combine(config.MayaFluxRoot, "lib", "MayaFluxLib.lib")))
         {
             logBox.Text = "[OK] MayaFlux already installed\r\n[INFO] Skipping download";
             statusLabel.Text = "MayaFlux already installed";
-            statusLabel.ForeColor = Color.Green;
+            statusLabel.ForeColor = ThemeColors.Success;
             nextButton.Enabled = true;
             config.SkipDownload = true;
             return panel;
         }
 
-        // Start download
         Task.Run(() => DownloadMayaFluxAsync(
             config,
             msg =>
@@ -108,7 +120,7 @@ public class MayaFluxDownloadStep : IInstallationStep
                 {
                     nextButton.Enabled = downloadSuccess;
                     statusLabel.Text = downloadSuccess ? "Download complete!" : "Download failed";
-                    statusLabel.ForeColor = downloadSuccess ? Color.Green : Color.Red;
+                    statusLabel.ForeColor = downloadSuccess ? ThemeColors.Success : ThemeColors.Error;
                 }));
             }
         ));

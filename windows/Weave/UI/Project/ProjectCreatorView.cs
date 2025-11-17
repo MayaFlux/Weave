@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Windows.Forms;
 using System.Drawing;
+using Weave.Theme;
 
 namespace Weave.UI.Project;
 
@@ -25,7 +26,7 @@ public partial class ProjectCreatorView : UserControl
 
     private void InitializeUI()
     {
-        BackColor = Color.White;
+        BackColor = ThemeColors.BackgroundDark;
         Padding = new Padding(20);
 
         // ============================================================================
@@ -37,7 +38,8 @@ public partial class ProjectCreatorView : UserControl
             Font = new Font("Segoe UI", 14, FontStyle.Bold),
             Location = new Point(0, 0),
             AutoSize = true,
-            ForeColor = Color.FromArgb(29, 29, 31)
+            ForeColor = ThemeColors.TextPrimary,
+            BackColor = ThemeColors.BackgroundDark
         };
         Controls.Add(titleLabel);
 
@@ -49,7 +51,8 @@ public partial class ProjectCreatorView : UserControl
             Text = "Project Name:",
             Location = new Point(0, 40),
             AutoSize = true,
-            ForeColor = Color.FromArgb(110, 110, 115)
+            ForeColor = ThemeColors.TextSecondary,
+            BackColor = ThemeColors.BackgroundDark
         };
         Controls.Add(nameLabel);
 
@@ -59,7 +62,9 @@ public partial class ProjectCreatorView : UserControl
             Width = Width - 40,
             Height = 30,
             Text = "MyProject",
-            Font = new Font("Segoe UI", 10)
+            Font = new Font("Segoe UI", 10),
+            BackColor = ThemeColors.BackgroundMedium,
+            ForeColor = ThemeColors.TextPrimary
         };
         Controls.Add(projectNameInput);
 
@@ -71,7 +76,8 @@ public partial class ProjectCreatorView : UserControl
             Text = "Project Location:",
             Location = new Point(0, 100),
             AutoSize = true,
-            ForeColor = Color.FromArgb(110, 110, 115)
+            ForeColor = ThemeColors.TextSecondary,
+            BackColor = ThemeColors.BackgroundDark
         };
         Controls.Add(pathLabel);
 
@@ -81,7 +87,9 @@ public partial class ProjectCreatorView : UserControl
             Width = Width - 110,
             Height = 30,
             Text = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            Font = new Font("Segoe UI", 10)
+            Font = new Font("Segoe UI", 10),
+            BackColor = ThemeColors.BackgroundMedium,
+            ForeColor = ThemeColors.TextPrimary
         };
         Controls.Add(projectPathInput);
 
@@ -91,7 +99,7 @@ public partial class ProjectCreatorView : UserControl
             Location = new Point(Width - 100, 120),
             Width = 85,
             Height = 30,
-            BackColor = Color.FromArgb(0, 120, 215),
+            BackColor = ThemeColors.ButtonPrimary,
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
             Font = new Font("Segoe UI", 9)
@@ -107,7 +115,9 @@ public partial class ProjectCreatorView : UserControl
             Text = "Enable Live Coding (Lila)",
             Location = new Point(0, 170),
             AutoSize = true,
-            Checked = false
+            Checked = false,
+            BackColor = ThemeColors.BackgroundDark,
+            ForeColor = ThemeColors.TextPrimary
         };
         Controls.Add(withLilaCheckbox);
 
@@ -116,7 +126,9 @@ public partial class ProjectCreatorView : UserControl
             Text = "Configure for VS Code",
             Location = new Point(0, 195),
             AutoSize = true,
-            Checked = true
+            Checked = true,
+            BackColor = ThemeColors.BackgroundDark,
+            ForeColor = ThemeColors.TextPrimary
         };
         Controls.Add(withVscodeCheckbox);
 
@@ -128,7 +140,8 @@ public partial class ProjectCreatorView : UserControl
             Text = "Output:",
             Location = new Point(0, 230),
             AutoSize = true,
-            ForeColor = Color.FromArgb(110, 110, 115),
+            ForeColor = ThemeColors.TextSecondary,
+            BackColor = ThemeColors.BackgroundDark,
             Font = new Font("Segoe UI", 9, FontStyle.Bold)
         };
         Controls.Add(outputLabel);
@@ -139,7 +152,8 @@ public partial class ProjectCreatorView : UserControl
             Width = Width - 40,
             Height = Height - 350,
             ReadOnly = true,
-            BackColor = Color.FromArgb(242, 242, 242),
+            BackColor = ThemeColors.BackgroundMedium,
+            ForeColor = ThemeColors.TextPrimary,
             Font = new Font("Consolas", 9),
             BorderStyle = BorderStyle.Fixed3D
         };
@@ -154,7 +168,7 @@ public partial class ProjectCreatorView : UserControl
             Location = new Point(Width - 200, Height - 50),
             Width = 180,
             Height = 40,
-            BackColor = Color.FromArgb(16, 124, 16),
+            BackColor = ThemeColors.ButtonSuccess,
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
             Font = new Font("Segoe UI", 10, FontStyle.Bold)
@@ -168,8 +182,8 @@ public partial class ProjectCreatorView : UserControl
             Location = new Point(0, Height - 50),
             Width = 100,
             Height = 40,
-            BackColor = Color.FromArgb(200, 200, 200),
-            ForeColor = Color.Black,
+            BackColor = ThemeColors.ButtonSecondary,
+            ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
             Font = new Font("Segoe UI", 10)
         };

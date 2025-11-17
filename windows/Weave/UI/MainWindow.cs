@@ -3,6 +3,7 @@ using System.Windows.Forms;
 using Weave.Shared.Models;
 using Weave.Modes;
 using Weave.UI.Pages;
+using static Weave.Theme.ThemeExtensions;
 
 namespace Weave.UI;
 
@@ -36,10 +37,12 @@ public partial class MainWindow : Form
         MinimizeBox = true;
         Icon = SystemIcons.Application;
 
+        this.ApplyDarkTheme();
+
         contentPanel = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = Color.White
+            BackColor = Weave.Theme.ThemeColors.BackgroundDark
         };
         Controls.Add(contentPanel);
     }
