@@ -1,10 +1,4 @@
 #!/usr/bin/env powershell
-# Verify Windows build artifacts
-
-param(
-    [Parameter(Mandatory = $true)]
-    [string]$Version
-)
 
 $ErrorActionPreference = "Stop"
 
@@ -15,45 +9,48 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
 $buildDir = "build\windows"
-$installerPath = "$buildDir\Weave-$Version.exe"
+$zipPath = "$buildDir\Weave.zip"
 
-# Check if installer exists
+# Check if ZIP exists
 Write-Host "Checking installer..." -ForegroundColor Yellow
-if (Test-Path $installerPath) {
-    $fileSize = (Get-Item $installerPath).Length
+if (Test-Path $zipPath) {
+    $fileSize = (Get-Item $zipPath).Length
     $fileSizeMB = [Math]::Round($fileSize / 1MB, 2)
-    Write-Host "[OK] Installer found" -ForegroundColor Green
-    Write-Host "     Path: $installerPath" -ForegroundColor Green
-    Write-Host "     Size: $fileSizeMB MB" -ForegroundColor Green
+    Write-Host "OK: Installer found" -ForegroundColor Green
+    Write-Host "    Path: $zipPath" -ForegroundColor Green
+    Write-Host "    Size: $fileSizeMB MB" -ForegroundColor Green
 } else {
-    Write-Host "[ERROR] Installer not found at: $installerPath" -ForegroundColor Red
+    Write-Host "Error: Installer not found at: $zipPath" -ForegroundColor Red
     exit 1
 }
 
-# Check that scripts were included in the build output
+# Check that scripts were included in the ZIP
 Write-Host ""
 Write-Host "Checking bundled resources..." -ForegroundColor Yellow
 
-$scriptFiles = @(
+$requiredFiles = @(
     "install_package.ps1",
-    "packages.psd1"
+    "packages.psd1",
+    "Weave.exe"
 )
 
-$allScriptsPresent = $true
-foreach ($script in $scriptFiles) {
-    $scriptPath = Join-Path $buildDir $script
-    if (Test-Path $scriptPath) {
-        $fileSize = (Get-Item $scriptPath).Length / 1KB
-        Write-Host "[OK] $script ($('{0:F1}' -f $fileSize) KB)" -ForegroundColor Green
+$stagingDir = "$buildDir\staging"
+$allPresent = $true
+
+foreach ($file in $requiredFiles) {
+    $filePath = "$stagingDir\$file"
+    if (Test-Path $filePath) {
+        $fileSize = (Get-Item $filePath).Length / 1KB
+        Write-Host "OK: $file ($('{0:F1}' -f $fileSize) KB)" -ForegroundColor Green
     } else {
-        Write-Host "[ERROR] $script not found in build output" -ForegroundColor Red
-        $allScriptsPresent = $false
+        Write-Host "Error: $file not found in staging directory" -ForegroundColor Red
+        $allPresent = $false
     }
 }
 
-if (-not $allScriptsPresent) {
+if (-not $allPresent) {
     Write-Host ""
-    Write-Host "[ERROR] Some required scripts are missing from build output" -ForegroundColor Red
+    Write-Host "Error: Some required files are missing" -ForegroundColor Red
     exit 1
 }
 
@@ -62,6 +59,6 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  Build Verification Complete" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "✅ Installer ready for distribution:" -ForegroundColor Green
-Write-Host "   $installerPath" -ForegroundColor Green
+Write-Host "OK: Installer ready for distribution:" -ForegroundColor Green
+Write-Host "   $zipPath" -ForegroundColor Green
 Write-Host ""

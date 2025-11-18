@@ -10,23 +10,10 @@ jobs:
   build-macos:
     runs-on: macos-14
     outputs:
-      version: ${{ steps.version.outputs.VERSION }}
       sha256: ${{ steps.hash.outputs.SHA256 }}
-      installer_path: ${{ steps.version.outputs.INSTALLER_PATH }}
     steps:
       - name: Checkout Weave
         uses: actions/checkout@v4
-
-      - name: Extract version
-        id: version
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-          else
-            VERSION="0.1.0-$(git rev-parse --short HEAD)"
-          fi
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "INSTALLER_PATH=build/macos/Weave-${VERSION}.pkg" >> $GITHUB_OUTPUT
 
       - name: Setup Xcode (for Swift compilation)
         uses: maxim-lobanov/setup-xcode@v1
@@ -55,13 +42,14 @@ jobs:
           chmod +x .github/scripts/verify-macos-build.sh
           chmod +x .github/scripts/generate-release-body.sh
 
-      - name: Build installer package (includes Swift app)
+      - name: Build installer package
         run: |
-          ./macos/scripts/create_pkg.sh ${{ steps.version.outputs.VERSION }}
+          mkdir -p build/macos
+          ./macos/scripts/create_pkg.sh
 
       - name: Verify build outputs
         run: |
-          ./.github/scripts/verify-macos-build.sh ${{ steps.version.outputs.VERSION }}
+          ./.github/scripts/verify-macos-build.sh
 
       - name: Test Weave.app (smoke test)
         run: |
@@ -78,54 +66,40 @@ jobs:
           fi
           echo "✅ Info.plist exists"
 
-          echo ""
-          echo "=== Verifying code signature ==="
-          codesign -vv build/macos/WeaveApp/Weave.app || echo "⚠️ Code signature verification failed (expected for ad-hoc signing)"
-
       - name: Generate SHA256 hash
         id: hash
         run: |
-          SHA256=$(shasum -a 256 "${{ steps.version.outputs.INSTALLER_PATH }}" | cut -d ' ' -f 1)
+          PKG=$(find build/macos -maxdepth 1 -name "Weave.pkg" -o -name "Weave-*.pkg" | head -1)
+          if [ -z "$PKG" ]; then
+            echo "Error: No .pkg file found in build/macos"
+            exit 1
+          fi
+          SHA256=$(shasum -a 256 "$PKG" | cut -d ' ' -f 1)
           echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
+          echo "PKG_PATH=$PKG" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Weave-${{ steps.version.outputs.VERSION }}-macos
-          path: ${{ steps.version.outputs.INSTALLER_PATH }}
+          name: weave-macos
+          path: ${{ steps.hash.outputs.PKG_PATH }}
           retention-days: 30
 
       - name: Upload debug artifacts (on failure)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: build-debug-${{ steps.version.outputs.VERSION }}-macos
-          path: |
-            build/macos/
+          name: build-debug-macos
+          path: build/macos/
           retention-days: 7
 
   build-windows:
     runs-on: windows-latest
     outputs:
-      version: ${{ steps.version.outputs.VERSION }}
       sha256: ${{ steps.hash.outputs.SHA256 }}
-      installer_path: ${{ steps.version.outputs.INSTALLER_PATH }}
     steps:
       - name: Checkout Weave
         uses: actions/checkout@v4
-
-      - name: Extract version
-        id: version
-        shell: powershell
-        run: |
-          if ("$env:GITHUB_REF" -match "refs/tags/v(.+)") {
-            $VERSION = $matches[1]
-          } else {
-            $SHORT_SHA = "$env:GITHUB_SHA".Substring(0, 7)
-            $VERSION = "0.1.0-$SHORT_SHA"
-          }
-          echo "VERSION=$VERSION" >> $env:GITHUB_OUTPUT
-          echo "INSTALLER_PATH=build/windows/Weave-$VERSION.exe" >> $env:GITHUB_OUTPUT
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -159,21 +133,20 @@ jobs:
         shell: powershell
         run: |
           if (-not (Test-Path "templates")) {
-            Write-Host "[ERROR] Templates directory not found" -ForegroundColor Red
+            Write-Host "Error: Templates directory not found"
             exit 1
           }
           $templateCount = @(Get-ChildItem "templates" -Recurse).Count
-          Write-Host "[OK] Templates directory found with $templateCount items" -ForegroundColor Green
+          Write-Host "OK: Templates directory found with $templateCount items"
 
       - name: Create distribution package
         shell: powershell
         run: |
-          $VERSION = "${{ steps.version.outputs.VERSION }}"
           $buildDir = "build\windows"
           $releaseDir = "windows\Weave\bin\x64\Release\net8.0-windows\win-x64"
           
           if (-not (Test-Path $releaseDir)) {
-            Write-Host "[ERROR] Release directory not found" -ForegroundColor Red
+            Write-Host "Error: Release directory not found"
             exit 1
           }
           
@@ -181,46 +154,59 @@ jobs:
             New-Item -ItemType Directory -Path $buildDir | Out-Null
           }
           
+          # Create staging directory for all files
+          $stagingDir = "$buildDir\staging"
+          New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
+          
           # Copy exe
-          Copy-Item "$releaseDir\Weave.exe" -Destination "$buildDir\Weave.exe" -Force
+          Copy-Item "$releaseDir\Weave.exe" -Destination "$stagingDir\Weave.exe" -Force
           
           # Copy scripts from source
-          Copy-Item "windows\scripts\install_package.ps1" -Destination "$buildDir\install_package.ps1" -Force
-          Copy-Item "windows\scripts\packages.psd1" -Destination "$buildDir\packages.psd1" -Force
+          Copy-Item "windows\scripts\install_package.ps1" -Destination "$stagingDir\install_package.ps1" -Force
+          Copy-Item "windows\scripts\packages.psd1" -Destination "$stagingDir\packages.psd1" -Force
           
-          Write-Host "[OK] Distribution package created" -ForegroundColor Green
-      - name: Rename for distribution
+          # Copy templates directory
+          if (Test-Path "templates") {
+            Copy-Item "templates" -Destination "$stagingDir\templates" -Recurse -Force
+          }
+
+      - name: Create ZIP archive
         shell: powershell
         run: |
           $buildDir = "build\windows"
-          $version = "${{ steps.version.outputs.VERSION }}"
-          $source = Join-Path $buildDir "Weave.exe"
-          $dest = Join-Path $buildDir "Weave-$version.exe"
+          $stagingDir = "$buildDir\staging"
+          $zipPath = "$buildDir\Weave.zip"
           
-          Move-Item $source $dest -Force
+          Compress-Archive -Path $stagingDir -DestinationPath $zipPath -Force
 
       - name: Verify build
         shell: powershell
-        run: .\.github\scripts\verify-windows-build.ps1 -Version "${{ steps.version.outputs.VERSION }}"
+        run: .\.github\scripts\verify-windows-build.ps1
+
       - name: Generate SHA256 hash
         id: hash
         shell: powershell
         run: |
-          $hash = (Get-FileHash "${{ steps.version.outputs.INSTALLER_PATH }}" -Algorithm SHA256).Hash
+          $zipPath = "build\windows\Weave.zip"
+          if (-not (Test-Path $zipPath)) {
+            Write-Host "Error: ZIP file not found at $zipPath"
+            exit 1
+          }
+          $hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash
           echo "SHA256=$hash" >> $env:GITHUB_OUTPUT
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Weave-${{ steps.version.outputs.VERSION }}-windows
-          path: ${{ steps.version.outputs.INSTALLER_PATH }}
+          name: weave-windows
+          path: build/windows/Weave.zip
           retention-days: 30
 
       - name: Upload debug artifacts (on failure)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: build-debug-${{ steps.version.outputs.VERSION }}-windows
+          name: build-debug-windows
           path: |
             build/windows/
             windows/Weave/bin/Release/
@@ -229,7 +215,6 @@ jobs:
   publish-release:
     needs: [build-macos, build-windows]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
     steps:
@@ -239,56 +224,66 @@ jobs:
       - name: Download macOS artifact
         uses: actions/download-artifact@v4
         with:
-          name: Weave-${{ needs.build-macos.outputs.version }}-macos
+          name: weave-macos
           path: ./packages/macos
 
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
-          name: Weave-${{ needs.build-windows.outputs.version }}-windows
+          name: weave-windows
           path: ./packages/windows
 
-      - name: Verify artifacts
+      - name: Rename artifacts for release
         run: |
-          echo "=== macOS Artifact ==="
-          ls -lh ./packages/macos/ || echo "No macOS artifact"
-          echo ""
-          echo "=== Windows Artifact ==="
-          ls -lh ./packages/windows/ || echo "No Windows artifact"
-          echo ""
-
-          # Check that we have both artifacts
-          if [ ! -f "./packages/macos/Weave-${{ needs.build-macos.outputs.version }}.pkg" ]; then
-            echo "❌ macOS artifact not found!"
+          mkdir -p ./release
+          
+          MACOS_PKG=$(find ./packages/macos -name "*.pkg" | head -1)
+          if [ -z "$MACOS_PKG" ]; then
+            echo "Error: macOS artifact not found"
             exit 1
           fi
-
-          if [ ! -f "./packages/windows/Weave-${{ needs.build-windows.outputs.version }}.exe" ]; then
-            echo "❌ Windows artifact not found!"
+          cp "$MACOS_PKG" ./release/Weave-macos.pkg
+          
+          WINDOWS_ZIP=$(find ./packages/windows -name "*.zip" | head -1)
+          if [ -z "$WINDOWS_ZIP" ]; then
+            echo "Error: Windows artifact not found"
             exit 1
           fi
+          cp "$WINDOWS_ZIP" ./release/Weave-windows.zip
+
+      - name: Determine release version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+            IS_RELEASE=true
+          else
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.1.0")
+            VERSION=${LATEST_TAG#v}-dev
+            IS_RELEASE=false
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "IS_RELEASE=$IS_RELEASE" >> $GITHUB_OUTPUT
 
       - name: Generate release body
         id: generate_release_body
         run: |
-          # Generate release body from template
+          chmod +x ./.github/scripts/generate-release-body.sh
           ./.github/scripts/generate-release-body.sh \
-            --version "${{ needs.build-macos.outputs.version }}" \
+            --version "${{ steps.version.outputs.VERSION }}" \
             --macos-sha256 "${{ needs.build-macos.outputs.sha256 }}" \
             --windows-sha256 "${{ needs.build-windows.outputs.sha256 }}" \
             --output release-body.md
 
-          echo "Generated release body:"
-          cat release-body.md
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.IS_RELEASE == 'true' && format('v{0}', steps.version.outputs.VERSION) || format('v{0}', steps.version.outputs.VERSION) }}
           files: |
-            packages/macos/Weave-*.pkg
-            packages/windows/Weave-*.exe
+            release/Weave-macos.pkg
+            release/Weave-windows.zip
           body_path: release-body.md
           draft: false
-          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          prerelease: ${{ steps.version.outputs.IS_RELEASE == 'false' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
