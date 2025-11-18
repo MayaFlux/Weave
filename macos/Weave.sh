@@ -141,22 +141,22 @@ echo "✅ CMakeLists.txt generated"
 # COPY main.cpp
 # ============================================================================
 
-if [ ! -f "$TEMPLATES_DIR/main.cpp.in" ]; then
-    error "main.cpp template not found at $TEMPLATES_DIR/main.cpp.in"
+if [ ! -f "$TEMPLATES_DIR/main.cpp" ]; then
+    error "main.cpp template not found at $TEMPLATES_DIR/main.cpp"
 fi
 
-cp "$TEMPLATES_DIR/main.cpp.in" "$PROJECT_DIR/src/main.cpp"
+cp "$TEMPLATES_DIR/main.cpp" "$PROJECT_DIR/src/main.cpp"
 echo "✅ main.cpp created"
 
 # ============================================================================
 # COPY user_project.hpp
 # ============================================================================
 
-if [ ! -f "$TEMPLATES_DIR/user_project.hpp.in" ]; then
-    error "user_project.hpp template not found at $TEMPLATES_DIR/user_project.hpp.in"
+if [ ! -f "$TEMPLATES_DIR/user_project.hpp" ]; then
+    error "user_project.hpp template not found at $TEMPLATES_DIR/user_project.hpp"
 fi
 
-cp "$TEMPLATES_DIR/user_project.hpp.in" "$PROJECT_DIR/src/user_project.hpp"
+cp "$TEMPLATES_DIR/user_project.hpp" "$PROJECT_DIR/src/user_project.hpp"
 echo "✅ user_project.hpp created"
 
 # ============================================================================
@@ -170,9 +170,9 @@ if [ "$WITH_VSCODE" = true ]; then
     if [ -d "$TEMPLATES_DIR/vscode" ]; then
         # Use templates with substitution
         for vscode_file in settings.json tasks.json launch.json; do
-            if [ -f "$TEMPLATES_DIR/vscode/${vscode_file}.in" ]; then
+            if [ -f "$TEMPLATES_DIR/vscode/${vscode_file}" ]; then
                 sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" \
-                    "$TEMPLATES_DIR/vscode/${vscode_file}.in" \
+                    "$TEMPLATES_DIR/vscode/${vscode_file}" \
                     >"$PROJECT_DIR/.vscode/$vscode_file"
             fi
         done
@@ -218,7 +218,7 @@ Edit your code in \`src/user_project.hpp\`:
 
 ## Documentation
 
-See [MayaFlux Documentation](https://github.com/rhish9h/MayaFlux)
+See [MayaFlux Documentation](https://github.com/MayaFlux/MayaFlux)
 EOF
 
 echo "✅ README.md created"

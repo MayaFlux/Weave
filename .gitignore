@@ -1,2 +1,8 @@
 build/
 .vs/
+windows/Weave/bin/
+windows/Weave/obj/
+windows/Shared/bin/
+windows/Shared/obj/
+/windows/**/**/**.resx
+windows/**/**.csproj.user

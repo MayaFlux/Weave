@@ -127,76 +127,87 @@ jobs:
           echo "VERSION=$VERSION" >> $env:GITHUB_OUTPUT
           echo "INSTALLER_PATH=build/windows/Weave-$VERSION.exe" >> $env:GITHUB_OUTPUT
 
-      - name: Install NSIS
-        shell: powershell
-        run: |
-          Write-Host "Installing NSIS..." -ForegroundColor Cyan
-          choco install nsis -y --no-progress
-          Write-Host "NSIS installed successfully" -ForegroundColor Green
-
-      - name: Verify NSIS installation
-        shell: powershell
-        run: |
-          $nsis = "C:\Program Files (x86)\NSIS\makensis.exe"
-          if (Test-Path $nsis) {
-            Write-Host "[OK] NSIS found at: $nsis" -ForegroundColor Green
-            & $nsis -VERSION
-          } else {
-            Write-Host "[ERROR] NSIS not found" -ForegroundColor Red
-            exit 1
-          }
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
 
       - name: Verify source files
         shell: powershell
-        run: |
-          .\.github\scripts\verify-windows-files.ps1
+        run: .\.github\scripts\verify-windows-files.ps1
 
-      - name: Build installer
+      - name: Restore dependencies
         shell: powershell
         run: |
-          $VERSION = "${{ steps.version.outputs.VERSION }}"
-          Write-Host "Building Weave installer v$VERSION..." -ForegroundColor Cyan
-
-          # Run the build script
-          & .\windows\scripts\create_installer.ps1 -Version $VERSION
-
+          dotnet restore windows\Weave.sln
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "[ERROR] Build failed" -ForegroundColor Red
             exit 1
           }
 
-      - name: Rename installer for distribution
+      - name: Build solution (Release x64)
+        shell: powershell
+        run: |
+          dotnet build windows\Weave.sln `
+            --configuration Release `
+            -p:Platform=x64
+          
+          if ($LASTEXITCODE -ne 0) {
+            exit 1
+          }
+
+      - name: Verify templates directory
+        shell: powershell
+        run: |
+          if (-not (Test-Path "templates")) {
+            Write-Host "[ERROR] Templates directory not found" -ForegroundColor Red
+            exit 1
+          }
+          $templateCount = @(Get-ChildItem "templates" -Recurse).Count
+          Write-Host "[OK] Templates directory found with $templateCount items" -ForegroundColor Green
+
+      - name: Create distribution package
+        shell: powershell
+        run: |
+          $VERSION = "${{ steps.version.outputs.VERSION }}"
+          $buildDir = "build\windows"
+          $releaseDir = "windows\Weave\bin\x64\Release\net8.0-windows\win-x64"
+          
+          if (-not (Test-Path $releaseDir)) {
+            Write-Host "[ERROR] Release directory not found" -ForegroundColor Red
+            exit 1
+          }
+          
+          if (-not (Test-Path $buildDir)) {
+            New-Item -ItemType Directory -Path $buildDir | Out-Null
+          }
+          
+          # Copy exe
+          Copy-Item "$releaseDir\Weave.exe" -Destination "$buildDir\Weave.exe" -Force
+          
+          # Copy scripts from source
+          Copy-Item "windows\scripts\install_package.ps1" -Destination "$buildDir\install_package.ps1" -Force
+          Copy-Item "windows\scripts\packages.psd1" -Destination "$buildDir\packages.psd1" -Force
+          
+          Write-Host "[OK] Distribution package created" -ForegroundColor Green
+      - name: Rename for distribution
         shell: powershell
         run: |
           $buildDir = "build\windows"
           $version = "${{ steps.version.outputs.VERSION }}"
           $source = Join-Path $buildDir "Weave.exe"
           $dest = Join-Path $buildDir "Weave-$version.exe"
+          
+          Move-Item $source $dest -Force
 
-          if (Test-Path $source) {
-            Move-Item $source $dest -Force
-            Write-Host "[OK] Renamed to: $dest" -ForegroundColor Green
-          } else {
-            Write-Host "[ERROR] Source file not found: $source" -ForegroundColor Red
-            # List what's actually in the directory
-            Write-Host "Contents of $buildDir :" -ForegroundColor Yellow
-            Get-ChildItem $buildDir -Recurse | Format-Table Name, Length
-            exit 1
-          }
-
-      - name: Verify installer
+      - name: Verify build
         shell: powershell
-        run: |
-          .\.github\scripts\verify-windows-build.ps1 -Version "${{ steps.version.outputs.VERSION }}"
-
+        run: .\.github\scripts\verify-windows-build.ps1 -Version "${{ steps.version.outputs.VERSION }}"
       - name: Generate SHA256 hash
         id: hash
         shell: powershell
         run: |
-          $outputExe = "${{ steps.version.outputs.INSTALLER_PATH }}"
-          $hash = (Get-FileHash $outputExe -Algorithm SHA256).Hash
+          $hash = (Get-FileHash "${{ steps.version.outputs.INSTALLER_PATH }}" -Algorithm SHA256).Hash
           echo "SHA256=$hash" >> $env:GITHUB_OUTPUT
-          Write-Host "SHA256: $hash" -ForegroundColor Green
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -212,6 +223,7 @@ jobs:
           name: build-debug-${{ steps.version.outputs.VERSION }}-windows
           path: |
             build/windows/
+            windows/Weave/bin/Release/
           retention-days: 7
 
   publish-release:
