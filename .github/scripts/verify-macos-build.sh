@@ -1,5 +1,4 @@
 #!/bin/bash
-VERSION=$1
 
 echo "=== Checking Weave.app ==="
 if [ ! -d "build/macos/WeaveApp/Weave.app" ]; then
@@ -20,9 +19,9 @@ done
 
 echo ""
 echo "=== Checking final package ==="
-FINAL_PKG="build/macos/Weave-launcher${VERSION}.pkg"
-if [ ! -f "$FINAL_PKG" ]; then
-    echo "❌ Final package not found at $FINAL_PKG"
+FINAL_PKG=$(find build/macos -name "Weave-*.pkg" -type f | head -1)
+if [ -z "$FINAL_PKG" ]; then
+    echo "❌ Final package not found"
     exit 1
 fi
 echo "✅ Final package created: $FINAL_PKG"

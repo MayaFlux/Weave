@@ -69,14 +69,14 @@ jobs:
       - name: Generate SHA256 hash
         id: hash
         run: |
-          PKG=$(find build/macos -maxdepth 1 -name "Weave-launcher.pkg" -o -name "Weave-*.pkg" | head -1)
-          if [ -z "$PKG" ]; then
-            echo "Error: No .pkg file found in build/macos"
+          FINAL_PKG=$(find build/macos -name "Weave-*.pkg" -type f | head -1)
+          if [ -z "$FINAL_PKG" ]; then
+            echo "Error: No final .pkg file found in build/macos"
             exit 1
           fi
-          SHA256=$(shasum -a 256 "$PKG" | cut -d ' ' -f 1)
+          SHA256=$(shasum -a 256 "$FINAL_PKG" | cut -d ' ' -f 1)
           echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
-          echo "PKG_PATH=$PKG" >> $GITHUB_OUTPUT
+          echo "PKG_PATH=$FINAL_PKG" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -104,7 +104,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: "8.0.x"
 
       - name: Verify source files
         shell: powershell
@@ -124,7 +124,7 @@ jobs:
           dotnet build windows\Weave.sln `
             --configuration Release `
             -p:Platform=x64
-          
+
           if ($LASTEXITCODE -ne 0) {
             exit 1
           }
@@ -144,27 +144,27 @@ jobs:
         run: |
           $buildDir = "build\windows"
           $releaseDir = "windows\Weave\bin\x64\Release\net8.0-windows\win-x64"
-          
+
           if (-not (Test-Path $releaseDir)) {
             Write-Host "Error: Release directory not found"
             exit 1
           }
-          
+
           if (-not (Test-Path $buildDir)) {
             New-Item -ItemType Directory -Path $buildDir | Out-Null
           }
-          
+
           # Create staging directory for all files
           $stagingDir = "$buildDir\staging"
           New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
-          
+
           # Copy exe
           Copy-Item "$releaseDir\Weave.exe" -Destination "$stagingDir\Weave.exe" -Force
-          
+
           # Copy scripts from source
           Copy-Item "windows\scripts\install_package.ps1" -Destination "$stagingDir\install_package.ps1" -Force
           Copy-Item "windows\scripts\packages.psd1" -Destination "$stagingDir\packages.psd1" -Force
-          
+
           # Copy templates directory
           if (Test-Path "templates") {
             Copy-Item "templates" -Destination "$stagingDir\templates" -Recurse -Force
@@ -176,7 +176,7 @@ jobs:
           $buildDir = "build\windows"
           $stagingDir = "$buildDir\staging"
           $zipPath = "$buildDir\Weave.zip"
-          
+
           Compress-Archive -Path $stagingDir -DestinationPath $zipPath -Force
 
       - name: Verify build
@@ -236,14 +236,14 @@ jobs:
       - name: Rename artifacts for release
         run: |
           mkdir -p ./release
-          
+
           MACOS_PKG=$(find ./packages/macos -name "*.pkg" | head -1)
           if [ -z "$MACOS_PKG" ]; then
             echo "Error: macOS artifact not found"
             exit 1
           fi
           cp "$MACOS_PKG" ./release/Weave-macos.pkg
-          
+
           WINDOWS_ZIP=$(find ./packages/windows -name "*.zip" | head -1)
           if [ -z "$WINDOWS_ZIP" ]; then
             echo "Error: Windows artifact not found"
