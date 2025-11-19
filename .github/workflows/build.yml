@@ -66,6 +66,43 @@ jobs:
           fi
           echo "✅ Info.plist exists"
 
+      - name: Create Weave.app standalone archive
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.1.0")-dev
+          fi
+
+          cd build/macos/WeaveApp
+          zip -r "../Weave-app-${VERSION}.zip" Weave.app
+          cd ../..
+          echo "Created Weave.app standalone archive: Weave-app-${VERSION}.zip"
+
+      - name: Verify universal binary
+        run: |
+          echo "=== Verifying Universal Binary ==="
+          BINARY="build/macos/WeaveApp/Weave.app/Contents/MacOS/Weave"
+          if [ ! -f "$BINARY" ]; then
+            echo "❌ Weave binary not found"
+            exit 1
+          fi
+
+          ARCHITECTURES=$(lipo -info "$BINARY")
+          echo "Architectures: $ARCHITECTURES"
+
+          if [[ "$ARCHITECTURES" != *"x86_64"* ]]; then
+            echo "❌ Missing x86_64 (Intel) architecture"
+            exit 1
+          fi
+
+          if [[ "$ARCHITECTURES" != *"arm64"* ]]; then
+            echo "❌ Missing arm64 (Apple Silicon) architecture"
+            exit 1
+          fi
+
+          echo "✅ Universal binary contains both x86_64 and arm64"
+
       - name: Generate SHA256 hash
         id: hash
         run: |
@@ -82,7 +119,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: weave-macos
-          path: ${{ steps.hash.outputs.PKG_PATH }}
+          path: |
+            ${{ steps.hash.outputs.PKG_PATH }}
+            build/macos/Weave-app-*.zip
           retention-days: 30
 
       - name: Upload debug artifacts (on failure)
@@ -129,15 +168,21 @@ jobs:
             exit 1
           }
 
-      - name: Verify templates directory
-        shell: powershell
+      - name: Verify template files exist
         run: |
-          if (-not (Test-Path "templates")) {
-            Write-Host "Error: Templates directory not found"
+          echo "=== Checking template files ==="
+          if [ ! -d "templates" ]; then
+            echo "❌ Templates directory missing"
             exit 1
-          }
-          $templateCount = @(Get-ChildItem "templates" -Recurse).Count
-          Write-Host "OK: Templates directory found with $templateCount items"
+          fi
+
+          TEMPLATE_COUNT=$(find templates -type f | wc -l)
+          echo "✅ Found $TEMPLATE_COUNT template files"
+
+          if [ "$TEMPLATE_COUNT" -eq 0 ]; then
+            echo "❌ No template files found"
+            exit 1
+          fi
 
       - name: Create distribution package
         shell: powershell
@@ -237,19 +282,31 @@ jobs:
         run: |
           mkdir -p ./release
 
-          MACOS_PKG=$(find ./packages/macos -name "*.pkg" | head -1)
+          # Get version first
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.1.0")-dev
+          fi
+
+          MACOS_PKG=$(find ./packages/macos -name "Weave-*.pkg" | head -1)
           if [ -z "$MACOS_PKG" ]; then
             echo "Error: macOS artifact not found"
             exit 1
           fi
-          cp "$MACOS_PKG" ./release/Weave-macos.pkg
+          cp "$MACOS_PKG" "./release/$(basename "$MACOS_PKG")"
+
+          MACOS_APP_ZIP=$(find ./packages/macos -name "Weave-app-*.zip" | head -1)
+          if [ -n "$MACOS_APP_ZIP" ]; then
+            cp "$MACOS_APP_ZIP" "./release/$(basename "$MACOS_APP_ZIP")"
+          fi
 
           WINDOWS_ZIP=$(find ./packages/windows -name "*.zip" | head -1)
           if [ -z "$WINDOWS_ZIP" ]; then
             echo "Error: Windows artifact not found"
             exit 1
           fi
-          cp "$WINDOWS_ZIP" ./release/Weave-windows.zip
+          cp "$WINDOWS_ZIP" "./release/Weave-windows-${VERSION}.zip"
 
       - name: Determine release version
         id: version
@@ -280,8 +337,9 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.IS_RELEASE == 'true' && format('v{0}', steps.version.outputs.VERSION) || format('v{0}', steps.version.outputs.VERSION) }}
           files: |
-            release/Weave-macos.pkg
-            release/Weave-windows.zip
+            release/Weave-*.pkg
+            release/Weave-app-*.zip
+            release/Weave-windows-*.zip
           body_path: release-body.md
           draft: false
           prerelease: ${{ steps.version.outputs.IS_RELEASE == 'false' }}

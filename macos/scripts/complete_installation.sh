@@ -10,16 +10,16 @@ LOG_FILE="$HOME/.weave_install.log"
 
 log() {
     echo "$*"
-    echo "$*" >> "$LOG_FILE"
+    echo "$*" >>"$LOG_FILE"
 }
 
 error() {
     echo "ERROR: $*"
-    echo "ERROR: $*" >> "$LOG_FILE"
+    echo "ERROR: $*" >>"$LOG_FILE"
 }
 
 clear
-cat << 'BANNER'
+cat <<'BANNER'
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
 ║   🎛️  Weave - MayaFlux Installation                       ║
@@ -45,14 +45,14 @@ done
 if [ -z "$BREW_CMD" ]; then
     log "Installing Homebrew..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    
+
     for brew_path in /opt/homebrew/bin/brew /usr/local/bin/brew; do
         if [ -f "$brew_path" ] && [ -x "$brew_path" ]; then
             BREW_CMD="$brew_path"
             break
         fi
     done
-    
+
     if [ -z "$BREW_CMD" ]; then
         error "Failed to install Homebrew"
         exit 1
@@ -68,26 +68,26 @@ if [ -f "$MAYAFLUX_INSTALL_DIR/lib/libMayaFluxLib.dylib" ]; then
     log "✅ MayaFlux already installed"
 else
     mkdir -p "$MAYAFLUX_INSTALL_DIR"
-    
+
     TMPDIR_DOWNLOAD=$(mktemp -d)
     trap 'rm -rf "$TMPDIR_DOWNLOAD"' EXIT
-    
+
     # Just download the known prerelease directly
     TAG="v0.1.0-dev"
     ASSET_NAME="MayaFlux-0.1.0-dev-macos-arm64.tar.gz"
     ASSET_URL="https://github.com/MayaFlux/MayaFlux/releases/download/${TAG}/${ASSET_NAME}"
-    
+
     log "  Downloading $ASSET_NAME..."
-    
+
     curl -fL --progress-bar "$ASSET_URL" -o "$TMPDIR_DOWNLOAD/release.tar.gz"
-    
+
     DOWNLOADED_SIZE=$(stat -f%z "$TMPDIR_DOWNLOAD/release.tar.gz")
     DOWNLOADED_SIZE_MB=$((DOWNLOADED_SIZE / 1024 / 1024))
     log "  Downloaded: ${DOWNLOADED_SIZE_MB} MB"
-    
+
     log "  Extracting..."
     tar -xzf "$TMPDIR_DOWNLOAD/release.tar.gz" -C "$TMPDIR_DOWNLOAD"
-    
+
     # The archive extracts directly to bin/, lib/, etc. - no dist_staging
     # Just copy everything from the temp dir to the install dir
     log "  Installing to $MAYAFLUX_INSTALL_DIR..."
@@ -96,14 +96,14 @@ else
     sudo cp -R "$TMPDIR_DOWNLOAD"/lib "$MAYAFLUX_INSTALL_DIR/"
     sudo cp -R "$TMPDIR_DOWNLOAD"/include "$MAYAFLUX_INSTALL_DIR/"
     sudo cp -R "$TMPDIR_DOWNLOAD"/share "$MAYAFLUX_INSTALL_DIR/"
-    
+
     if [ ! -f "$MAYAFLUX_INSTALL_DIR/lib/libMayaFluxLib.dylib" ]; then
         error "Verification failed"
         sudo ls -la "$MAYAFLUX_INSTALL_DIR"
         exit 1
     fi
-    
-    echo "$TAG" | sudo tee "$MAYAFLUX_INSTALL_DIR/.version" > /dev/null
+
+    echo "$TAG" | sudo tee "$MAYAFLUX_INSTALL_DIR/.version" >/dev/null
     log "✅ MayaFlux $TAG installed"
 fi
 # Step 4: Install dependencies
@@ -136,15 +136,15 @@ if [ -d "$VULKAN_SDK_ROOT" ] && [ -n "$(find "$VULKAN_SDK_ROOT" -mindepth 1 -max
 else
     SDK_VERSION=$(curl -fsSL https://vulkan.lunarg.com/sdk/latest/mac.txt)
     SDK_URL="https://sdk.lunarg.com/sdk/download/${SDK_VERSION}/mac/vulkan_sdk.zip"
-    
+
     TMPDIR_VULKAN=$(mktemp -d)
-    
+
     log "  Downloading Vulkan SDK v$SDK_VERSION..."
     curl -fL --progress-bar "$SDK_URL" -o "$TMPDIR_VULKAN/vulkan_sdk.zip"
-    
+
     log "  Extracting..."
     unzip -q "$TMPDIR_VULKAN/vulkan_sdk.zip" -d "$TMPDIR_VULKAN"
-    
+
     INSTALLER_APP=$(find "$TMPDIR_VULKAN" -name "*.app" -type d | head -n1)
     if [ -n "$INSTALLER_APP" ]; then
         mkdir -p "$VULKAN_SDK_ROOT/$SDK_VERSION"
@@ -154,7 +154,7 @@ else
             --accept-licenses --default-answer --confirm-command install \
             com.lunarg.vulkan.core com.lunarg.vulkan.usr
     fi
-    
+
     rm -rf "$TMPDIR_VULKAN"
     log "✅ Vulkan SDK installed"
 fi
@@ -162,12 +162,12 @@ fi
 # Step 6: Environment setup
 log "➤ Configuring environment..."
 
-ZSHENV="$HOME/.zshenv"
+ZSHENV="${ZDOTDIR:-$HOME}/.zshenv"
 touch "$ZSHENV"
 
 append_if_missing() {
     if ! grep -Fq "$1" "$ZSHENV"; then
-        echo "$1" >> "$ZSHENV"
+        echo "$1" >>"$ZSHENV"
     fi
 }
 
@@ -254,15 +254,15 @@ if [ -d "$VULKAN_SDK_ROOT" ] && [ -n "$(find "$VULKAN_SDK_ROOT" -mindepth 1 -max
 else
     SDK_VERSION=$(curl -fsSL https://vulkan.lunarg.com/sdk/latest/mac.txt)
     SDK_URL="https://sdk.lunarg.com/sdk/download/${SDK_VERSION}/mac/vulkan_sdk.zip"
-    
+
     TMPDIR_VULKAN=$(mktemp -d)
-    
+
     log "  Downloading Vulkan SDK v$SDK_VERSION..."
     curl -L --progress-bar "$SDK_URL" -o "$TMPDIR_VULKAN/vulkan_sdk.zip"
-    
+
     log "  Extracting..."
     unzip -q "$TMPDIR_VULKAN/vulkan_sdk.zip" -d "$TMPDIR_VULKAN"
-    
+
     INSTALLER_APP=$(find "$TMPDIR_VULKAN" -name "*.app" -type d | head -n1)
     if [ -n "$INSTALLER_APP" ]; then
         mkdir -p "$VULKAN_SDK_ROOT/$SDK_VERSION"
@@ -272,7 +272,7 @@ else
             --accept-licenses --default-answer --confirm-command install \
             com.lunarg.vulkan.core com.lunarg.vulkan.usr
     fi
-    
+
     rm -rf "$TMPDIR_VULKAN"
     show_complete "Vulkan SDK installed"
 fi
@@ -285,7 +285,7 @@ touch "$ZSHENV"
 
 append_if_missing() {
     if ! grep -Fq "$1" "$ZSHENV" 2>/dev/null; then
-        echo "$1" >> "$ZSHENV"
+        echo "$1" >>"$ZSHENV"
     fi
 }
 
@@ -300,21 +300,18 @@ if [ -n "$VULKAN_SDK_PATH" ]; then
     append_if_missing "export PATH=\"\$VULKAN_SDK/bin:\$PATH\""
 fi
 
-append_if_missing "export STB_ROOT=\"$HOME/Libraries\""
+append_if_missing 'export STB_ROOT="$HOME/Libraries"'
 append_if_missing 'export CMAKE_PREFIX_PATH="$STB_ROOT:$CMAKE_PREFIX_PATH"'
 append_if_missing 'export CPATH="$STB_ROOT/:$CPATH"'
 
 LLVM_PREFIX="$(brew --prefix llvm 2>/dev/null || true)"
 if [ -n "$LLVM_PREFIX" ]; then
     if ! grep -Fq "$LLVM_PREFIX/bin" "$ZSHENV" 2>/dev/null; then
-        {
-            echo ''
-            echo '# LLVM setup for CMake / llvm-config'
-            echo "export PATH=\"$LLVM_PREFIX/bin:\$PATH\""
-            echo "export CMAKE_PREFIX_PATH=\"$LLVM_PREFIX/lib/cmake:\$CMAKE_PREFIX_PATH\""
-            echo "export LLVM_DIR=\"$LLVM_PREFIX/lib/cmake/llvm\""
-            echo "export Clang_DIR=\"$LLVM_PREFIX/lib/cmake/clang\""
-        } >>"$ZSHENV"
+        append_if_missing '# LLVM setup for CMake / llvm-config'
+        append_if_missing 'export PATH="$LLVM_PREFIX/bin:$PATH"'
+        append_if_missing 'export CMAKE_PREFIX_PATH="$LLVM_PREFIX/lib/cmake:$CMAKE_PREFIX_PATH"'
+        append_if_missing 'export LLVM_DIR="$LLVM_PREFIX/lib/cmake/llvm"'
+        append_if_missing 'export Clang_DIR="$LLVM_PREFIX/lib/cmake/clang"'
     fi
 fi
 

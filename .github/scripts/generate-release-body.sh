@@ -67,6 +67,17 @@ $(cat .github/release-templates/macos-section.md)
 
 **SHA256:** \`$MACOS_SHA256\`
 
+## Standalone Weave.app
+
+For users who want just the GUI application without the full installer, download $(Weave-app-{{VERSION}}.zip).
+
+**Usage:**
+1. Download and unzip $(Weave-app-{{VERSION}}.zip)
+2. Drag $(Weave.app) to your $(/Applications) folder
+3. Launch from Applications or Spotlight
+
+**Note:** The standalone app requires the Weave files and templates to be already installed via the full installer.
+
 **Installation:**
 1. Download and open \`Weave-${VERSION}.pkg\`
 2. Follow the installer prompts (installs Weave.app and files)

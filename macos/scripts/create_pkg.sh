@@ -64,7 +64,7 @@ echo "Building Weave-launcher.pkg..."
 
 mkdir -p "$BUILD_DIR/launcher_scripts"
 
-cat > "$BUILD_DIR/launcher_scripts/postinstall" << 'POSTINSTALL'
+cat >"$BUILD_DIR/launcher_scripts/postinstall" <<'POSTINSTALL'
 #!/usr/bin/env zsh
 set -euo pipefail
 
@@ -99,7 +99,7 @@ pkgbuild --nopayload \
 
 echo "Creating distribution package..."
 
-cat > "$BUILD_DIR/Distribution.xml" << 'DISTXML'
+cat >"$BUILD_DIR/Distribution.xml" <<'DISTXML'
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
     <title>Weave - MayaFlux Installation</title>
