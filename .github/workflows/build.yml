@@ -290,12 +290,12 @@ jobs:
             echo "Error: macOS package not found"
             exit 1
           fi
-          cp "$MACOS_PKG" "./release/Weave-installer.pkg"
+          cp "$MACOS_PKG" "./release/Weave-installer-macos.pkg"
 
           # macOS App
           MACOS_APP_ZIP=$(find ./packages/macos -name "Weave-app.zip" | head -1)
           if [ -n "$MACOS_APP_ZIP" ]; then
-            cp "$MACOS_APP_ZIP" "./release/Weave-project.zip"
+            cp "$MACOS_APP_ZIP" "./release/Weave-project-macos.zip"
           fi
 
           # Windows
