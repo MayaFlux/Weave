@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
-# complete_installation.sh - Runs AFTER .pkg completes, in visible Terminal
 
+# Runs AFTER .pkg completes, in visible Terminal
 set -euo pipefail
 
 # Configuration
@@ -22,7 +22,7 @@ clear
 cat <<'BANNER'
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
-║   🎛️  Weave - MayaFlux Installation                       ║
+║   🎛️  Weave - MayaFlux Installation                        ║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
 
@@ -106,7 +106,8 @@ else
     echo "$TAG" | sudo tee "$MAYAFLUX_INSTALL_DIR/.version" >/dev/null
     log "✅ MayaFlux $TAG installed"
 fi
-# Step 4: Install dependencies
+
+# Step 3: Install dependencies
 log "➤ Installing dependencies..."
 log "  This may take several minutes..."
 
@@ -127,96 +128,7 @@ else
     log "✅ All dependencies already installed"
 fi
 
-# Step 5: Vulkan SDK
-log "➤ Setting up Vulkan SDK..."
-
-VULKAN_SDK_ROOT="$HOME/VulkanSDK"
-if [ -d "$VULKAN_SDK_ROOT" ] && [ -n "$(find "$VULKAN_SDK_ROOT" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)" ]; then
-    log "✅ Vulkan SDK already installed"
-else
-    SDK_VERSION=$(curl -fsSL https://vulkan.lunarg.com/sdk/latest/mac.txt)
-    SDK_URL="https://sdk.lunarg.com/sdk/download/${SDK_VERSION}/mac/vulkan_sdk.zip"
-
-    TMPDIR_VULKAN=$(mktemp -d)
-
-    log "  Downloading Vulkan SDK v$SDK_VERSION..."
-    curl -fL --progress-bar "$SDK_URL" -o "$TMPDIR_VULKAN/vulkan_sdk.zip"
-
-    log "  Extracting..."
-    unzip -q "$TMPDIR_VULKAN/vulkan_sdk.zip" -d "$TMPDIR_VULKAN"
-
-    INSTALLER_APP=$(find "$TMPDIR_VULKAN" -name "*.app" -type d | head -n1)
-    if [ -n "$INSTALLER_APP" ]; then
-        mkdir -p "$VULKAN_SDK_ROOT/$SDK_VERSION"
-        log "  Running Vulkan installer..."
-        sudo "$INSTALLER_APP/Contents/MacOS/$(basename "$INSTALLER_APP" .app)" \
-            --root "$VULKAN_SDK_ROOT/$SDK_VERSION" \
-            --accept-licenses --default-answer --confirm-command install \
-            com.lunarg.vulkan.core com.lunarg.vulkan.usr
-    fi
-
-    rm -rf "$TMPDIR_VULKAN"
-    log "✅ Vulkan SDK installed"
-fi
-
-# Step 6: Environment setup
-log "➤ Configuring environment..."
-
-ZSHENV="${ZDOTDIR:-$HOME}/.zshenv"
-touch "$ZSHENV"
-
-append_if_missing() {
-    if ! grep -Fq "$1" "$ZSHENV"; then
-        echo "$1" >>"$ZSHENV"
-    fi
-}
-
-append_if_missing "# MayaFlux Environment"
-append_if_missing "export MAYAFLUX_ROOT=\"$MAYAFLUX_INSTALL_DIR\""
-append_if_missing "export PATH=\"\$MAYAFLUX_ROOT/bin:\$HOME/.local/bin:\$PATH\""
-append_if_missing "export CMAKE_PREFIX_PATH=\"\$MAYAFLUX_ROOT:\$CMAKE_PREFIX_PATH\""
-
-VULKAN_SDK_PATH=$(find "$VULKAN_SDK_ROOT" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -n1)
-if [ -n "$VULKAN_SDK_PATH" ]; then
-    append_if_missing "export VULKAN_SDK=\"$VULKAN_SDK_PATH/macOS\""
-    append_if_missing "export PATH=\"\$VULKAN_SDK/bin:\$PATH\""
-fi
-
-log "✅ Environment configured"
-
-# Step 7: Weave CLI and templates
-log "➤ Installing Weave CLI and templates..."
-
-WEAVE_BIN="$HOME/.local/bin"
-WEAVE_SHARE="$MAYAFLUX_INSTALL_DIR/share/weave"
-
-mkdir -p "$WEAVE_BIN"
-sudo mkdir -p "$WEAVE_SHARE/templates"
-
-cp "$WEAVE_LOCATION/project_creator.sh" "$WEAVE_BIN/weave"
-chmod +x "$WEAVE_BIN/weave"
-
-sudo cp -R "$WEAVE_LOCATION/templates/"* "$WEAVE_SHARE/templates/"
-
-log "✅ Weave CLI installed"
-
-log ""
-log "=========================================="
-log "✅ Installation Complete!"
-log "=========================================="
-log ""
-log "Next steps:"
-log "  1. Restart your terminal or run: source ~/.zshenv"
-log "  2. Create a project: weave new MyProject ~/Projects/"
-log ""
-log "Installation log: $LOG_FILE"
-log ""
-
-echo "Press any key to close..."
-read -n 1
-
-printf 'Installing STB headers...\n' >&3
-
+# Step 4: STB Headers
 STB_INSTALL_DIR="$HOME/Libraries/stb"
 STB_HEADER_CHECK="$STB_INSTALL_DIR/stb_image.h"
 
@@ -304,14 +216,17 @@ append_if_missing 'export STB_ROOT="$HOME/Libraries"'
 append_if_missing 'export CMAKE_PREFIX_PATH="$STB_ROOT:$CMAKE_PREFIX_PATH"'
 append_if_missing 'export CPATH="$STB_ROOT/:$CPATH"'
 
-LLVM_PREFIX="$(brew --prefix llvm 2>/dev/null || true)"
+set +e
+LLVM_PREFIX="$("$BREW_CMD" --prefix llvm 2>/dev/null)"
+set -e
+
 if [ -n "$LLVM_PREFIX" ]; then
     if ! grep -Fq "$LLVM_PREFIX/bin" "$ZSHENV" 2>/dev/null; then
-        append_if_missing '# LLVM setup for CMake / llvm-config'
-        append_if_missing 'export PATH="$LLVM_PREFIX/bin:$PATH"'
-        append_if_missing 'export CMAKE_PREFIX_PATH="$LLVM_PREFIX/lib/cmake:$CMAKE_PREFIX_PATH"'
-        append_if_missing 'export LLVM_DIR="$LLVM_PREFIX/lib/cmake/llvm"'
-        append_if_missing 'export Clang_DIR="$LLVM_PREFIX/lib/cmake/clang"'
+        append_if_missing "# LLVM setup for CMake / llvm-config"
+        append_if_missing "export PATH=\"$LLVM_PREFIX/bin:\$PATH\""
+        append_if_missing "export CMAKE_PREFIX_PATH=\"$LLVM_PREFIX/lib/cmake:\$CMAKE_PREFIX_PATH\""
+        append_if_missing "export LLVM_DIR=\"$LLVM_PREFIX/lib/cmake/llvm\""
+        append_if_missing "export Clang_DIR=\"$LLVM_PREFIX/lib/cmake/clang\""
     fi
 fi
 
@@ -333,7 +248,6 @@ sudo cp -R "$WEAVE_LOCATION/templates/"* "$WEAVE_SHARE/templates/"
 
 show_complete "Weave CLI installed"
 
-# Done!
 log ""
 log "=========================================="
 log "✅ Installation Complete!"

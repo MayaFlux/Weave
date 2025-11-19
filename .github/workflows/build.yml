@@ -290,12 +290,12 @@ jobs:
             echo "Error: macOS package not found"
             exit 1
           fi
-          cp "$MACOS_PKG" "./release/Weave-macos-${VERSION}.pkg"
+          cp "$MACOS_PKG" "./release/Weave-installer.pkg"
 
           # macOS App
           MACOS_APP_ZIP=$(find ./packages/macos -name "Weave-app.zip" | head -1)
           if [ -n "$MACOS_APP_ZIP" ]; then
-            cp "$MACOS_APP_ZIP" "./release/Weave-app-${VERSION}.zip"
+            cp "$MACOS_APP_ZIP" "./release/Weave-project.zip"
           fi
 
           # Windows
@@ -304,7 +304,7 @@ jobs:
             echo "Error: Windows artifact not found"
             exit 1
           fi
-          cp "$WINDOWS_ZIP" "./release/Weave-windows-${VERSION}.zip"
+          cp "$WINDOWS_ZIP" "./release/Weave-windows.zip"
 
       - name: Generate release body
         id: generate_release_body
@@ -321,9 +321,9 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.IS_RELEASE == 'true' && format('v{0}', steps.version.outputs.VERSION) || format('v{0}', steps.version.outputs.VERSION) }}
           files: |
-            release/Weave-*.pkg
-            release/Weave-app-*.zip
-            release/Weave-windows-*.zip
+            release/Weave-installer-macos.pkg
+            release/Weave-project-macos.zip
+            release/Weave-windows.zip
           body_path: release-body.md
           draft: false
           prerelease: ${{ steps.version.outputs.IS_RELEASE == 'false' }}
