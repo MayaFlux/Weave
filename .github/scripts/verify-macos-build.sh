@@ -20,7 +20,7 @@ done
 
 echo ""
 echo "=== Checking final package ==="
-FINAL_PKG="build/macos/Weave-${VERSION}.pkg"
+FINAL_PKG="build/macos/Weave-launcher${VERSION}.pkg"
 if [ ! -f "$FINAL_PKG" ]; then
     echo "❌ Final package not found at $FINAL_PKG"
     exit 1
