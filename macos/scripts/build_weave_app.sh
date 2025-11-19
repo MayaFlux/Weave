@@ -1,5 +1,4 @@
 #!/usr/bin/env zsh
-# Build Weave.app (GUI for project creation) - Universal Binary
 # This should be placed in: macos/scripts/build_weave_app.sh
 
 set -euo pipefail
@@ -22,7 +21,7 @@ mkdir -p "$TEMP_PROJECT"
 # Copy Swift source
 cp "$MACOS_DIR/WeaveGUI.swift" "$TEMP_PROJECT/"
 
-# Create Info.plist
+# Create Info.plist - UPDATED TO macOS 12.0
 cat >"$TEMP_PROJECT/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -45,7 +44,7 @@ cat >"$TEMP_PROJECT/Info.plist" <<EOF
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
-    <string>11.0</string>
+    <string>12.0</string>
     <key>LSUIElement</key>
     <false/>
     <key>NSHumanReadableCopyright</key>
@@ -65,21 +64,21 @@ cd "$TEMP_PROJECT"
 # Get SDK path
 SDK_PATH=$(xcrun --show-sdk-path)
 
-# Build for arm64 (Apple Silicon)
+# Build for arm64 (Apple Silicon) - UPDATED TO macOS 12.0
 echo "Building for arm64 (Apple Silicon)..."
 swiftc -o Weave-arm64 \
     -parse-as-library \
-    -target arm64-apple-macos11.0 \
+    -target arm64-apple-macos12.0 \
     -sdk "$SDK_PATH" \
     -framework SwiftUI \
     -framework AppKit \
     WeaveGUI.swift
 
-# Build for x86_64 (Intel)
+# Build for x86_64 (Intel) - UPDATED TO macOS 12.0
 echo "Building for x86_64 (Intel)..."
 swiftc -o Weave-x86_64 \
     -parse-as-library \
-    -target x86_64-apple-macos11.0 \
+    -target x86_64-apple-macos12.0 \
     -sdk "$SDK_PATH" \
     -framework SwiftUI \
     -framework AppKit \
