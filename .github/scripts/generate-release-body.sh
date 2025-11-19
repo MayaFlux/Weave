@@ -39,6 +39,18 @@ $(cat .github/release-templates/macos-section.md)
 
 **SHA256:** \`$MACOS_SHA256\`
 
+**Installation:**
+1. Download and open \`Weave-${VERSION}.pkg\`
+2. Follow the installer prompts (installs Weave.app and files)
+3. Terminal will open automatically with installation progress
+4. Watch real-time progress for MayaFlux download and dependency installation
+
+**What's installed:**
+- Weave.app in \`/Applications\` (GUI project creator)
+- Project templates and CLI tool in \`/Library/Weave\`
+- MayaFlux framework to \`/Library/MayaFlux\` (via post-install script)
+- Dependencies via Homebrew (via post-install script)
+
 ## Windows Installer  
 
 $(cat .github/release-templates/windows-section.md)
@@ -49,4 +61,4 @@ $(cat .github/release-templates/footer.md)
 EOF
 
 # Replace version placeholders
-sed -i "s/{{VERSION}}/$VERSION/g" "$OUTPUT_FILE"
+sed -i '' "s/{{VERSION}}/$VERSION/g" "$OUTPUT_FILE"
