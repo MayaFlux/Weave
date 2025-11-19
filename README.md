@@ -8,7 +8,7 @@ Weave handles everything needed to get MayaFlux running on your system: download
 
 ## Overview
 
-MayaFlux is a unified multimedia processing architecture. Weave ensures you can **install it, configure it, and start building with it**—across macOS, Windows, and Linux.
+MayaFlux is a unified multimedia processing architecture. Weave ensures you can **install it, configure it, and start building with it**—across macOS and Windows.
 
 Instead of juggling separate downloads, manual dependency installation, and environment configuration, Weave automates the entire setup process while providing both GUI and CLI tools for project creation.
 
@@ -17,18 +17,18 @@ Instead of juggling separate downloads, manual dependency installation, and envi
 - **Downloads and installs MayaFlux** from the latest GitHub release
 - **Manages all dependencies** (build tools, graphics libraries, audio backends, development SDKs)
 - **Configures environment variables** for seamless development
-- **Provides project creation tools** (GUI and CLI) to scaffold new MayaFlux applications
+- **Provides project creation tools** (GUI on both platforms, CLI on macOS) to scaffold new MayaFlux applications
 - **Handles platform-specific setup** with intelligent fallbacks and validation
 
 ---
 
 ## Current Platform Support
 
-| Platform | Status | Installer | Project Creator |
-|----------|--------|-----------|-----------------|
-| **macOS 14+** | ✓ Ready | `.pkg` package | `Weave.app` (GUI) + `weave` CLI |
-| **Windows 10/11** | ✓ Ready | `.exe` installer | `Weave.exe` (GUI) + `weave` CLI |
-| **Linux** | 🔄 In Progress | Coming soon | Coming soon |
+| Platform | Status | Installer | Installation | Project Creator |
+|----------|--------|-----------|---------------|-----------------|
+| **macOS 14+** | ✓ Ready | `.pkg` package | Terminal + GUI | `Weave.app` (GUI) + `weave` (CLI) |
+| **Windows 10/11** | ✓ Ready | `.exe` (self-contained) | GUI (step-by-step) | `Weave.exe` (GUI) |
+| **Linux** | 📋 In Progress | Coming soon | Coming soon | Coming soon |
 
 ---
 
@@ -38,8 +38,9 @@ Instead of juggling separate downloads, manual dependency installation, and envi
 
 1. **Download** the latest `Weave-X.X.X.pkg` from [Releases](https://github.com/MayaFlux/Weave/releases)
 2. **Double-click** to install (administrator password required)
-3. **Weave.app** launches automatically—create your first project
-4. **Build and run**:
+3. **Terminal opens automatically** showing installation progress in real-time
+4. **Weave.app** launches when complete—create your first project
+5. **Build and run**:
    ```bash
    cd MyProject
    mkdir build && cd build
@@ -50,9 +51,12 @@ Instead of juggling separate downloads, manual dependency installation, and envi
 ### Windows
 
 1. **Download** the latest `Weave-X.X.X.exe` from [Releases](https://github.com/MayaFlux/Weave/releases)
-2. **Double-click** to install (administrator privileges required)
-3. **Weave Project Creator** launches automatically
-4. **Build and run**:
+2. **Double-click** to launch (UAC prompt for administrator privileges)
+3. **Select a mode:**
+   - "Install MayaFlux" - Downloads framework and dependencies
+   - "Create Project" - Opens project creator GUI
+4. **Follow the step-by-step installer** with progress tracking
+5. **Build and run**:
    ```powershell
    cd MyProject
    mkdir build
@@ -62,16 +66,11 @@ Instead of juggling separate downloads, manual dependency installation, and envi
    .\Release\MyProject.exe
    ```
 
-### From Command Line
-
-After installation, use the `weave` command to create projects:
+### macOS Command Line (after installation)
 
 ```bash
-# macOS / Linux
+# Create a new project
 weave new MyProject ~/Projects/
-
-# Windows
-weave new MyProject C:\Projects\
 
 # With live coding enabled
 weave new MyProject ~/Projects/ --with-lila
@@ -82,149 +81,231 @@ weave new MyProject ~/Projects/ --no-vscode
 
 ---
 
-## What Gets Installed
+## Detailed Installation Guides
 
-### MayaFlux Framework
-- **Core Library** (`libMayaFluxLib` / `MayaFluxLib.dll`)
-- **Lila JIT Compiler** for live code modification
-- **Headers and CMake configuration** for project integration
+### macOS Installation Flow
 
-### Build Tools & Languages
-- CMake 3.25+
-- Git
-- C++20 compiler (GCC/Clang/MSVC)
-- Ninja build system
+The `.pkg` installer uses a composite package design with three transparent components orchestrated by the system:
 
-### Graphics & Rendering
-- Vulkan SDK (GPU compute support)
-- GLFW (windowing and input)
-- GLM (math library)
+1. **Weave-files** - Templates and CLI tool
+2. **Weave-gui** - Universal Weave.app (arm64 + x86_64)
+3. **Weave-launcher** - Postinstall coordinator
 
-### Audio Processing
-- FFmpeg (media handling)
-- RtAudio (real-time audio backend)
-- Libsndfile (audio I/O)
+**What you see when you double-click the installer:**
 
-### Development Libraries
-- LLVM 21+ (for Lila JIT)
-- Eigen (linear algebra)
-- STB (image processing headers)
-- MagicEnum (reflection utilities)
-- oneDPL (parallel algorithms)
+1. Standard macOS installer dialog appears
+2. Select installation location and click "Install"
+3. **Terminal window opens automatically** (this is intentional)
+4. Real-time progress appears showing:
+   - Homebrew verification/installation
+   - MayaFlux framework download (~100+ MB from GitHub)
+   - Dependency installation (ffmpeg, rtaudio, glfw, eigen, etc.)
+   - STB headers and Vulkan SDK setup
+   - Environment configuration
+5. Installation complete message
+6. Close Terminal when finished
 
-### Optional
-- **libxml2** (data serialization)
-- **7-Zip** (archive handling)
+**Important notes:**
+- The Terminal stays open intentionally—you see what's happening
+- Total time: 10-30 minutes (varies with internet speed)
+- All output also logged to `~/.weave_install.log` for reference
+- Password may be requested by Homebrew—provide it when prompted
+
+**Installation directories:**
+```
+/Library/Weave/             - Templates and CLI tool
+/Applications/Weave.app     - Weave project creator GUI
+/Library/MayaFlux/          - MayaFlux framework
+~/.local/bin/weave          - Symlink to CLI tool
+~/.zshenv                   - Environment variables added here
+```
+
+**After installation:**
+Restart your terminal or run `source ~/.zshenv` to load environment variables immediately.
 
 ---
 
-## Installation Details
+### Windows Installation & Usage
 
-### macOS
+Windows gets a single, self-contained `Weave.exe` that handles all installation and project creation through a professional GUI interface.
 
-The `.pkg` installer includes two components:
+#### Single Executable Design
 
-1. **Weave-core.pkg** — MayaFlux framework, dependencies via Homebrew, environment setup
-2. **Weave-gui.pkg** — `Weave.app` for the GUI project creator
+- **Size:** ~15-20 MB (includes templates, dependency scripts, .NET 8 runtime)
+- **Self-contained:** No external prerequisites (just Windows 10/11 64-bit)
+- **Embedded resources:** All templates and PowerShell dependency scripts are built into the executable
+- **Architecture:** .NET WinForms with dark theme, global layout manager for consistent UI
+
+#### Installation Workflow
+
+**Step 1: Launch and Mode Selection**
+
+1. Double-click `Weave-X.X.X.exe`
+2. UAC (User Access Control) dialog appears requesting administrator privileges
+3. **Mode selection dialog** appears:
+   - "Install MayaFlux" - Fresh installation or update
+   - "Create Project" - Add a new project to existing installation
+
+#### Install MayaFlux Mode (Detailed Steps)
+
+**Step 1: System Check**
+- Verifies Windows 64-bit (32-bit not supported)
+- Checks for 7-Zip (required for extraction)
+- Verifies administrator privileges
+- Shows warnings if issues detected (installation continues anyway)
+
+**Step 2: Download MayaFlux**
+- Connects to GitHub API to fetch latest release
+- Downloads framework binary (~100+ MB)
+- **Real-time progress bar** shows download status
+- Extracts to `C:\MayaFlux\` (default, configurable during installation)
+- Verifies DLL files present and valid
+
+**Step 3: Install Dependencies**
+- Runs embedded `install_package.ps1` PowerShell script
+- Intelligently detects already-installed packages (skips those)
+- Installs build tools and libraries:
+  - Build Tools: CMake, Git, Ninja, 7-Zip
+  - Graphics: Vulkan SDK, GLFW
+  - Audio: FFmpeg, RtAudio
+  - Math/Utilities: LLVM, Eigen3, GLM, STB, MagicEnum
+- Takes 10-20 minutes depending on internet speed
+- Can be skipped if you have dependencies already installed
+
+**Step 4: Environment Setup**
+- Sets `MAYAFLUX_ROOT` environment variable
+- Adds MayaFlux to system `PATH`
+- Sets `CMAKE_PREFIX_PATH` for CMake discovery
+- **Important:** Close and reopen your terminal/PowerShell for changes to take effect
+
+**Step 5: Templates Installation**
+- Extracts embedded project templates to `C:\MayaFlux\share\weave\templates\`
+- Validates template integrity
+
+**Step 6: Completion**
+- Shows installation summary with all paths
+- Button to view detailed installation log
+- Ready to create projects
 
 **Installation directories:**
-- System-wide: `/Library/MayaFlux/`
-- User-level (recommended): `~/MayaFlux/`
-
-**Environment setup:**
-Variables are added to `~/.zshenv`:
-```bash
-export MAYAFLUX_ROOT="$HOME/MayaFlux"
-export CMAKE_PREFIX_PATH="$MAYAFLUX_ROOT:$CMAKE_PREFIX_PATH"
+```
+C:\MayaFlux\
+├── bin/              - Executables and DLLs
+├── lib/              - Libraries and CMake configs
+├── include/          - Headers
+└── share\weave\      - Templates and scripts
+    ├── templates\
+    └── scripts\      - install_package.ps1, packages.psd1
 ```
 
-**Manual installation:**
-```bash
-sudo installer -pkg Weave-X.X.X.pkg -target CurrentUserHomeDirectory
-```
+**Log file location:** `%LOCALAPPDATA%\weave_install.log`
 
-### Windows
+#### Create Project Mode
 
-The `.exe` installer handles:
+1. Run `Weave.exe` again and select "Create Project" (or skip installation if already done)
+2. **Project Creator GUI** opens with:
+   - **Project Name** - Text input (e.g., "AudioVisualizer")
+   - **Project Location** - Path browser with Browse button
+   - **Enable Live Coding (Lila)** - Optional checkbox
+   - **Configure for VS Code** - Checkbox (enabled by default)
+   - **Output log** - Real-time display of project generation
 
-1. **MayaFlux framework download** (from GitHub releases)
-2. **Dependency installation** via WinGet and PowerShell automation
-3. **Environment variable setup** (system-wide `MAYAFLUX_ROOT`, `PATH`, `CMAKE_PREFIX_PATH`)
+3. Click **"Create Project"** to scaffold new project
+4. Success dialog shows project location and build instructions
 
-**Installation directory:**
-- `C:\MayaFlux\`
+#### What Gets Installed on First Run
 
-**Dependency handling:**
-- Build tools installed via WinGet (CMake, Git, Ninja, 7-Zip)
-- Graphics/audio libs auto-downloaded and extracted
-- Visual Studio Build Tools detection and integration
+| Component | Details |
+|-----------|---------|
+| **MayaFlux Framework** | Core library, headers, CMake configs |
+| **Build Tools** | CMake, Git, Ninja, 7-Zip |
+| **Graphics Stack** | Vulkan SDK, GLFW, GLM |
+| **Audio Stack** | FFmpeg, RtAudio |
+| **Development Libraries** | LLVM, Eigen3, STB, MagicEnum, oneDPL |
 
-**Automatic fallback:**
-If WinGet isn't available, an embedded PowerShell script manages installation with detailed logging at `%LOCALAPPDATA%\weave_install.log`.
+**Environment variables configured:**
+- `MAYAFLUX_ROOT` = installation directory (e.g., `C:\MayaFlux`)
+- `PATH` += `%MAYAFLUX_ROOT%\bin`
+- `CMAKE_PREFIX_PATH` = installation directory
+
+**System impact:**
+- Clean integration via environment variables only
+- No registry entries
+- No services or background processes
+- Easy uninstall via Windows Settings
+
+---
+
+## Weave.app (macOS GUI)
+
+Weave.app is a universal macOS application for creating new projects with a friendly graphical interface.
+
+### Launch Methods
+
+- **Automatically** after installation completes
+- From `/Applications/Weave.app`
+- From Spotlight search (`cmd+space`, type "Weave")
+- From dock after first launch
+
+### Architecture
+
+- **Universal binary:** Optimized for both Apple Silicon (arm64) and Intel (x86_64) Macs
+- **Built with:** SwiftUI and AppKit frameworks
+- **Size:** ~50 MB app bundle
+- **No external dependencies:** Self-contained, included in `.pkg` installer
+
+### Using Weave.app
+
+1. **Enter project details:**
+   - Project name
+   - Target directory (click "Browse..." to select)
+
+2. **Optional settings:**
+   - Enable Lila (live coding JIT compiler)
+   - Configure for VS Code
+
+3. **Click "Create Project"**
+   - Real-time output shows what's being generated
+   - Success/error feedback in dialog
+
+4. **Build your project:**
+   ```bash
+   cd <project-directory>
+   mkdir build && cd build
+   cmake .. && make
+   ./MyProject
+   ```
 
 ---
 
 ## Project Creation
 
-### Using the GUI
-
-**macOS:** Open `/Applications/Weave.app`  
-**Windows:** Run `Weave.exe` (or find it in Start menu)
-
-1. Enter project name (e.g., `AudioVisualizer`)
-2. Select target directory
-3. (Optional) Enable live coding (Lila)
-4. (Optional) Configure VS Code integration
-5. Click "Create Project"
-
-### Using the CLI
-
-```bash
-weave new <project-name> [destination-directory] [options]
-
-Options:
-  --with-lila    Enable Lila JIT for live code modification
-  --no-vscode    Skip VS Code configuration
-  --help         Show usage information
-```
-
-**Examples:**
-```bash
-# Basic project
-weave new BasicAudio ~/Projects/
-
-# With live coding
-weave new LiveCoding ~/Projects/ --with-lila
-
-# Minimal setup (no IDE config)
-weave new Minimal . --no-vscode
-```
-
 ### Generated Project Structure
 
 ```
 MyProject/
-├── CMakeLists.txt              # Build configuration
+├── CMakeLists.txt              # Build configuration (auto-detects MayaFlux)
 ├── README.md                   # Project documentation
-├── .vscode/                    # VS Code settings (optional)
-│   ├── settings.json           # Language server, formatting
-│   ├── tasks.json              # Build tasks
-│   └── launch.json             # Debug configuration
+├── .vscode/                    # VS Code configuration (optional)
+│   ├── settings.json           # C++ language server, IntelliSense
+│   ├── tasks.json              # Build tasks (Configure, Build, Run)
+│   └── launch.json             # Debug launch configurations
 └── src/
     ├── main.cpp                # Application entry point
     └── user_project.hpp        # Your MayaFlux code
 ```
 
-**Key files to edit:**
-- `src/user_project.hpp` — Define `settings()` and `compose()` functions
-- `CMakeLists.txt` — Add custom sources, dependencies, or compilation flags
-- `.vscode/settings.json` — Customize editor behavior
+### Key Files to Edit
+
+- **`src/user_project.hpp`** — Define `settings()` function (sample rate, buffer size, graphics) and `compose()` function (your audio/visual processing)
+- **`CMakeLists.txt`** — Add custom sources, additional dependencies, or compiler flags
+- **`.vscode/settings.json`** — Customize editor behavior, language server, formatting
 
 ---
 
 ## Building Projects
 
-### From Source
+### From Command Line
 
 ```bash
 mkdir build && cd build
@@ -232,13 +313,32 @@ cmake .. -DCMAKE_BUILD_TYPE=Release
 cmake --build . --parallel
 ```
 
+### Cross-Platform CMakeLists.txt Behavior
+
+Generated projects automatically handle platform differences:
+
+**macOS/Linux:**
+- Uses rpath to embed library search paths in executable
+- Libraries found automatically at runtime
+- No need to set `LD_LIBRARY_PATH`
+
+**Windows:**
+- Post-build step copies MayaFlux DLLs to executable output directory
+- Executables run without additional PATH setup
+- Useful for distribution (all files in one folder)
+
+**MayaFlux Discovery (all platforms):**
+- Checks `MAYAFLUX_ROOT` environment variable (set by Weave installer)
+- Falls back to standard install locations
+- Provides clear error message if not found
+
 ### With VS Code (if configured)
 
 1. Open project folder in VS Code
 2. Tasks → Run Task → "Build Project"
-3. Or press F5 to debug with gdb/lldb/MSVC
+3. Press F5 to debug with integrated debugger (lldb on macOS, MSVC on Windows)
 
-### Platform-Specific Commands
+### Platform-Specific Run Commands
 
 **macOS/Linux:**
 ```bash
@@ -254,19 +354,73 @@ cmake --build . --parallel
 
 ## Environment Variables
 
-Weave sets up the following for you:
+Weave automatically configures these variables during installation:
 
 | Variable | Value | Purpose |
 |----------|-------|---------|
-| `MAYAFLUX_ROOT` | `~/MayaFlux` | MayaFlux installation root |
+| `MAYAFLUX_ROOT` | Installation directory | MayaFlux framework location |
 | `CMAKE_PREFIX_PATH` | Includes `$MAYAFLUX_ROOT` | CMake package discovery |
-| `PATH` | Includes MayaFlux `bin/` | CLI tool access |
-| `VULKAN_SDK` | Vulkan installation path | GPU compute support |
-| `VK_LAYER_PATH` | Vulkan layer config | Validation layers |
+| `PATH` | Includes MayaFlux `bin/` | CLI tools and executables |
+| `VULKAN_SDK` | Vulkan installation path | GPU compute support (macOS) |
 
-**To reload environment (if installing manually):**
-- **macOS/Linux:** `source ~/.zshenv`
-- **Windows:** Restart terminal or `refreshenv` in PowerShell
+**To reload environment after installation:**
+
+**macOS/Linux:**
+```bash
+source ~/.zshenv
+# Or restart your terminal
+```
+
+**Windows:**
+```powershell
+# Close PowerShell/CMD and reopen to reload environment
+# Or run: refreshenv (in some terminals)
+```
+
+**To verify environment:**
+```bash
+# macOS/Linux
+echo $MAYAFLUX_ROOT
+
+# Windows
+echo %MAYAFLUX_ROOT%
+```
+
+---
+
+## What Gets Installed
+
+### MayaFlux Framework
+- Core library (libMayaFluxLib / MayaFluxLib.dll)
+- Lila JIT compiler for live code modification
+- Headers and CMake configuration files
+
+### Build Tools & Languages
+- CMake 3.25+
+- Git
+- C++23 compiler (GCC/Clang/MSVC)
+- Ninja build system
+
+### Graphics & Rendering
+- Vulkan SDK (GPU compute support)
+- GLFW (windowing and input)
+- GLM (mathematics library)
+
+### Audio Processing
+- FFmpeg (media handling)
+- RtAudio (real-time audio backend)
+- Libsndfile (audio I/O)
+
+### Development Libraries
+- LLVM 21+ (for Lila JIT)
+- Eigen (linear algebra)
+- STB (image processing headers)
+- MagicEnum (reflection utilities)
+- oneDPL (parallel algorithms)
+
+### Optional
+- libxml2 (data serialization)
+- 7-Zip (archive handling)
 
 ---
 
@@ -274,114 +428,58 @@ Weave sets up the following for you:
 
 ### Installation Issues
 
-**"Weave.app won't open" (macOS)**
+**macOS: "Weave.app won't open" or "damaged application"**
 ```bash
 # Remove quarantine attribute
-sudo xattr -rd com.apple.quarantine ~/Downloads/Weave-*.pkg
-
-# Or use installer from command line
-sudo installer -pkg Weave-*.pkg -target CurrentUserHomeDirectory
+sudo xattr -rd com.apple.quarantine /Applications/Weave.app
 ```
 
-**"Administrator privileges required" (Windows)**
-- Right-click `Weave-*.exe` → "Run as administrator"
-- Or enable UAC if disabled
-
-**Installation hangs or is slow**
+**macOS: Installer hangs or is slow**
 - Check internet connection (dependencies are downloaded)
-- For macOS: Homebrew may prompt for password—provide it when requested
-- For Windows: PowerShell may need time to compile/extract dependencies
-- Installation log: `~/.weave_install.log` (macOS) or `%LOCALAPPDATA%\weave_install.log` (Windows)
+- Homebrew may prompt for password—provide it when requested
+- Installation time varies: 10-30 minutes typically
+- Check progress: `tail -f ~/.weave_install.log` in another terminal
+
+**Windows: "Administrator privileges required"**
+- Right-click `Weave-*.exe` → "Run as administrator"
+- Or enable UAC if it's disabled in your system
+
+**Windows: PowerShell execution policy error**
+- This is handled automatically by Weave
+- If you see errors, check `%LOCALAPPDATA%\weave_install.log`
 
 ### Build Issues
 
 **"MayaFlux not found" during CMake**
-- Verify installation: `echo $MAYAFLUX_ROOT` (macOS/Linux) or `echo %MAYAFLUX_ROOT%` (Windows)
-- If empty, reload environment (see Environment Variables section)
-- Or set manually: `export MAYAFLUX_ROOT=/path/to/MayaFlux`
+```bash
+# Verify installation location
+echo $MAYAFLUX_ROOT    # macOS/Linux
+echo %MAYAFLUX_ROOT%   # Windows
 
-**"Command 'weave' not found"**
-- Ensure `~/.local/bin` (macOS/Linux) or `%USERPROFILE%\.local\bin` (Windows) is in `PATH`
-- Restart terminal after installation
-- Check installation log for errors
+# If empty, reload environment:
+source ~/.zshenv       # macOS/Linux
+# Or restart terminal (Windows)
+
+# Or set manually:
+export MAYAFLUX_ROOT=/path/to/MayaFlux    # macOS/Linux
+set MAYAFLUX_ROOT=C:\path\to\MayaFlux      # Windows CMD
+```
+
+**"Command 'weave' not found" (macOS)**
+- Ensure `~/.local/bin` is in `PATH`
+- Restart terminal or run `source ~/.zshenv`
+- Check installation log: `cat ~/.weave_install.log`
 
 **Compiler errors with C++23 features**
-- Ensure modern compiler: GCC 12+, Clang 16+, or MSVC 2022+
-- Verify `CMAKE_CXX_STANDARD=23` in CMakeLists.txt
+- Ensure modern compiler:
+  - GCC 12+
+  - Clang 16+
+  - MSVC 2022+
+- Verify `CMAKE_CXX_STANDARD=23` in generated `CMakeLists.txt`
 
----
-
-## Building Weave from Source
-
-For developers contributing to Weave itself:
-
-### Prerequisites
-
-- Git
-- CMake 3.25+
-- C++20 compiler
-- Platform-specific tools:
-  - **macOS:** Xcode Command Line Tools, Homebrew
-  - **Windows:** Visual Studio Build Tools, WinGet
-  - **Linux:** GCC 12+, standard build utils
-
-### Clone and Build
-
-```bash
-git clone https://github.com/MayaFlux/Weave.git
-cd Weave
-
-# macOS
-./macos/scripts/create_pkg.sh 0.1.0
-# Output: build/macos/Weave-0.1.0.pkg
-
-# Windows
-.\windows\scripts\create_installer.ps1 -Version 0.1.0
-# Output: build\windows\Weave-0.1.0.exe
-
-# Linux (coming soon)
-./linux/scripts/create_installer.sh 0.1.0
-```
-
-### Project Structure
-
-```
-Weave/
-├── macos/
-│   ├── scripts/
-│   │   ├── build_weave_app.sh      # Builds Weave.app GUI
-│   │   └── create_pkg.sh            # Packages .pkg installer
-│   ├── Weave.sh                     # CLI tool (symlinked as `weave`)
-│   ├── WeaveGUI.swift               # macOS app source
-│   └── resources/
-│       ├── Distribution.xml         # Installer metadata
-│       ├── welcome.html
-│       └── conclusion.html
-├── windows/
-│   ├── scripts/
-│   │   ├── create_installer.ps1     # Main build script
-│   │   ├── install_package.ps1      # Generic dependency installer
-│   │   └── packages.psd1            # Dependency definitions
-│   ├── gui/
-│   │   └── WeaveGUI.cs              # Windows app source
-│   ├── resources/
-│   │   ├── welcome.html
-│   │   └── conclusion.html
-│   └── Weave.nsi                    # NSIS installer definition
-├── linux/ (coming soon)
-├── templates/
-│   ├── CMakeLists.txt               # Project template
-│   ├── main.cpp
-│   ├── user_project.hpp
-│   └── vscode/
-│       ├── settings.json
-│       ├── tasks.json
-│       └── launch.json
-├── .github/workflows/
-│   ├── build-macos.yml              # macOS CI/CD
-│   └── build-windows.yml            # Windows CI/CD
-└── README.md (this file)
-```
+**"weave: command not found" but installation said it succeeded (macOS)**
+- Run: `source ~/.zshenv` to load environment variables
+- Or restart your terminal completely
 
 ---
 
@@ -423,60 +521,159 @@ export MAYAFLUX_GRAPHICS_DEBUG=1
 
 ---
 
-## CI/CD Integration
-
-Weave includes GitHub Actions workflows for automated builds:
-
-### macOS
-
-```yaml
-# .github/workflows/build-macos.yml
-- Builds and signs Weave.app
-- Creates notarized .pkg installer
-- Uploads to GitHub Releases
-```
-
-### Windows
-
-```yaml
-# .github/workflows/build-windows.yml
-- Compiles with NSIS
-- Manages dependency packages
-- Generates SHA256 hashes
-```
-
-Trigger releases with Git tags:
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-# Workflows automatically build and publish
-```
-
----
-
 ## Uninstallation
 
 ### macOS
 
 ```bash
-# Remove MayaFlux
-rm -rf ~/MayaFlux
+# Remove Weave.app
 rm -rf /Applications/Weave.app
 
-# Clean environment (optional)
+# Remove MayaFlux framework and dependencies
+rm -rf /Library/MayaFlux
+rm -rf /Library/Weave
+
+# Remove CLI tool
+rm ~/.local/bin/weave
+
+# Remove environment setup (optional)
 nano ~/.zshenv
-# Remove MAYAFLUX_ROOT and related lines
+# Find and remove lines starting with: export MAYAFLUX_ROOT, CMAKE_PREFIX_PATH, etc.
+```
+
+Note: Homebrew packages installed as dependencies are NOT removed. To clean those:
+```bash
+brew autoremove    # Removes packages no longer needed
 ```
 
 ### Windows
 
+**Option 1: Settings GUI**
 1. Settings → Apps → Apps & Features
-2. Find "Weave" → Uninstall
-3. (Optional) Remove `C:\MayaFlux\` folder
+2. Find "Weave" → Click "Uninstall"
+3. Confirm removal
 
+**Option 2: Command Line**
 ```powershell
-# Or via command line
 wmic product where name="Weave" call uninstall
+```
+
+**Optional: Remove installation directory**
+```powershell
+# Remove MayaFlux directory (all files)
+Remove-Item -Path "C:\MayaFlux" -Recurse -Force
+```
+
+---
+
+## Building Weave from Source
+
+For developers contributing to Weave itself:
+
+### Prerequisites
+
+- Git
+- CMake 3.25+
+- C++20 compiler
+- Platform-specific tools:
+  - **macOS:** Xcode Command Line Tools, Homebrew, Swift 5.9+
+  - **Windows:** Visual Studio Build Tools 2022, WinGet, .NET 8 SDK
+  - **Linux:** GCC 12+, standard build utils
+
+### Clone and Build
+
+```bash
+git clone https://github.com/MayaFlux/Weave.git
+cd Weave
+
+# macOS
+./macos/scripts/create_pkg.sh 0.1.0
+# Output: build/macos/Weave-0.1.0.pkg
+
+# Windows
+.\windows\scripts\create_installer.ps1 -Version 0.1.0
+# Output: build\windows\Weave-0.1.0.exe
+
+# Linux (coming soon)
+./linux/scripts/create_installer.sh 0.1.0
+```
+
+### Project Structure
+
+```
+Weave/
+├── macos/
+│   ├── scripts/
+│   │   ├── build_weave_app.sh      # Builds universal Weave.app
+│   │   ├── create_pkg.sh            # Packages .pkg installer
+│   │   └── complete_installation.sh # Real-time installation script
+│   ├── Weave.sh                     # CLI tool source
+│   ├── WeaveGUI.swift               # Weave.app GUI source
+│   └── resources/
+│       ├── Distribution.xml         # Installer orchestration
+│       ├── welcome.html
+│       └── conclusion.html
+├── windows/
+│   ├── scripts/
+│   │   ├── create_installer.ps1     # Main build script
+│   │   ├── install_package.ps1      # Generic dependency installer
+│   │   └── packages.psd1            # Dependency definitions
+│   ├── Weave/                       # Main C# project
+│   │   ├── Program.cs               # Entry point
+│   │   ├── MainWindow.cs            # Installation UI
+│   │   ├── UI/
+│   │   │   ├── Pages/               # Installation steps
+│   │   │   ├── Layout/              # Global layout manager
+│   │   │   └── Project/             # Project creator UI
+│   │   └── Weave.csproj
+│   ├── Shared/                      # Shared models and utilities
+│   └── Weave.sln                    # Solution file
+├── templates/
+│   ├── CMakeLists.txt               # Project template
+│   ├── main.cpp
+│   ├── user_project.hpp
+│   └── vscode/
+│       ├── settings.json
+│       ├── tasks.json
+│       └── launch.json
+├── .github/workflows/
+│   ├── build.yml                    # CI/CD for all platforms
+│   └── scripts/
+│       ├── verify-macos-build.sh
+│       └── generate-release-body.sh
+└── README.md (this file)
+```
+
+---
+
+## CI/CD Integration
+
+Weave includes GitHub Actions workflows for automated builds:
+
+### macOS Workflow (`build.yml`)
+
+- Builds Weave.app as universal binary (arm64 + x86_64)
+- Creates `.pkg` installer with orchestrated components
+- Verifies binary architecture with `lipo`
+- Generates SHA256 hashes for distribution
+- Uploads artifacts to GitHub Releases
+
+### Windows Workflow (`build.yml`)
+
+- Compiles Weave.exe with .NET 8 SDK
+- Creates self-contained executable
+- Verifies all embedded resources present
+- Generates SHA256 hashes
+- Uploads to GitHub Releases
+
+### Release Workflow
+
+Trigger automated builds with Git tags:
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+# Workflows automatically build and publish
 ```
 
 ---
@@ -492,10 +689,14 @@ Weave is part of the MayaFlux ecosystem. Contributions are welcome!
 4. Submit a pull request with detailed description
 
 **Development guidelines:**
-- Test installers on fresh VMs before submitting
+- Test installers on fresh systems before submitting
 - Update documentation for new features
-- Follow existing code style (Swift for macOS, C# for Windows, Bash for Linux)
-- Include error handling and user feedback
+- Follow existing code style:
+  - Swift for macOS (SwiftUI patterns)
+  - C# for Windows (WinForms best practices)
+  - Bash/Zsh for shell scripts
+- Include proper error handling and user feedback
+- Verify both GUI and CLI tools work correctly
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
@@ -504,9 +705,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 ## Documentation
 
 - **[MayaFlux Docs](https://github.com/MayaFlux/MayaFlux)** — Framework architecture, tutorials, API reference
-- **[Getting Started](../docs/Getting_Started.md)** — First MayaFlux project walkthrough
-- **[Installation FAQ](docs/FAQ.md)** — Common questions and solutions
-- **[Build Operations](docs/BuildOps.md)** — Advanced build and customization
 
 ---
 
@@ -531,10 +729,10 @@ Weave is part of MayaFlux. See [LICENSE](LICENSE) for full terms.
 
 | Phase | Timeline | Goals |
 |-------|----------|-------|
-| **Phase 1** | Now | macOS & Windows installers ✓, CLI tool, project creator |
-| **Phase 2** | Q4 2025 | Linux installer, improved dependency management, cross-platform CI/CD |
+| **Phase 1** | Now | macOS & Windows installers ✓, GUI tools, CLI (macOS), template system |
+| **Phase 2** | Q4 2025 | Linux installer, Windows CLI tool, enhanced dependency management |
 | **Phase 3** | Q1 2026 | Weave package manager for community templates, plugin registry |
-| **Phase 4+** | TBD | Self-updating installers, advanced dependency resolution |
+| **Phase 4+** | TBD | Self-updating installers, advanced dependency resolution, cross-platform synchronization |
 
 ---
 

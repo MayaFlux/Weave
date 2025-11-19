@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(@PROJECT_NAME@ VERSION 0.1.0 LANGUAGES CXX)
+project(@PROJECT_NAME@ VERSION 0.1.0 LANGUAGES C CXX)
 
 # ============================================================================
 # C++ Standard Configuration
@@ -18,6 +18,8 @@ elseif(APPLE)
 elseif(UNIX)
     set(PLATFORM_LINUX TRUE)
 endif()
+
+add_compile_definitions(MAYAFLUX_PROJECT)
 
 # ============================================================================
 # MayaFlux Discovery

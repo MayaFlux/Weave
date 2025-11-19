@@ -124,7 +124,7 @@ if [ "$SKIP_DOWNLOAD" = false ]; then
     RELEASES=$(curl -fsSL "https://api.github.com/repos/MayaFlux/MayaFlux/releases" 2>&1) || error "Failed to fetch releases"
 
     TAG_NAME=$(echo "$RELEASES" | grep -o '"tag_name": *"[^"]*"' | head -1 | sed 's/"tag_name": *"\([^"]*\)"/\1/')
-    
+
     if [ -z "$TAG_NAME" ]; then
         error "Could not find release tag"
     fi
@@ -190,7 +190,7 @@ if [ "$SKIP_DOWNLOAD" = false ]; then
 
     # Move dist_staging contents to final location
     DIST_STAGING=$(find "$TMPDIR_DOWNLOAD" -type d -name "dist_staging" | head -1)
-    
+
     if [ -z "$DIST_STAGING" ]; then
         error "dist_staging folder not found in archive"
     fi
@@ -232,7 +232,7 @@ if [ "$SKIP_DEPS" = false ]; then
     eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
 
     DEPS_NEEDED=()
-    for dep in ffmpeg rtaudio glfw glm eigen fmt magic-enum onedpl; do
+    for dep in ffmpeg rtaudio glfw glm eigen fmt magic_enum onedpl googletest; do
         if ! brew list "$dep" &>/dev/null 2>&1; then
             DEPS_NEEDED+=("$dep")
         fi
@@ -248,6 +248,36 @@ if [ "$SKIP_DEPS" = false ]; then
             log "✅ Dependencies installed"
         fi
     fi
+fi
+
+printf 'Installing STB headers...\n' >&3
+
+STB_INSTALL_DIR="$HOME/Libraries/stb"
+STB_HEADER_CHECK="$STB_INSTALL_DIR/stb_image.h"
+
+if [ ! -f "$STB_HEADER_CHECK" ]; then
+    mkdir -p "$STB_INSTALL_DIR"
+
+    STB_HEADERS=(
+        "stb_image.h"
+        "stb_image_write.h"
+        "stb_image_resize.h"
+        "stb_truetype.h"
+        "stb_rect_pack.h"
+    )
+
+    for header in "${STB_HEADERS[@]}"; do
+        header_url="https://raw.githubusercontent.com/nothings/stb/master/$header"
+        header_path="$STB_INSTALL_DIR/$header"
+
+        if ! curl -fL "$header_url" -o "$header_path" 2>/dev/null; then
+            err "Failed to download STB header: $header"
+        fi
+    done
+
+    printf 'STB headers installed to %s\n' "$STB_INSTALL_DIR" >&3
+else
+    printf 'STB already installed at %s\n' "$STB_INSTALL_DIR" >&3
 fi
 
 # ============================================================================
@@ -295,7 +325,7 @@ fi
 
 log "Configuring environment..."
 
-ZSHENV="$HOME/.zshenv"
+ZSHENV="${ZDOTDIR:-$HOME}/.zshenv"
 touch "$ZSHENV" || error "Failed to create $ZSHENV"
 
 append_if_missing() {
@@ -318,6 +348,26 @@ if [ -n "$VULKAN_SDK_PATH" ]; then
     append_if_missing "export VK_ICD_FILENAMES=\"\$VULKAN_SDK/etc/vulkan/icd.d/MoltenVK_icd.json\""
     append_if_missing "export VK_LAYER_PATH=\"\$VULKAN_SDK/etc/vulkan/explicit_layer.d\""
 fi
+
+append_if_missing "export STB_ROOT=\"$HOME/Libraries\""
+append_if_missing 'export CMAKE_PREFIX_PATH="$STB_ROOT:$CMAKE_PREFIX_PATH"'
+append_if_missing 'export CPATH="$STB_ROOT/:$CPATH"'
+
+LLVM_PREFIX="$(brew --prefix llvm 2>/dev/null || true)"
+if [ -n "$LLVM_PREFIX" ]; then
+    if ! grep -Fq "$LLVM_PREFIX/bin" "$ZSHENV" 2>/dev/null; then
+        {
+            echo ''
+            echo '# LLVM setup for CMake / llvm-config'
+            echo "export PATH=\"$LLVM_PREFIX/bin:\$PATH\""
+            echo "export CMAKE_PREFIX_PATH=\"$LLVM_PREFIX/lib/cmake:\$CMAKE_PREFIX_PATH\""
+            echo "export LLVM_DIR=\"$LLVM_PREFIX/lib/cmake/llvm\""
+            echo "export Clang_DIR=\"$LLVM_PREFIX/lib/cmake/clang\""
+        } >>"$ZSHENV"
+    fi
+fi
+
+append_if_missing "# END: MayaFlux Environment (added by Weave installer)"
 
 log "✅ Environment configured"
 
