@@ -1,69 +1,60 @@
-**Platform:** Windows 10/11 (64-bit)
+## windows-section.md
+
+**Platform:** Windows 10/11 (64-bit)  
 **Architecture:** x86_64
 
 ### Installation
 
-**Double-click the Weave.exe file**
+**Double-click `Weave-{{VERSION}}.exe`** to launch the installer.
 
+The installer will:
+1. Show a mode selection dialog (Install MayaFlux or Create Project)
+2. Run step-by-step installation with progress tracking
+3. Download MayaFlux framework (~100 MB)
+4. Install dependencies (CMake, Vulkan SDK, FFmpeg, LLVM, etc.)
+5. Configure environment variables
+6. Extract project templates
 
-The installer will launch the setup wizard. After installation, **Weave Project Creator will launch automatically**.
-
-### What Gets Installed
-
-1. **Weave Installer & Tools** (self-contained executable)
-   - Project templates (embedded in exe, extracted at runtime)
-   - Dependency installation scripts (embedded in exe)
-   - GUI project creator
-
-2. **MayaFlux Framework** (downloaded from GitHub releases during installation)
-   - Core libraries and headers
-   - CMake configuration files
-
-3. **Dependencies** (installed via automated scripts)
-   - Build Tools: CMake, Git, Ninja, 7-Zip
-   - Graphics: Vulkan SDK, GLFW  
-   - Audio: FFmpeg, RtAudio
-   - Math & Libraries: LLVM, Eigen3, GLM, STB, MagicEnum
-   - Visual Studio Build Tools (C++ compiler)
+**Total time:** 15-30 minutes (depends on internet and system)
 
 ### Installation Steps
 
-1. Run `Weave-{{VERSION}}.exe`
-2. Follow the installation wizard
-3. Choose installation directory (default: `C:\MayaFlux`)
-4. Dependencies will be downloaded and installed
-5. Project Creator launches automatically upon completion
+1. **Mode Selection** - Choose "Install MayaFlux"
+2. **System Check** - Verifies Windows 64-bit, 7-Zip availability, admin privileges
+3. **Download MayaFlux** - Fetches latest framework from GitHub, shows progress bar
+4. **Install Dependencies** - Runs PowerShell script to install build tools and libraries
+5. **Environment Setup** - Sets system environment variables
+6. **Templates** - Extracts project templates
+7. **Complete** - Shows summary with log file location
 
-### Creating Your First Project
+### What Gets Installed
 
-**Using the GUI (recommended):**
-1. Weave Project Creator launches automatically after installation
-2. Enter project name and select location
-3. Click "Create Project"
-
-**Using the CLI:**
-```powershell
-weave new MyProject C:\Projects\
-cd C:\Projects\MyProject
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build . --config Release --parallel
-.\Release\MyProject.exe
-```
+- **Weave.exe** - Single GUI application for all operations
+- **MayaFlux Framework** - Downloaded to `C:\MayaFlux\` (default)
+- **Build Tools** - CMake, Git, Ninja, 7-Zip
+- **Graphics Stack** - Vulkan SDK, GLFW, GLM
+- **Audio Stack** - FFmpeg, RtAudio
+- **Development Libraries** - LLVM, Eigen3, STB, MagicEnum, oneDPL
 
 ### Environment Setup
 
-After installation, your system will have:
-- `MAYAFLUX_ROOT` environment variable pointing to installation directory
-- `PATH` updated with MayaFlux binaries and tools
-- `CMAKE_PREFIX_PATH` configured for CMake discovery
+After installation, your system has:
+- `MAYAFLUX_ROOT` - Points to installation directory
+- `PATH` - Updated with MayaFlux and build tools
+- `CMAKE_PREFIX_PATH` - For CMake discovery
 
-Restart your terminal/PowerShell to use the new environment variables.
+**Restart your terminal/PowerShell** for changes to take effect.
 
-### System Requirements
+### Creating Your First Project
 
-- **OS:** Windows 10/11 (64-bit)
-- **RAM:** 4GB minimum (8GB+ recommended for dependency compilation)
-- **Disk:** ~5GB free space (for MayaFlux + dependencies)
-- **Internet:** Required for initial downloads
-- **Permissions:** Administrator privileges required for installation
+1. Run `Weave.exe` again (or click in Start Menu)
+2. Select "Create Project" mode
+3. Enter project name and select location
+4. (Optional) Enable Lila or VS Code configuration
+5. Click "Create Project"
+
+The GUI shows real-time output of project generation.
+
+---
+
+
