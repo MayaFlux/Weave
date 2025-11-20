@@ -9,7 +9,7 @@ echo "✅ Weave.app exists"
 
 echo ""
 echo "=== Checking component packages ==="
-for pkg in Weave-files Weave-gui Weave-launcher; do
+for pkg in WeaveStep-files WeaveStep-gui WeaveStep-launcher; do
     if [ ! -f "build/macos/${pkg}.pkg" ]; then
         echo "❌ ${pkg}.pkg not found"
         exit 1

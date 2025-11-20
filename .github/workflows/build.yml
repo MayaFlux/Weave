@@ -15,6 +15,9 @@ jobs:
     steps:
       - name: Checkout Weave
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          clean: true
 
       - name: Setup Xcode (for Swift compilation)
         uses: maxim-lobanov/setup-xcode@v1
@@ -69,15 +72,14 @@ jobs:
 
       - name: Create Weave.app standalone archive
         run: |
-          cd build/macos/WeaveApp
-          zip -r "../Weave-app.zip" Weave.app
-          cd ../..
+          cd build/macos
+          mv WeaveApp/Weave.app WeaveProjects.app
           echo "Created Weave.app standalone archive"
 
       - name: Verify universal binary
         run: |
           echo "=== Verifying Universal Binary ==="
-          BINARY="build/macos/WeaveApp/Weave.app/Contents/MacOS/Weave"
+          BINARY="build/macos/WeaveProjects.app/Contents/MacOS/Weave"
           if [ ! -f "$BINARY" ]; then
             echo "❌ Weave binary not found"
             exit 1
@@ -116,7 +118,8 @@ jobs:
           name: weave-macos
           path: |
             build/macos/Weave-*.pkg
-            build/macos/Weave-app.zip
+            build/macos/WeaveStep-*.pkg
+            build/macos/WeaveProjects.app
           retention-days: 30
 
       - name: Upload debug artifacts (on failure)
@@ -134,6 +137,9 @@ jobs:
     steps:
       - name: Checkout Weave
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          clean: true
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -257,6 +263,7 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          clean: true
 
       - name: Download macOS artifact
         uses: actions/download-artifact@v4
@@ -333,9 +340,9 @@ jobs:
           cp "$MACOS_PKG" "./release/Weave-installer-macos.pkg"
 
           # macOS App
-          MACOS_APP_ZIP=$(find ./packages/macos -name "Weave-app.zip" | head -1)
-          if [ -n "$MACOS_APP_ZIP" ]; then
-            cp "$MACOS_APP_ZIP" "./release/Weave-project-macos.zip"
+          MACOS_APP=$(find ./packages/macos -name "WeaveProjects.app" | head -1)
+          if [ -n "$MACOS_APP" ]; then
+            cp "$MACOS_APP" "./release/Weave-project-macos.app"
           fi
 
           # Windows
@@ -362,7 +369,7 @@ jobs:
           tag_name: ${{ steps.version.outputs.IS_RELEASE == 'true' && format('v{0}', steps.version.outputs.VERSION) || format('v{0}', steps.version.outputs.VERSION) }}
           files: |
             release/Weave-installer-macos.pkg
-            release/Weave-project-macos.zip
+            release/Weave-project-macos.app
             release/Weave-windows.zip
           body_path: release-body.md
           draft: false

@@ -30,13 +30,13 @@ clear
 cat <<'BANNER'
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
-║   🎛️  Weave - MayaFlux Installation                        ║
+║ 🎛️  Weave - MayaFlux Installation, Dependency Management   ║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
 
 BANNER
 
-log "Starting installation..."
+log "Starting Installation..."
 log ""
 
 # Step 1: Homebrew
@@ -242,16 +242,21 @@ show_complete "Environment configured"
 # Step 7: Install Weave CLI and templates
 show_progress "Installing Weave CLI and templates..."
 
+# Create MayaFlux share directory structure
+sudo mkdir -p "$MAYAFLUX_INSTALL_DIR/share/weave"
+
+# Copy templates from package location to MayaFlux
+if [ -d "/Library/Weave/templates" ]; then
+    sudo cp -R "/Library/Weave/templates" "$MAYAFLUX_INSTALL_DIR/share/weave/"
+    show_complete "Templates installed to MayaFlux"
+else
+    error "Templates not found in /Library/Weave - package installation may have failed"
+    exit 1
+fi
+
 WEAVE_BIN="$HOME/.local/bin"
-WEAVE_SHARE="/Library/share/weave"
-
 mkdir -p "$WEAVE_BIN"
-sudo mkdir -p "$WEAVE_SHARE/templates"
-
 cp "/Library/Weave/project_creator.sh" "$WEAVE_BIN/weave"
-sudo cp -R "/Library/Weave/templates/"* "$WEAVE_SHARE/templates/"
-
-sudo cp -R "$WEAVE_LOCATION/templates/"* "$WEAVE_SHARE/templates/"
 
 show_complete "Weave CLI installed"
 

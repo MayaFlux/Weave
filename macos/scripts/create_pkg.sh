@@ -24,7 +24,7 @@ echo "Building Weave.app GUI..."
 # COMPONENT 1: Weave Files
 # ============================================================================
 
-echo "Building Weave-files.pkg..."
+echo "Building WeaveStep-files.pkg..."
 
 mkdir -p "$BUILD_DIR/files_payload/Library/Weave"
 
@@ -40,13 +40,13 @@ chmod +x "$BUILD_DIR/files_payload/Library/Weave/complete_installation.sh"
 pkgbuild --root "$BUILD_DIR/files_payload" \
     --identifier com.mayaflux.weave.files \
     --version "$VERSION" \
-    "$BUILD_DIR/Weave-files.pkg"
+    "$BUILD_DIR/WeaveStep-files.pkg"
 
 # ============================================================================
 # COMPONENT 2: Weave.app GUI
 # ============================================================================
 
-echo "Building Weave-gui.pkg..."
+echo "Building WeaveStep-gui.pkg..."
 
 mkdir -p "$BUILD_DIR/gui_payload/Applications"
 cp -R "$BUILD_DIR/WeaveApp/Weave.app" "$BUILD_DIR/gui_payload/Applications/Weave.app"
@@ -54,13 +54,13 @@ cp -R "$BUILD_DIR/WeaveApp/Weave.app" "$BUILD_DIR/gui_payload/Applications/Weave
 pkgbuild --root "$BUILD_DIR/gui_payload" \
     --identifier com.mayaflux.weave.gui \
     --version "$VERSION" \
-    "$BUILD_DIR/Weave-gui.pkg"
+    "$BUILD_DIR/WeaveStep-gui.pkg"
 
 # ============================================================================
 # COMPONENT 3: Postinstall launcher (just launches complete_installation.sh)
 # ============================================================================
 
-echo "Building Weave-launcher.pkg..."
+echo "Building WeaveStep-launcher.pkg..."
 
 mkdir -p "$BUILD_DIR/launcher_scripts"
 
@@ -91,7 +91,7 @@ pkgbuild --nopayload \
     --identifier com.mayaflux.weave.launcher \
     --version "$VERSION" \
     --scripts "$BUILD_DIR/launcher_scripts" \
-    "$BUILD_DIR/Weave-launcher.pkg"
+    "$BUILD_DIR/WeaveStep-launcher.pkg"
 
 # ============================================================================
 # FINAL: Distribution package
@@ -128,9 +128,9 @@ cat >"$BUILD_DIR/Distribution.xml" <<'DISTXML'
         <pkg-ref id="com.mayaflux.weave.launcher"/>
     </choice>
     
-    <pkg-ref id="com.mayaflux.weave.files" installKBytes="1000" version="1.0">Weave-files.pkg</pkg-ref>
-    <pkg-ref id="com.mayaflux.weave.gui" installKBytes="10000" version="1.0">Weave-gui.pkg</pkg-ref>
-    <pkg-ref id="com.mayaflux.weave.launcher" installKBytes="100" version="1.0">Weave-launcher.pkg</pkg-ref>
+    <pkg-ref id="com.mayaflux.weave.files" installKBytes="1000" version="1.0">WeaveStep-files.pkg</pkg-ref>
+    <pkg-ref id="com.mayaflux.weave.gui" installKBytes="10000" version="1.0">WeaveStep-gui.pkg</pkg-ref>
+    <pkg-ref id="com.mayaflux.weave.launcher" installKBytes="100" version="1.0">WeaveStep-launcher.pkg</pkg-ref>
 </installer-gui-script>
 DISTXML
 
