@@ -129,7 +129,8 @@ struct WeaveProjectCreatorView: View {
         // Find weave command
         let possiblePaths = [
             "\(NSHomeDirectory())/.local/bin/weave",
-            "/usr/local/bin/weave"
+            "/usr/local/bin/weave", 
+            "/Library/Weave/project_creator.sh"
         ]
         
         guard let weaveCommand = possiblePaths.first(where: { FileManager.default.fileExists(atPath: $0) }) else {

@@ -8,7 +8,7 @@ set -euo pipefail
 # CONFIGURATION
 # ============================================================================
 
-MAYAFLUX_ROOT="${MAYAFLUX_ROOT:-$HOME/MayaFlux}"
+MAYAFLUX_ROOT="${MAYAFLUX_ROOT:-/Library/MayaFlux}"
 TEMPLATES_DIR="$MAYAFLUX_ROOT/share/weave/templates"
 
 # ============================================================================

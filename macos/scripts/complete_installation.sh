@@ -8,6 +8,14 @@ MAYAFLUX_INSTALL_DIR="/Library/MayaFlux"
 WEAVE_LOCATION="/Library/Weave"
 LOG_FILE="$HOME/.weave_install.log"
 
+show_progress() {
+    log "➤ $1..."
+}
+
+show_complete() {
+    log "✅ $1"
+}
+
 log() {
     echo "$*"
     echo "$*" >>"$LOG_FILE"
@@ -67,7 +75,7 @@ log "➤ Downloading latest MayaFlux release..."
 if [ -f "$MAYAFLUX_INSTALL_DIR/lib/libMayaFluxLib.dylib" ]; then
     log "✅ MayaFlux already installed"
 else
-    mkdir -p "$MAYAFLUX_INSTALL_DIR"
+    sudo mkdir -p "$MAYAFLUX_INSTALL_DIR"
 
     TMPDIR_DOWNLOAD=$(mktemp -d)
     trap 'rm -rf "$TMPDIR_DOWNLOAD"' EXIT
@@ -91,7 +99,6 @@ else
     # The archive extracts directly to bin/, lib/, etc. - no dist_staging
     # Just copy everything from the temp dir to the install dir
     log "  Installing to $MAYAFLUX_INSTALL_DIR..."
-    sudo mkdir -p "$MAYAFLUX_INSTALL_DIR"
     sudo cp -R "$TMPDIR_DOWNLOAD"/bin "$MAYAFLUX_INSTALL_DIR/"
     sudo cp -R "$TMPDIR_DOWNLOAD"/lib "$MAYAFLUX_INSTALL_DIR/"
     sudo cp -R "$TMPDIR_DOWNLOAD"/include "$MAYAFLUX_INSTALL_DIR/"
@@ -111,7 +118,7 @@ fi
 log "➤ Installing dependencies..."
 log "  This may take several minutes..."
 
-DEPS=(ffmpeg rtaudio glfw glm eigen fmt magic_enum onedpl googletest)
+DEPS=(pkgconfig llvm ffmpeg rtaudio glfw glm eigen fmt magic_enum onedpl googletest)
 DEPS_TO_INSTALL=()
 
 for dep in "${DEPS[@]}"; do
@@ -148,13 +155,13 @@ if [ ! -f "$STB_HEADER_CHECK" ]; then
         header_path="$STB_INSTALL_DIR/$header"
 
         if ! curl -fL "$header_url" -o "$header_path" 2>/dev/null; then
-            err "Failed to download STB header: $header"
+            error "Failed to download STB header: $header"
         fi
     done
 
-    printf 'STB headers installed to %s\n' "$STB_INSTALL_DIR" >&3
+    log 'STB headers installed to %s\n' "$STB_INSTALL_DIR"
 else
-    printf 'STB already installed at %s\n' "$STB_INSTALL_DIR" >&3
+    log 'STB already installed at %s\n' "$STB_INSTALL_DIR"
 fi
 
 # Step 5: Vulkan SDK
@@ -236,13 +243,13 @@ show_complete "Environment configured"
 show_progress "Installing Weave CLI and templates..."
 
 WEAVE_BIN="$HOME/.local/bin"
-WEAVE_SHARE="$MAYAFLUX_INSTALL_DIR/share/weave"
+WEAVE_SHARE="/Library/share/weave"
 
 mkdir -p "$WEAVE_BIN"
 sudo mkdir -p "$WEAVE_SHARE/templates"
 
-cp "$WEAVE_LOCATION/project_creator.sh" "$WEAVE_BIN/weave"
-chmod +x "$WEAVE_BIN/weave"
+cp "/Library/Weave/project_creator.sh" "$WEAVE_BIN/weave"
+sudo cp -R "/Library/Weave/templates/"* "$WEAVE_SHARE/templates/"
 
 sudo cp -R "$WEAVE_LOCATION/templates/"* "$WEAVE_SHARE/templates/"
 
