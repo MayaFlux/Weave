@@ -75,7 +75,7 @@ log "➤ Downloading latest MayaFlux release..."
 if [ -f "$MAYAFLUX_INSTALL_DIR/lib/libMayaFluxLib.dylib" ]; then
     log "✅ MayaFlux already installed"
 else
-    mkdir -p "$MAYAFLUX_INSTALL_DIR"
+    sudo mkdir -p "$MAYAFLUX_INSTALL_DIR"
 
     TMPDIR_DOWNLOAD=$(mktemp -d)
     trap 'rm -rf "$TMPDIR_DOWNLOAD"' EXIT
@@ -99,7 +99,6 @@ else
     # The archive extracts directly to bin/, lib/, etc. - no dist_staging
     # Just copy everything from the temp dir to the install dir
     log "  Installing to $MAYAFLUX_INSTALL_DIR..."
-    sudo mkdir -p "$MAYAFLUX_INSTALL_DIR"
     sudo cp -R "$TMPDIR_DOWNLOAD"/bin "$MAYAFLUX_INSTALL_DIR/"
     sudo cp -R "$TMPDIR_DOWNLOAD"/lib "$MAYAFLUX_INSTALL_DIR/"
     sudo cp -R "$TMPDIR_DOWNLOAD"/include "$MAYAFLUX_INSTALL_DIR/"
@@ -119,7 +118,7 @@ fi
 log "➤ Installing dependencies..."
 log "  This may take several minutes..."
 
-DEPS=(ffmpeg rtaudio glfw glm eigen fmt magic_enum onedpl googletest)
+DEPS=(pkgconfig llvm ffmpeg rtaudio glfw glm eigen fmt magic_enum onedpl googletest)
 DEPS_TO_INSTALL=()
 
 for dep in "${DEPS[@]}"; do
