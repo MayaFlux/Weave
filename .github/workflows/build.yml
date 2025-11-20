@@ -15,6 +15,9 @@ jobs:
     steps:
       - name: Checkout Weave
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup Xcode (for Swift compilation)
         uses: maxim-lobanov/setup-xcode@v1
