@@ -342,7 +342,7 @@ jobs:
           # macOS App
           MACOS_APP=$(find ./packages/macos -name "WeaveProjects.app" | head -1)
           if [ -n "$MACOS_APP" ]; then
-            cp "$MACOS_APP" "./release/Weave-project-macos.app"
+            cp -r "$MACOS_APP" "./release/Weave-project-macos.app"
           fi
 
           # Windows
