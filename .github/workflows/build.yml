@@ -285,6 +285,13 @@ jobs:
             
             echo "Release build for version: $VERSION"
             
+            # CREATE THE STABLE TAG for the release
+            echo "Creating stable release tag: v$VERSION"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git config user.name "github-actions[bot]"
+            git tag "v$VERSION" "${GITHUB_SHA}"
+            git push origin "v$VERSION"
+            
           else
             # Non-main branch = Dev build
             LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
