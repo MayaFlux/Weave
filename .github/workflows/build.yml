@@ -3,6 +3,7 @@ name: Build Weave Installers
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     tags:
       - "v*"
 
@@ -269,20 +270,42 @@ jobs:
       - name: Determine release version
         id: version
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
+          if [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
+            # Main branch = Release build
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            if [[ -z "$LATEST_TAG" ]]; then
+              echo "Error: No existing tag found for release build"
+              exit 1
+            fi
+            
+            # Ensure the tag doesn't have -dev suffix for release
+            VERSION=${LATEST_TAG#v}
+            VERSION=${VERSION%-dev}
             IS_RELEASE=true
+            
+            echo "Release build for version: $VERSION"
+            
           else
-            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.1.0")
-            VERSION=${LATEST_TAG#v}-dev
+            # Non-main branch = Dev build
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            if [[ -z "$LATEST_TAG" ]]; then
+              echo "Error: No existing tag found for dev build"
+              exit 1
+            fi
+            
+            # Use the latest tag but ensure it has -dev suffix
+            VERSION=${LATEST_TAG#v}
+            if [[ "$VERSION" != *-dev ]]; then
+              VERSION="$VERSION-dev"
+            fi
             IS_RELEASE=false
 
-            echo "Preparing dev tag: $VERSION -> ${GITHUB_SHA}"
+            echo "Preparing dev tag: v$VERSION -> ${GITHUB_SHA}"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git config user.name "github-actions[bot]"
 
-            git tag -f "$VERSION" "${GITHUB_SHA}"
-            git push -f origin "$VERSION"
+            git tag -f "v$VERSION" "${GITHUB_SHA}"
+            git push -f origin "v$VERSION"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "IS_RELEASE=$IS_RELEASE" >> $GITHUB_OUTPUT
