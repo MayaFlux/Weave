@@ -252,8 +252,83 @@ jobs:
             windows/Weave/bin/Release/
           retention-days: 7
 
+  build-linux:
+    runs-on: ubuntu-latest
+    outputs:
+      sha256: ${{ steps.hash.outputs.SHA256 }}
+    steps:
+      - name: Checkout Weave
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          clean: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install GTK4 and dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-4-dev \
+            libadwaita-1-dev \
+            libgirepository1.0-dev \
+            gir1.2-gtk-4.0 \
+            gir1.2-adw-1 \
+            python3-gi
+
+      - name: Verify source files
+        run: |
+          bash .github/scripts/verify-linux-files.sh
+
+      - name: Make scripts executable
+        run: |
+          chmod +x linux/scripts/build_distribution.sh
+          chmod +x linux/scripts/create_project.sh
+          chmod +x linux/scripts/install_deps.sh
+          chmod +x linux/Weave
+
+      - name: Build distribution package
+        run: |
+          mkdir -p build/linux
+          bash linux/scripts/build_distribution.sh
+
+      - name: Verify build output
+        run: |
+          bash .github/scripts/verify-linux-build.sh
+
+      - name: Generate SHA256 hash
+        id: hash
+        run: |
+          TARBALL=$(find build/linux -name "Weave.tar.gz" -type f | head -1)
+          if [ -z "$TARBALL" ]; then
+            echo "Error: Tarball not found in build/linux"
+            ls -la build/linux/
+            exit 1
+          fi
+          SHA256=$(sha256sum "$TARBALL" | cut -d ' ' -f 1)
+          echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
+          echo "TARBALL_PATH=$TARBALL" >> $GITHUB_OUTPUT
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: weave-linux
+          path: build/linux/Weave.tar.gz
+          retention-days: 30
+
+      - name: Upload debug artifacts (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-debug-linux
+          path: build/linux/
+          retention-days: 7
+
   publish-release:
-    needs: [build-macos, build-windows]
+    needs: [build-macos, build-windows, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -270,6 +345,12 @@ jobs:
         with:
           name: weave-macos
           path: ./packages/macos
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: weave-linux
+          path: ./packages/linux
 
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
@@ -345,6 +426,14 @@ jobs:
             cp -r "$MACOS_APP" "./release/Weave-project-macos.app"
           fi
 
+          # Linux
+          LINUX_TARBALL=$(find ./packages/linux -name "Weave.tar.gz" | head -1)
+          if [ -z "$LINUX_TARBALL" ]; then
+            echo "Error: Linux tarball not found"
+            exit 1
+          fi
+          cp "$LINUX_TARBALL" "./release/Weave-linux.tar.gz"
+
           # Windows
           WINDOWS_ZIP=$(find ./packages/windows -name "Weave.zip" | head -1)
           if [ -z "$WINDOWS_ZIP" ]; then
@@ -360,6 +449,7 @@ jobs:
           ./.github/scripts/generate-release-body.sh \
             --version "${{ steps.version.outputs.VERSION }}" \
             --macos-sha256 "${{ needs.build-macos.outputs.sha256 }}" \
+            --linux-sha256 "${{ needs.build-linux.outputs.sha256 }}" \
             --windows-sha256 "${{ needs.build-windows.outputs.sha256 }}" \
             --output release-body.md
 
@@ -370,6 +460,7 @@ jobs:
           files: |
             release/Weave-installer-macos.pkg
             release/Weave-project-macos.app
+            release/Weave-linux.tar.gz
             release/Weave-windows.zip
           body_path: release-body.md
           draft: false
