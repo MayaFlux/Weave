@@ -34,25 +34,28 @@ echo "   Size: ${TARBALL_SIZE_MB} MB"
 echo ""
 echo "Verifying tarball contents..."
 
-# List first 20 entries
-tar -tzf "$TARBALL" | head -20
-ENTRY_COUNT=$(tar -tzf "$TARBALL" | wc -l)
+# Save all entries to a variable to avoid pipe issues
+ENTRIES=$(tar -tzf "$TARBALL")
+ENTRY_COUNT=$(echo "$ENTRIES" | wc -l)
+
+# Show first 20 entries
+echo "$ENTRIES" | head -20
 echo "✅ Tarball contains $ENTRY_COUNT entries"
 
 echo ""
 echo "Required files in tarball:"
 
 required_items=(
-    "Weave-"
-    "lib/weave/main.py"
-    "templates/CMakeLists.txt"
-    "templates/main.cpp"
-    "scripts/create_project.sh"
+    "Weave-0.1.0/lib/weave/main.py"
+    "Weave-0.1.0/templates/CMakeLists.txt"
+    "Weave-0.1.0/templates/main.cpp"
+    "Weave-0.1.0/scripts/create_project.sh"
+    "Weave-0.1.0/Weave"
 )
 
 all_present=true
 for item in "${required_items[@]}"; do
-    if tar -tzf "$TARBALL" | grep -q "$item" 2>/dev/null; then
+    if echo "$ENTRIES" | grep -q "^$item$"; then
         echo "✅ $item"
     else
         echo "❌ Missing: $item"
