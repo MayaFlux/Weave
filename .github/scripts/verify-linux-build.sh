@@ -18,7 +18,7 @@ if [ ! -d "$BUILD_DIR" ]; then
 fi
 
 echo "Checking tarball..."
-TARBALL=$(find "$BUILD_DIR" -name "Weave-*.tar.gz" -type f | head -1)
+TARBALL=$(find "$BUILD_DIR" -name "Weave.tar.gz" -type f | head -1)
 
 if [ -z "$TARBALL" ]; then
     echo "❌ No tarball found in $BUILD_DIR"
@@ -46,11 +46,11 @@ echo ""
 echo "Required files in tarball:"
 
 required_items=(
-    "Weave-0.1.0/lib/weave/main.py"
-    "Weave-0.1.0/templates/CMakeLists.txt"
-    "Weave-0.1.0/templates/main.cpp"
-    "Weave-0.1.0/scripts/create_project.sh"
-    "Weave-0.1.0/Weave"
+    "Weave/lib/weave/main.py"
+    "Weave/templates/CMakeLists.txt"
+    "Weave/templates/main.cpp"
+    "Weave/scripts/create_project.sh"
+    "Weave/Weave"
 )
 
 all_present=true

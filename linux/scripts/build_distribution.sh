@@ -1,6 +1,5 @@
 #!/bin/bash
-VERSION="0.1.0"
-DIST="build/linux/Weave-${VERSION}"
+DIST="build/linux/Weave"
 
 rm -rf "$DIST"
 mkdir -p "$DIST"/{lib/weave,templates,scripts}
@@ -20,5 +19,5 @@ exec python3 -m weave.main "$@"
 EOF
 chmod +x "$DIST/Weave"
 
-tar czf "$DIST.tar.gz" -C build/linux "Weave-${VERSION}"
+tar czf "$DIST.tar.gz" -C build/linux "Weave"
 sha256sum "$DIST.tar.gz"

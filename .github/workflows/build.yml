@@ -302,7 +302,7 @@ jobs:
       - name: Generate SHA256 hash
         id: hash
         run: |
-          TARBALL=$(find build/linux -name "Weave-*.tar.gz" -type f | head -1)
+          TARBALL=$(find build/linux -name "Weave.tar.gz" -type f | head -1)
           if [ -z "$TARBALL" ]; then
             echo "Error: Tarball not found in build/linux"
             ls -la build/linux/
@@ -316,7 +316,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: weave-linux
-          path: build/linux/Weave-*.tar.gz
+          path: build/linux/Weave.tar.gz
           retention-days: 30
 
       - name: Upload debug artifacts (on failure)
@@ -427,7 +427,7 @@ jobs:
           fi
 
           # Linux
-          LINUX_TARBALL=$(find ./packages/linux -name "Weave-*.tar.gz" | head -1)
+          LINUX_TARBALL=$(find ./packages/linux -name "Weave.tar.gz" | head -1)
           if [ -z "$LINUX_TARBALL" ]; then
             echo "Error: Linux tarball not found"
             exit 1
