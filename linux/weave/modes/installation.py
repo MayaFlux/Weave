@@ -11,8 +11,11 @@ import subprocess
 import os
 import json
 import urllib.request
+import urllib.error
 import tarfile
+import time
 from pathlib import Path
+from typing import Optional, Dict
 
 
 class ConfirmationStep:
@@ -121,7 +124,7 @@ class SystemCheckStep:
 
 
 class DownloadStep:
-    """Step 2: Download MayaFlux"""
+    """Step 2: Download MayaFlux (skip for Arch)"""
 
     def build_ui(self, container):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15)
@@ -159,6 +162,16 @@ class DownloadStep:
         container.append(box)
 
     async def execute(self):
+        if self._is_arch_linux():
+            self._log("✓ Arch Linux detected - MayaFlux available in AUR")
+            self._log("")
+            self._log("Install with: yay -S mayaflux-dev-bin")
+            self._log("          or: paru -S mayaflux-dev-bin")
+            self._log("")
+            self._log("Skipping binary download step.")
+            self.status.set_text("ℹ Arch Linux - use AUR for MayaFlux")
+            return True
+
         root = Path.home() / "MayaFlux"
 
         if (root / "lib" / "libMayaFluxLib.so").exists():
@@ -175,16 +188,28 @@ class DownloadStep:
                 return False
 
             self._log(f"✓ Found: {release['tag']}")
-            self._log(f"Downloading {release['asset_name']}...")
+
+            asset = self._find_asset(release)
+            if not asset:
+                self._log("✗ No suitable asset found for this platform")
+                self.status.set_text("✗ Asset not found")
+                return False
+
+            self._log(f"Downloading {asset['name']}...")
 
             root.mkdir(parents=True, exist_ok=True)
-            await self._download(release["url"], root / "mayaflux.tar.gz")
+            download_path = root / "mayaflux.tar.gz"
+
+            if not await self._download(asset["browser_download_url"], download_path):
+                self._log("✗ Download failed")
+                self.status.set_text("✗ Download failed")
+                return False
 
             self._log("✓ Download complete")
             self._log("Extracting...")
-            with tarfile.open(root / "mayaflux.tar.gz", "r:gz") as tar:
+            with tarfile.open(download_path, "r:gz") as tar:
                 tar.extractall(root)
-            (root / "mayaflux.tar.gz").unlink()
+            download_path.unlink()
 
             self._log("✓ Extracted successfully")
             self.status.set_text("✓ Downloaded and extracted")
@@ -194,33 +219,158 @@ class DownloadStep:
             self.status.set_text("✗ Failed")
             return False
 
-    async def _fetch_release(self):
+    def _is_arch_linux(self) -> bool:
+        """Check if running on Arch Linux"""
         try:
-            with urllib.request.urlopen(
-                "https://api.github.com/repos/MayaFlux/MayaFlux/releases/latest",
-                timeout=10,
-            ) as r:
-                data = json.loads(r.read())
+            result = subprocess.run(
+                ["pacman", "--version"], capture_output=True, timeout=5, check=False
+            )
+            return result.returncode == 0
+        except:
+            return False
 
-            for asset in data.get("assets", []):
-                if "linux" in asset["name"] and asset["name"].endswith(".tar.gz"):
-                    return {
-                        "tag": data["tag_name"],
-                        "asset_name": asset["name"],
-                        "url": asset["browser_download_url"],
-                    }
+    async def _fetch_release(self) -> Optional[Dict]:
+        """Fetch latest release from GitHub API"""
+        url = "https://api.github.com/repos/MayaFlux/MayaFlux/releases"
+        max_retries = 3
+
+        for attempt in range(max_retries):
+            try:
+                req = urllib.request.Request(url)
+                req.add_header("User-Agent", "Weave-Installer/1.0")
+
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    if response.status != 200:
+                        self._log(f"✗ GitHub API returned status {response.status}")
+                        return None
+
+                    releases = json.loads(response.read().decode())
+
+                    if not releases:
+                        self._log("✗ No releases found")
+                        return None
+
+                    release = releases[0]
+                    tag = release.get("tag_name")
+
+                    if not tag:
+                        self._log("✗ No tag_name in release")
+                        return None
+
+                    self._log(f"✓ Found release: {tag}")
+
+                    return {"tag": tag, "assets": release.get("assets", [])}
+
+            except urllib.error.HTTPError as e:
+                if e.code == 403:
+                    self._log("✗ GitHub API rate limit exceeded")
+                    return None
+                elif e.code == 404:
+                    self._log("✗ Releases not found")
+                    return None
+                else:
+                    if attempt < max_retries - 1:
+                        wait = 2**attempt
+                        self._log(f"⚠ HTTP {e.code}, retrying in {wait}s...")
+                        await asyncio.sleep(wait)
+                    else:
+                        self._log(f"✗ HTTP error {e.code}")
+                    continue
+
+            except (urllib.error.URLError, json.JSONDecodeError) as e:
+                if attempt < max_retries - 1:
+                    wait = 2**attempt
+                    self._log(f"⚠ Error: {e}, retrying in {wait}s...")
+                    await asyncio.sleep(wait)
+                else:
+                    self._log(f"✗ Failed: {e}")
+                    continue
+
+        return None
+
+    def _find_asset(self, release: Dict) -> Optional[Dict]:
+        """Find the appropriate asset for this platform"""
+        import platform as plat
+
+        assets = release.get("assets", [])
+        if not assets:
+            self._log("✗ No assets found in release")
             return None
-        except Exception as e:
-            self._log(f"✗ GitHub API error: {e}")
-            return None
+        system = plat.system().lower()
+        machine = plat.machine().lower()
+        self._log(f"Looking for asset: {system}/{machine}")
 
-    async def _download(self, url, dest):
-        def progress(block, size, total):
-            if total > 0:
-                frac = min((block * size) / total, 1.0)
-                GLib.idle_add(lambda f=frac: self.progress.set_fraction(f))
+        patterns = {
+            "linux": ["Linux", "x86_64"],
+            "darwin": ["macos", "arm64"],
+            "windows": ["windows", "x86_64"],
+        }
 
-        urllib.request.urlretrieve(url, dest, progress)
+        target_patterns = patterns.get(system, [system])
+
+        for asset in assets:
+            name = asset.get("name", "")
+            if all(p in name for p in target_patterns):
+                self._log(f"✓ Found matching asset: {asset['name']}")
+                return asset
+
+        for asset in assets:
+            if asset["name"].endswith(".tar.gz"):
+                self._log(f"⚠ Using fallback asset: {asset['name']}")
+                return asset
+
+        return None
+
+    async def _download(self, url: str, dest_path: Path) -> bool:
+        """Download with progress tracking"""
+        chunk_size = 8192
+        downloaded = 0
+        max_retries = 3
+
+        for attempt in range(max_retries):
+            try:
+                req = urllib.request.Request(url)
+                req.add_header("User-Agent", "Weave-Installer/1.0")
+
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    total_size = response.headers.get("Content-Length")
+                    if total_size:
+                        total_size = int(total_size)
+
+                    dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+                    with open(dest_path, "wb") as f:
+                        while True:
+                            chunk = response.read(chunk_size)
+                            if not chunk:
+                                break
+
+                            f.write(chunk)
+                            downloaded += len(chunk)
+
+                            if total_size:
+                                frac = downloaded / total_size
+                                GLib.idle_add(
+                                    lambda f=frac: self.progress.set_fraction(f)
+                                )
+
+                            await asyncio.sleep(0)
+
+                self._log(f"✓ Downloaded successfully")
+                return True
+
+            except (urllib.error.URLError, urllib.error.HTTPError) as e:
+                if attempt < max_retries - 1:
+                    wait = 2**attempt
+                    self._log(f"⚠ Download failed, retrying in {wait}s...")
+                    dest_path.unlink(missing_ok=True)
+                    await asyncio.sleep(wait)
+                else:
+                    self._log(f"✗ Download failed after {max_retries} attempts")
+                    dest_path.unlink(missing_ok=True)
+                    return False
+
+        return False
 
     def _log(self, msg):
         buf = self.log.get_buffer()
