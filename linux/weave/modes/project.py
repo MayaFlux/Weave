@@ -7,6 +7,8 @@ gi.require_version("Gtk", "4.0")
 
 from gi.repository import Gtk, Gio, GLib
 import subprocess
+import os
+import sys
 from pathlib import Path
 
 
@@ -173,13 +175,22 @@ class ProjectCreationMode(Gtk.ApplicationWindow):
         original_label = self.create_btn.get_label()
         self.create_btn.set_label("Creating...")
 
+        name_captured = name
+        loc_captured = loc
+        label_captured = original_label
+
         GLib.timeout_add(
-            100, lambda: self._create_project_async(name, loc, original_label)
+            100,
+            lambda n=name_captured,
+            l=loc_captured,
+            lbl=label_captured: self._create_project_async(n, l, lbl),
         )
 
     def _create_project_async(self, name, loc, original_label):
         """Create project asynchronously"""
         try:
+            loc = str(Path(loc).expanduser().resolve())
+
             cmd = ["weave", "new", name, loc]
             if self.lila_check.get_active():
                 cmd.append("--with-lila")
@@ -198,7 +209,6 @@ class ProjectCreationMode(Gtk.ApplicationWindow):
                 self._show_error(f"Failed to create project:\n{error_msg}")
                 self.create_btn.set_sensitive(True)
                 self.create_btn.set_label(original_label)
-
         except subprocess.TimeoutExpired:
             self._show_error("Project creation timed out")
             self.create_btn.set_sensitive(True)

@@ -16,31 +16,52 @@ detect_distro() {
 
 install_arch() {
     echo "Installing for Arch Linux..."
-    sudo pacman -Syu --noconfirm \
-        base-devel cmake git pkg-config llvm clang \
-        rtaudio glfw glm eigen ffmpeg vulkan-devel
+
+    if command -v yay &>/dev/null; then
+        echo "Found yay, installing mayaflux-dev-bin from AUR..."
+        yay -S --noconfirm mayaflux-dev-bin
+    elif command -v paru &>/dev/null; then
+        echo "Found paru, installing mayaflux-dev-bin from AUR..."
+        paru -S --noconfirm mayaflux-dev-bin
+    else
+        echo "No AUR helper found. Building mayaflux-dev-bin from AUR manually..."
+        BUILD_DIR=$(mktemp -d)
+        cd "$BUILD_DIR"
+        git clone https://aur.archlinux.org/mayaflux-dev-bin.git
+        cd mayaflux-dev-bin
+        makepkg -si --noconfirm
+        cd /
+        rm -rf "$BUILD_DIR"
+    fi
 }
 
 install_fedora() {
     echo "Installing for Fedora..."
     sudo dnf install -y \
-        @development-tools cmake git pkg-config llvm-devel clang \
-        rtaudio-devel glfw-devel eigen3-devel ffmpeg-devel vulkan-devel
+        @development-tools llvm llvm-libs clang cmake pkgconfig \
+        rtaudio-devel glfw-devel glm-devel eigen3-devel \
+        spirv-headers spirv-tools vulkan-headers vulkan-loader vulkan-tools \
+        vulkan-validation-layers ffmpeg-devel stb-devel magic_enum-devel
 }
 
 install_ubuntu() {
-    sudo apt-get update
     echo "Installing for Ubuntu/Debian..."
+    sudo apt-get update
     sudo apt-get install -y \
         build-essential cmake git pkg-config llvm llvm-dev clang \
-        librtaudio-dev libglfw3-dev libeigen3-dev ffmpeg libvulkan-dev
+        librtaudio-dev libglfw3-dev libglm-dev libeigen3-dev \
+        libvulkan-dev vulkan-tools spirv-tools \
+        ffmpeg libavcodec-dev libavformat-dev libavutil-dev libswscale-dev \
+        libstb-dev
 }
 
 install_opensuse() {
     echo "Installing for openSUSE..."
     sudo zypper install -y \
         gcc gcc-c++ cmake git pkg-config llvm-devel clang \
-        rtaudio-devel glfw-devel eigen3-devel ffmpeg-devel vulkan-devel
+        rtaudio-devel glfw-devel glm-devel eigen3-devel \
+        vulkan-devel vulkan-tools spirv-tools \
+        ffmpeg-4-libavcodec-devel ffmpeg-4-libavformat-devel ffmpeg-4-libavutil-devel ffmpeg-4-libswscale-devel
 }
 
 DISTRO=$(detect_distro)

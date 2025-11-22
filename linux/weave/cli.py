@@ -84,7 +84,7 @@ Examples:
 
         script.chmod(0o755)
 
-        cmd = [str(script), args.name, args.location]
+        cmd = [str(script), "new", args.name, args.location]
         if args.with_lila:
             cmd.append("--with-lila")
         if args.no_vscode:

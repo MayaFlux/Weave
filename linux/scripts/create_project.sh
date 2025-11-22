@@ -9,7 +9,9 @@ set -euo pipefail
 # ============================================================================
 
 MAYAFLUX_ROOT="${MAYAFLUX_ROOT:-/usr/local}"
-TEMPLATES_DIR="$MAYAFLUX_ROOT/share/weave/templates"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+TEMPLATES_DIR="$PROJECT_ROOT/templates"
 
 # ============================================================================
 # UTILITIES
@@ -34,7 +36,7 @@ Options:
 
 Environment Variables:
   MAYAFLUX_ROOT  Override MayaFlux installation location
-                 (default: ~/MayaFlux)
+                 (default: /usr/local)
 EOF
     exit 0
 }
@@ -93,7 +95,8 @@ done
 
 DEST_DIR="${DEST_DIR/#\~/$HOME}"
 
-DEST_DIR="$(cd "$DEST_DIR" 2>/dev/null || true && pwd)" || error "Destination directory invalid: $DEST_DIR"
+mkdir -p "$DEST_DIR" || error "Cannot create destination directory: $DEST_DIR"
+DEST_DIR="$(cd "$DEST_DIR" && pwd)"
 
 PROJECT_DIR="$DEST_DIR/$PROJECT_NAME"
 
