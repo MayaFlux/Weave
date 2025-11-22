@@ -68,7 +68,7 @@ Examples:
 
     gui_parser = subparsers.add_parser("gui", help="Launch graphical installer")
 
-    parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.1.1")
 
     args = parser.parse_args()
 

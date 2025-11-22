@@ -12,10 +12,10 @@
 tar -xzf Weave-linux.tar.gz -C ~/.local/
 
 # Run Weave (GUI mode)
-~/.local/Weave-0.1.0/Weave
+~/.local/Weave/Weave
 
 # Or use CLI mode
-~/.local/Weave-0.1.0/scripts/create_project.sh new MyProject ~/Projects/
+~/.local/Weave/scripts/create_project.sh new MyProject ~/Projects/
 ```
 
 **From Package Manager (recommended for distributions):**

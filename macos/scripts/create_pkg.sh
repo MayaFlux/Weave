@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MACOS_DIR="$(dirname "$SCRIPT_DIR")"
 ROOT_DIR="$(dirname "$MACOS_DIR")"
 BUILD_DIR="$ROOT_DIR/build/macos"
-VERSION="${1:-0.1.0}"
+VERSION="${1:-0.1.1}"
 
 echo "Building Weave installer v$VERSION with sequential package steps..."
 
