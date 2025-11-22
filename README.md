@@ -24,11 +24,11 @@ Instead of juggling separate downloads, manual dependency installation, and envi
 
 ## Current Platform Support
 
-| Platform          | Status         | Installer               | Installation       | Project Creator                   |
-| ----------------- | -------------- | ----------------------- | ------------------ | --------------------------------- |
-| **macOS 14+**     | ✓ Ready        | `.pkg` package          | Terminal + GUI     | `Weave.app` (GUI) + `weave` (CLI) |
-| **Windows 10/11** | ✓ Ready        | `.exe` (self-contained) | GUI (step-by-step) | `Weave.exe` (GUI)                 |
-| **Linux**         | 📋 In Progress | Coming soon             | Coming soon        | Coming soon                       |
+| Platform          | Status  | Installer               | Installation       | Project Creator                   |
+| ----------------- | ------- | ----------------------- | ------------------ | --------------------------------- |
+| **macOS 14+**     | ✓ Ready | `.pkg` package          | Terminal + GUI     | `Weave.app` (GUI) + `weave` (CLI) |
+| **Windows 10/11** | ✓ Ready | `.exe` (self-contained) | GUI (step-by-step) | `Weave.exe` (GUI)                 |
+| **Linux**         | ✓ Ready | `bin` (self-contained)  | GUI (step-by-step) | `Weave` (GUI) + `Weave` (CLI)     |
 
 ---
 
@@ -631,7 +631,7 @@ cd Weave
 .\windows\scripts\create_installer.ps1 -Version 0.1.1
 # Output: build\windows\Weave-0.1.1.exe
 
-# Linux (coming soon)
+# Linux
 ./linux/scripts/create_installer.sh 0.1.1
 ```
 
@@ -769,7 +769,7 @@ Weave is part of MayaFlux. See [LICENSE](LICENSE) for full terms.
 | Phase        | Timeline | Goals                                                                                    |
 | ------------ | -------- | ---------------------------------------------------------------------------------------- |
 | **Phase 1**  | Now      | macOS & Windows installers ✓, GUI tools, CLI (macOS), template system                    |
-| **Phase 2**  | Q4 2025  | Linux installer, Windows CLI tool, enhanced dependency management                        |
+| **Phase 2**  | Q4 2025  | Linux installer (completed), Windows CLI tool, enhanced dependency management            |
 | **Phase 3**  | Q1 2026  | Weave package manager for community templates, plugin registry                           |
 | **Phase 4+** | TBD      | Self-updating installers, advanced dependency resolution, cross-platform synchronization |
 
