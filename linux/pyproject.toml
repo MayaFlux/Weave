@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "weave"
+version = "0.1.0"
+description = "MayaFlux installer and project creator for Linux"
+requires-python = ">=3.8"
+dependencies = ["PyGObject"]
+
+[project.scripts]
+weave-installer = "weave.main:main"
+weave = "weave.cli:main"
+
+[tool.setuptools]
+packages = ["weave", "weave.modes", "weave.ui"]
+
+[tool.setuptools.package-dir]
+"" = "."
+
+[tool.setuptools.package-data]
+weave = ["ui/dark.css"]
