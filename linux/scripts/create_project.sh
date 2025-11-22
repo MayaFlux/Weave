@@ -9,9 +9,13 @@ set -euo pipefail
 # ============================================================================
 
 MAYAFLUX_ROOT="${MAYAFLUX_ROOT:-/usr/local}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
-TEMPLATES_DIR="$PROJECT_ROOT/templates"
+
+if [ -n "${WEAVE_TEMPLATE_DIR:-}" ] && [ -d "$WEAVE_TEMPLATE_DIR" ]; then
+    TEMPLATES_DIR="$WEAVE_TEMPLATE_DIR"
+else
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    TEMPLATES_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")/templates"
+fi
 
 # ============================================================================
 # UTILITIES

@@ -381,6 +381,9 @@ class DownloadStep:
 class DependenciesStep:
     """Step 3: Install dependencies"""
 
+    def __init__(self, script_dir):
+        self.script_dir = script_dir
+
     def build_ui(self, container):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15)
         box.set_margin_top(20)
@@ -414,7 +417,8 @@ class DependenciesStep:
         container.append(box)
 
     async def execute(self):
-        script = Path(__file__).parent.parent.parent / "scripts" / "install_deps.sh"
+        # script = Path(__file__).parent.parent.parent / "scripts" / "install_deps.sh"
+        script = self.script_dir / "install_deps.sh"
         if not script.exists():
             self._log("✗ install_deps.sh not found")
             self.status.set_text("✗ Script not found")
@@ -575,8 +579,9 @@ class CompletionStep:
 class InstallationMode(Gtk.ApplicationWindow):
     """Main installation window"""
 
-    def __init__(self, app):
+    def __init__(self, app, script_dir):
         super().__init__(application=app)
+        self.script_dir = script_dir
         self.set_title("Weave - Install MayaFlux")
         self.set_default_size(700, 600)
 
@@ -584,7 +589,7 @@ class InstallationMode(Gtk.ApplicationWindow):
             ConfirmationStep(),
             SystemCheckStep(),
             DownloadStep(),
-            DependenciesStep(),
+            DependenciesStep(script_dir),
             EnvironmentStep(),
             CompletionStep(),
         ]

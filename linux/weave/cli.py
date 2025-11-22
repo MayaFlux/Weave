@@ -10,6 +10,11 @@ import os
 
 def find_script():
     """Find create_project.sh in multiple possible locations"""
+    if env_scripts := os.environ.get("WEAVE_SCRIPT_DIR"):
+        p = Path(env_scripts) / "create_project.sh"
+        if p.exists():
+            return p
+
     possible_paths = [
         Path(__file__).parent / "scripts" / "create_project.sh",
         Path(__file__).parent.parent / "scripts" / "create_project.sh",
@@ -91,7 +96,8 @@ Examples:
             cmd.append("--no-vscode")
 
         try:
-            result = subprocess.run(cmd, check=True)
+            env = os.environ.copy()
+            result = subprocess.run(cmd, env=env)
             return result.returncode
         except subprocess.CalledProcessError as e:
             print(

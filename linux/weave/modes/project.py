@@ -15,8 +15,10 @@ from pathlib import Path
 class ProjectCreationMode(Gtk.ApplicationWindow):
     """Create new MayaFlux project"""
 
-    def __init__(self, app):
+    def __init__(self, app, template_dir, script_dir):
         super().__init__(application=app)
+        self.template_dir = template_dir
+        self.script_dir = script_dir
         self.set_title("Weave - Create Project")
         self.set_default_size(600, 500)
 
@@ -190,12 +192,17 @@ class ProjectCreationMode(Gtk.ApplicationWindow):
         """Create project asynchronously"""
         try:
             loc = str(Path(loc).expanduser().resolve())
+            env = os.environ.copy()
+            env["WEAVE_TEMPLATE_DIR"] = str(self.template_dir)
+            script_path = self.script_dir / "create_project.sh"
 
-            cmd = ["weave", "new", name, loc]
+            cmd = [str(script_path), "new", name, loc]
             if self.lila_check.get_active():
                 cmd.append("--with-lila")
 
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=30, env=env
+            )
 
             if result.returncode == 0:
                 project_path = Path(loc) / name

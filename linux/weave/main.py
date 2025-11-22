@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 """Weave - MayaFlux installer and project creator for Linux"""
 
+import os
+from pathlib import Path
+
+TEMPLATE_DIR = Path(os.environ.get("WEAVE_TEMPLATE_DIR", "")) or (
+    Path(__file__).parent.parent.parent / "templates"
+)
+SCRIPT_DIR = Path(os.environ.get("WEAVE_SCRIPT_DIR", "")) or (
+    Path(__file__).parent.parent.parent / "linux" / "scripts"
+)
+
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -82,9 +92,9 @@ class WeaveApp(Adw.Application):
 
     def _on_mode_selected(self, window, selector):
         if selector.selected_mode == Mode.INSTALLATION:
-            main_window = InstallationMode(self)
+            main_window = InstallationMode(self, SCRIPT_DIR)
         elif selector.selected_mode == Mode.PROJECT_CREATION:
-            main_window = ProjectCreationMode(self)
+            main_window = ProjectCreationMode(self, TEMPLATE_DIR, SCRIPT_DIR)
         else:
             self.quit()
             return
