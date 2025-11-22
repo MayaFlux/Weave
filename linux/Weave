@@ -1,0 +1,6 @@
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+export PYTHONPATH="$SCRIPT_DIR/lib:${PYTHONPATH:-}"
+export WEAVE_TEMPLATE_DIR="$SCRIPT_DIR/templates"
+export WEAVE_SCRIPT_DIR="$SCRIPT_DIR/scripts"
+exec python3 -m weave.main "$@"

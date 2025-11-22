@@ -1,8 +1,14 @@
 build/
 .vs/
+.ccls-cache/
+
 windows/Weave/bin/
 windows/Weave/obj/
 windows/Shared/bin/
 windows/Shared/obj/
-/windows/**/**/**.resx
+windows/**/**/**.resx
 windows/**/**.csproj.user
+
+linux/**/**/__pycache__/
+linux/**/**/__init__.py
+linux/weave.egg-info/

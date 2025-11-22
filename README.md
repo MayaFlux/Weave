@@ -24,11 +24,11 @@ Instead of juggling separate downloads, manual dependency installation, and envi
 
 ## Current Platform Support
 
-| Platform | Status | Installer | Installation | Project Creator |
-|----------|--------|-----------|---------------|-----------------|
-| **macOS 14+** | ✓ Ready | `.pkg` package | Terminal + GUI | `Weave.app` (GUI) + `weave` (CLI) |
-| **Windows 10/11** | ✓ Ready | `.exe` (self-contained) | GUI (step-by-step) | `Weave.exe` (GUI) |
-| **Linux** | 📋 In Progress | Coming soon | Coming soon | Coming soon |
+| Platform          | Status         | Installer               | Installation       | Project Creator                   |
+| ----------------- | -------------- | ----------------------- | ------------------ | --------------------------------- |
+| **macOS 14+**     | ✓ Ready        | `.pkg` package          | Terminal + GUI     | `Weave.app` (GUI) + `weave` (CLI) |
+| **Windows 10/11** | ✓ Ready        | `.exe` (self-contained) | GUI (step-by-step) | `Weave.exe` (GUI)                 |
+| **Linux**         | 📋 In Progress | Coming soon             | Coming soon        | Coming soon                       |
 
 ---
 
@@ -106,12 +106,14 @@ The `.pkg` installer uses a composite package design with three transparent comp
 6. Close Terminal when finished
 
 **Important notes:**
+
 - The Terminal stays open intentionally—you see what's happening
 - Total time: 10-30 minutes (varies with internet speed)
 - All output also logged to `~/.weave_install.log` for reference
 - Password may be requested by Homebrew—provide it when prompted
 
 **Installation directories:**
+
 ```
 /Library/Weave/             - Templates and CLI tool
 /Applications/Weave.app     - Weave project creator GUI
@@ -149,12 +151,14 @@ Windows gets a single, self-contained `Weave.exe` that handles all installation 
 #### Install MayaFlux Mode (Detailed Steps)
 
 **Step 1: System Check**
+
 - Verifies Windows 64-bit (32-bit not supported)
 - Checks for 7-Zip (required for extraction)
 - Verifies administrator privileges
 - Shows warnings if issues detected (installation continues anyway)
 
 **Step 2: Download MayaFlux**
+
 - Connects to GitHub API to fetch latest release
 - Downloads framework binary (~100+ MB)
 - **Real-time progress bar** shows download status
@@ -162,6 +166,7 @@ Windows gets a single, self-contained `Weave.exe` that handles all installation 
 - Verifies DLL files present and valid
 
 **Step 3: Install Dependencies**
+
 - Runs embedded `install_package.ps1` PowerShell script
 - Intelligently detects already-installed packages (skips those)
 - Installs build tools and libraries:
@@ -173,21 +178,25 @@ Windows gets a single, self-contained `Weave.exe` that handles all installation 
 - Can be skipped if you have dependencies already installed
 
 **Step 4: Environment Setup**
+
 - Sets `MAYAFLUX_ROOT` environment variable
 - Adds MayaFlux to system `PATH`
 - Sets `CMAKE_PREFIX_PATH` for CMake discovery
 - **Important:** Close and reopen your terminal/PowerShell for changes to take effect
 
 **Step 5: Templates Installation**
+
 - Extracts embedded project templates to `C:\MayaFlux\share\weave\templates\`
 - Validates template integrity
 
 **Step 6: Completion**
+
 - Shows installation summary with all paths
 - Button to view detailed installation log
 - Ready to create projects
 
 **Installation directories:**
+
 ```
 C:\MayaFlux\
 ├── bin/              - Executables and DLLs
@@ -215,20 +224,22 @@ C:\MayaFlux\
 
 #### What Gets Installed on First Run
 
-| Component | Details |
-|-----------|---------|
-| **MayaFlux Framework** | Core library, headers, CMake configs |
-| **Build Tools** | CMake, Git, Ninja, 7-Zip |
-| **Graphics Stack** | Vulkan SDK, GLFW, GLM |
-| **Audio Stack** | FFmpeg, RtAudio |
+| Component                 | Details                              |
+| ------------------------- | ------------------------------------ |
+| **MayaFlux Framework**    | Core library, headers, CMake configs |
+| **Build Tools**           | CMake, Git, Ninja, 7-Zip             |
+| **Graphics Stack**        | Vulkan SDK, GLFW, GLM                |
+| **Audio Stack**           | FFmpeg, RtAudio                      |
 | **Development Libraries** | LLVM, Eigen3, STB, MagicEnum, oneDPL |
 
 **Environment variables configured:**
+
 - `MAYAFLUX_ROOT` = installation directory (e.g., `C:\MayaFlux`)
 - `PATH` += `%MAYAFLUX_ROOT%\bin`
 - `CMAKE_PREFIX_PATH` = installation directory
 
 **System impact:**
+
 - Clean integration via environment variables only
 - No registry entries
 - No services or background processes
@@ -318,16 +329,19 @@ cmake --build . --parallel
 Generated projects automatically handle platform differences:
 
 **macOS/Linux:**
+
 - Uses rpath to embed library search paths in executable
 - Libraries found automatically at runtime
 - No need to set `LD_LIBRARY_PATH`
 
 **Windows:**
+
 - Post-build step copies MayaFlux DLLs to executable output directory
 - Executables run without additional PATH setup
 - Useful for distribution (all files in one folder)
 
 **MayaFlux Discovery (all platforms):**
+
 - Checks `MAYAFLUX_ROOT` environment variable (set by Weave installer)
 - Falls back to standard install locations
 - Provides clear error message if not found
@@ -341,11 +355,13 @@ Generated projects automatically handle platform differences:
 ### Platform-Specific Run Commands
 
 **macOS/Linux:**
+
 ```bash
 ./build/MyProject
 ```
 
 **Windows:**
+
 ```powershell
 .\build\Release\MyProject.exe
 ```
@@ -356,28 +372,31 @@ Generated projects automatically handle platform differences:
 
 Weave automatically configures these variables during installation:
 
-| Variable | Value | Purpose |
-|----------|-------|---------|
-| `MAYAFLUX_ROOT` | Installation directory | MayaFlux framework location |
-| `CMAKE_PREFIX_PATH` | Includes `$MAYAFLUX_ROOT` | CMake package discovery |
-| `PATH` | Includes MayaFlux `bin/` | CLI tools and executables |
-| `VULKAN_SDK` | Vulkan installation path | GPU compute support (macOS) |
+| Variable            | Value                     | Purpose                     |
+| ------------------- | ------------------------- | --------------------------- |
+| `MAYAFLUX_ROOT`     | Installation directory    | MayaFlux framework location |
+| `CMAKE_PREFIX_PATH` | Includes `$MAYAFLUX_ROOT` | CMake package discovery     |
+| `PATH`              | Includes MayaFlux `bin/`  | CLI tools and executables   |
+| `VULKAN_SDK`        | Vulkan installation path  | GPU compute support (macOS) |
 
 **To reload environment after installation:**
 
 **macOS/Linux:**
+
 ```bash
 source ~/.zshenv
 # Or restart your terminal
 ```
 
 **Windows:**
+
 ```powershell
 # Close PowerShell/CMD and reopen to reload environment
 # Or run: refreshenv (in some terminals)
 ```
 
 **To verify environment:**
+
 ```bash
 # macOS/Linux
 echo $MAYAFLUX_ROOT
@@ -391,27 +410,32 @@ echo %MAYAFLUX_ROOT%
 ## What Gets Installed
 
 ### MayaFlux Framework
+
 - Core library (libMayaFluxLib / MayaFluxLib.dll)
 - Lila JIT compiler for live code modification
 - Headers and CMake configuration files
 
 ### Build Tools & Languages
+
 - CMake 3.25+
 - Git
 - C++23 compiler (GCC/Clang/MSVC)
 - Ninja build system
 
 ### Graphics & Rendering
+
 - Vulkan SDK (GPU compute support)
 - GLFW (windowing and input)
 - GLM (mathematics library)
 
 ### Audio Processing
+
 - FFmpeg (media handling)
 - RtAudio (real-time audio backend)
 - Libsndfile (audio I/O)
 
 ### Development Libraries
+
 - LLVM 21+ (for Lila JIT)
 - Eigen (linear algebra)
 - STB (image processing headers)
@@ -419,6 +443,7 @@ echo %MAYAFLUX_ROOT%
 - oneDPL (parallel algorithms)
 
 ### Optional
+
 - libxml2 (data serialization)
 - 7-Zip (archive handling)
 
@@ -429,28 +454,33 @@ echo %MAYAFLUX_ROOT%
 ### Installation Issues
 
 **macOS: "Weave.app won't open" or "damaged application"**
+
 ```bash
 # Remove quarantine attribute
 sudo xattr -rd com.apple.quarantine /Applications/Weave.app
 ```
 
 **macOS: Installer hangs or is slow**
+
 - Check internet connection (dependencies are downloaded)
 - Homebrew may prompt for password—provide it when requested
 - Installation time varies: 10-30 minutes typically
 - Check progress: `tail -f ~/.weave_install.log` in another terminal
 
 **Windows: "Administrator privileges required"**
+
 - Right-click `Weave-*.exe` → "Run as administrator"
 - Or enable UAC if it's disabled in your system
 
 **Windows: PowerShell execution policy error**
+
 - This is handled automatically by Weave
 - If you see errors, check `%LOCALAPPDATA%\weave_install.log`
 
 ### Build Issues
 
 **"MayaFlux not found" during CMake**
+
 ```bash
 # Verify installation location
 echo $MAYAFLUX_ROOT    # macOS/Linux
@@ -466,11 +496,13 @@ set MAYAFLUX_ROOT=C:\path\to\MayaFlux      # Windows CMD
 ```
 
 **"Command 'weave' not found" (macOS)**
+
 - Ensure `~/.local/bin` is in `PATH`
 - Restart terminal or run `source ~/.zshenv`
 - Check installation log: `cat ~/.weave_install.log`
 
 **Compiler errors with C++23 features**
+
 - Ensure modern compiler:
   - GCC 12+
   - Clang 16+
@@ -478,6 +510,7 @@ set MAYAFLUX_ROOT=C:\path\to\MayaFlux      # Windows CMD
 - Verify `CMAKE_CXX_STANDARD=23` in generated `CMakeLists.txt`
 
 **"weave: command not found" but installation said it succeeded (macOS)**
+
 - Run: `source ~/.zshenv` to load environment variables
 - Or restart your terminal completely
 
@@ -542,6 +575,7 @@ nano ~/.zshenv
 ```
 
 Note: Homebrew packages installed as dependencies are NOT removed. To clean those:
+
 ```bash
 brew autoremove    # Removes packages no longer needed
 ```
@@ -549,16 +583,19 @@ brew autoremove    # Removes packages no longer needed
 ### Windows
 
 **Option 1: Settings GUI**
+
 1. Settings → Apps → Apps & Features
 2. Find "Weave" → Click "Uninstall"
 3. Confirm removal
 
 **Option 2: Command Line**
+
 ```powershell
 wmic product where name="Weave" call uninstall
 ```
 
 **Optional: Remove installation directory**
+
 ```powershell
 # Remove MayaFlux directory (all files)
 Remove-Item -Path "C:\MayaFlux" -Recurse -Force
@@ -587,15 +624,15 @@ git clone https://github.com/MayaFlux/Weave.git
 cd Weave
 
 # macOS
-./macos/scripts/create_pkg.sh 0.1.0
-# Output: build/macos/Weave-0.1.0.pkg
+./macos/scripts/create_pkg.sh 0.1.1
+# Output: build/macos/Weave-0.1.1.pkg
 
 # Windows
-.\windows\scripts\create_installer.ps1 -Version 0.1.0
-# Output: build\windows\Weave-0.1.0.exe
+.\windows\scripts\create_installer.ps1 -Version 0.1.1
+# Output: build\windows\Weave-0.1.1.exe
 
 # Linux (coming soon)
-./linux/scripts/create_installer.sh 0.1.0
+./linux/scripts/create_installer.sh 0.1.1
 ```
 
 ### Project Structure
@@ -683,12 +720,14 @@ git push origin v0.2.0
 Weave is part of the MayaFlux ecosystem. Contributions are welcome!
 
 **To contribute:**
+
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/my-improvement`)
 3. Make changes and test on your platform
 4. Submit a pull request with detailed description
 
 **Development guidelines:**
+
 - Test installers on fresh systems before submitting
 - Update documentation for new features
 - Follow existing code style:
@@ -727,12 +766,12 @@ Weave is part of MayaFlux. See [LICENSE](LICENSE) for full terms.
 
 ## Roadmap
 
-| Phase | Timeline | Goals |
-|-------|----------|-------|
-| **Phase 1** | Now | macOS & Windows installers ✓, GUI tools, CLI (macOS), template system |
-| **Phase 2** | Q4 2025 | Linux installer, Windows CLI tool, enhanced dependency management |
-| **Phase 3** | Q1 2026 | Weave package manager for community templates, plugin registry |
-| **Phase 4+** | TBD | Self-updating installers, advanced dependency resolution, cross-platform synchronization |
+| Phase        | Timeline | Goals                                                                                    |
+| ------------ | -------- | ---------------------------------------------------------------------------------------- |
+| **Phase 1**  | Now      | macOS & Windows installers ✓, GUI tools, CLI (macOS), template system                    |
+| **Phase 2**  | Q4 2025  | Linux installer, Windows CLI tool, enhanced dependency management                        |
+| **Phase 3**  | Q1 2026  | Weave package manager for community templates, plugin registry                           |
+| **Phase 4+** | TBD      | Self-updating installers, advanced dependency resolution, cross-platform synchronization |
 
 ---
 
