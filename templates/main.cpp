@@ -27,8 +27,6 @@ void run()
     } catch (const std::exception& e) {
         MF_ERROR(MayaFlux::Journal::Component::USER, MayaFlux::Journal::Context::Runtime, "Error running user code: {}", e.what());
     }
-#else
-    auto container = vega.read("res/audio.wav") | Audio;
 #endif
 }
 
