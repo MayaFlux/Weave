@@ -12,6 +12,37 @@ MAYAFLUX_INSTALL_DIR="/Library/MayaFlux"
 WEAVE_LOCATION="/Library/Weave"
 LOG_FILE="$HOME/.weave_install.log"
 
+get_sudo_password() {
+    local password
+    password=$(osascript -e 'Tell application "System Events" to display dialog "Weave Installer requires administrator privileges to install MayaFlux system-wide.\n\nPlease enter your password:" default answer "" with hidden answer buttons {"Cancel", "OK"} default button "OK" with title "Weave Installer" with icon caution' -e 'text returned of result' 2>/dev/null)
+   
+    if (( ? != 0 )) || [[ -z "$password" ]]; then
+        echo "Please enter your password to continue installation:" >&2
+        read -rs password
+        echo "" >&2
+    fi
+   
+    echo "$password"
+}
+
+run_with_sudo() {
+    if (( EUID == 0 )); then
+        "$@"
+    else
+        if [[ -z "${SUDO_PASSWORD+x}" ]]; then
+            typeset -gx SUDO_PASSWORD
+            SUDO_PASSWORD=$(get_sudo_password)
+           
+            if ! echo "$SUDO_PASSWORD" | sudo -S -v 2>/dev/null; then
+                echo "ERROR: Incorrect password. Please run the installer again." >&2
+                exit 1
+            fi
+        fi
+       
+        echo "$SUDO_PASSWORD" | sudo -S "$@"
+    fi
+}
+
 show_progress() {
     log "➤ $1..."
 }
@@ -42,6 +73,10 @@ BANNER
 
 log "Starting Installation..."
 log ""
+
+osascript -e 'Tell application "System Events" to display dialog "Welcome to Weave Installer!\n\nThis installer will:\n1. Install MayaFlux to /Library/MayaFlux\n2. Set up development dependencies\n3. Configure your environment\n\nYou will be asked for your password once to install system components." buttons {"Cancel", "Continue"} default button "Continue" with title "Weave Installer" with icon note' 2>/dev/null || {
+    echo "Continuing in terminal mode..."
+}
 
 #------------------------------------------------------------------------------------------
 #                                       Step 1: Homebrew
@@ -136,7 +171,7 @@ fi
 ASSET_NAME=$(basename "$ASSET_URL")
 log "✓ Found asset: $ASSET_NAME"
 
-sudo mkdir -p "$MAYAFLUX_INSTALL_DIR"
+run_with_sudo mkdir -p "$MAYAFLUX_INSTALL_DIR"
 TMPDIR_DOWNLOAD=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_DOWNLOAD"' EXIT
 
@@ -156,17 +191,17 @@ log "  Extracting..."
 tar -xzf "$TMPDIR_DOWNLOAD/release.tar.gz" -C "$TMPDIR_DOWNLOAD"
 
 log "  Installing to $MAYAFLUX_INSTALL_DIR..."
-sudo cp -R "$TMPDIR_DOWNLOAD"/bin "$MAYAFLUX_INSTALL_DIR/" 2>/dev/null
-sudo cp -R "$TMPDIR_DOWNLOAD"/lib "$MAYAFLUX_INSTALL_DIR/" 2>/dev/null
-sudo cp -R "$TMPDIR_DOWNLOAD"/include "$MAYAFLUX_INSTALL_DIR/" 2>/dev/null
-sudo cp -R "$TMPDIR_DOWNLOAD"/share "$MAYAFLUX_INSTALL_DIR/" 2>/dev/null
+run_with_sudo cp -R "$TMPDIR_DOWNLOAD"/bin "$MAYAFLUX_INSTALL_DIR/" 2>/dev/null
+run_with_sudo cp -R "$TMPDIR_DOWNLOAD"/lib "$MAYAFLUX_INSTALL_DIR/" 2>/dev/null
+run_with_sudo cp -R "$TMPDIR_DOWNLOAD"/include "$MAYAFLUX_INSTALL_DIR/" 2>/dev/null
+run_with_sudo cp -R "$TMPDIR_DOWNLOAD"/share "$MAYAFLUX_INSTALL_DIR/" 2>/dev/null
 
 if [ ! -f "$MAYAFLUX_INSTALL_DIR/lib/libMayaFluxLib.dylib" ]; then
     error "Verification failed - libMayaFluxLib.dylib not found"
     exit 1
 fi
 
-echo "$TAG" | sudo tee "$MAYAFLUX_INSTALL_DIR/.version" >/dev/null
+echo "$TAG" | run_with_sudo tee "$MAYAFLUX_INSTALL_DIR/.version" >/dev/null
 log "✅ MayaFlux $TAG installed"
 
 #------------------------------------------------------------------------------------------
@@ -250,7 +285,7 @@ else
     if [ -n "$INSTALLER_APP" ]; then
         mkdir -p "$VULKAN_SDK_ROOT/$SDK_VERSION"
         log "  Running Vulkan installer..."
-        sudo "$INSTALLER_APP/Contents/MacOS/$(basename "$INSTALLER_APP" .app)" \
+        run_with_sudo "$INSTALLER_APP/Contents/MacOS/$(basename "$INSTALLER_APP" .app)" \
             --root "$VULKAN_SDK_ROOT/$SDK_VERSION" \
             --accept-licenses --default-answer --confirm-command install \
             com.lunarg.vulkan.core com.lunarg.vulkan.usr
@@ -313,11 +348,11 @@ show_complete "Environment configured"
 show_progress "Installing Weave CLI and templates..."
 
 # Create MayaFlux share directory structure
-sudo mkdir -p "$MAYAFLUX_INSTALL_DIR/share/weave"
+run_with_sudo mkdir -p "$MAYAFLUX_INSTALL_DIR/share/weave"
 
 # Copy templates from package location to MayaFlux
 if [ -d "/Library/Weave/templates" ]; then
-    sudo cp -R "/Library/Weave/templates" "$MAYAFLUX_INSTALL_DIR/share/weave/"
+    run_with_sudo cp -R "/Library/Weave/templates" "$MAYAFLUX_INSTALL_DIR/share/weave/"
     show_complete "Templates installed to MayaFlux"
 else
     error "Templates not found in /Library/Weave - package installation may have failed"
@@ -347,5 +382,11 @@ log ""
 log "Installation log saved to: $LOG_FILE"
 log ""
 
-echo "Press any key to close this window..."
-read -n 1
+# Clear the password from memory
+unset SUDO_PASSWORD
+
+# Show completion dialog
+osascript -e 'Tell application "System Events" to display dialog "Weave installation complete! 🎉\n\nNext steps:\n1. Restart your terminal\n2. Create a project: weave new MyProject ~/Projects/\n\nCheck the terminal for more details." buttons {"OK"} default button "OK" with title "Weave Installer" with icon note' 2>/dev/null || {
+    echo "Press any key to close this window..."
+    read -n 1
+}
