@@ -1,0 +1,20 @@
+{
+  "version": "0.1.2",
+  "package_root": "${WEAVE_ROOT}",
+  "paths": {
+    "lib": "${WEAVE_ROOT}/lib",
+    "scripts": "${WEAVE_ROOT}/lib/weave/scripts",
+    "templates": "${WEAVE_ROOT}/lib/weave/templates",
+    "python_path": "${WEAVE_ROOT}/lib"
+  },
+  "executables": {
+    "create_project_sh": "${WEAVE_ROOT}/lib/weave/scripts/create_project.sh",
+    "install_deps_sh": "${WEAVE_ROOT}/lib/weave/scripts/install_deps.sh"
+  },
+  "environment_variables": {
+    "WEAVE_ROOT": "automatically detected",
+    "PYTHONPATH": "${WEAVE_ROOT}/lib:${PYTHONPATH}",
+    "WEAVE_TEMPLATE_DIR": "${WEAVE_ROOT}/lib/weave/templates",
+    "WEAVE_SCRIPT_DIR": "${WEAVE_ROOT}/lib/weave/scripts"
+  }
+}

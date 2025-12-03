@@ -1,4 +1,6 @@
 #!/bin/bash
+# Weave - Unified launcher for both CLI and GUI modes
+# Run without args for GUI, with args for CLI
 
 set -euo pipefail
 
@@ -15,7 +17,10 @@ else
 fi
 
 export WEAVE_LAUNCHER_DIR
-
 export PYTHONPATH="$WEAVE_ROOT/lib:${PYTHONPATH:-}"
 
-exec python3 -m weave.main "$@"
+if [ $# -eq 0 ]; then
+    exec python3 -m weave.main
+else
+    exec python3 -m weave.cli "$@"
+fi

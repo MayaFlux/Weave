@@ -120,8 +120,8 @@ install_fedora() {
     run_with_sudo dnf install -y \
         @development-tools llvm llvm-libs clang cmake pkgconfig \
         rtaudio-devel glfw-devel glm-devel eigen3-devel \
-        spirv-headers spirv-tools vulkan-headers vulkan-loader vulkan-tools \
-        vulkan-validation-layers ffmpeg-devel stb-devel magic_enum-devel
+        spirv-headers-devel spirv-tools vulkan-headers vulkan-loader vulkan-tools \
+        vulkan-validation-layers ffmpeg-free-devel stb-devel magic_enum-devel
 }
 
 install_ubuntu() {
