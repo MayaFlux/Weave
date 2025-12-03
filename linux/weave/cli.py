@@ -7,33 +7,22 @@ import argparse
 from pathlib import Path
 import os
 
+_cli_dir = Path(__file__).parent
+_lib_dir = _cli_dir.parent
+if str(_lib_dir) not in sys.path:
+    sys.path.insert(0, str(_lib_dir))
 
-def find_script():
-    """Find create_project.sh in multiple possible locations"""
-    if env_scripts := os.environ.get("WEAVE_SCRIPT_DIR"):
-        p = Path(env_scripts) / "create_project.sh"
-        if p.exists():
-            return p
-
-    possible_paths = [
-        Path(__file__).parent / "scripts" / "create_project.sh",
-        Path(__file__).parent.parent / "scripts" / "create_project.sh",
-        Path("/usr/local/lib/weave/scripts/create_project.sh"),
-        Path("/opt/weave/scripts/create_project.sh"),
-        Path.home() / ".local/lib/weave/scripts/create_project.sh",
-    ]
-
-    mayaflux_root = os.environ.get("MAYAFLUX_ROOT")
-    if mayaflux_root:
-        possible_paths.append(
-            Path(mayaflux_root) / "share" / "weave" / "scripts" / "create_project.sh"
-        )
-
-    for path in possible_paths:
-        if path.exists() and path.is_file():
-            return path
-
-    return None
+try:
+    from weave.config import get_config
+except ImportError as e:
+    print(
+        "Error: Cannot import weave.config\n"
+        f"sys.path: {sys.path}\n"
+        f"Expected lib at: {_lib_dir}\n"
+        f"Error: {e}",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 
 def main():
@@ -68,24 +57,44 @@ Examples:
 
     gui_parser = subparsers.add_parser("gui", help="Launch graphical installer")
 
-    parser.add_argument("--version", action="version", version="%(prog)s 0.1.2")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
+    parser.add_argument(
+        "--config",
+        action="store_true",
+        help="Show configuration and exit",
+    )
 
     args = parser.parse_args()
 
-    if args.cmd == "new":
-        script = find_script()
+    if args.config:
+        try:
+            cfg = get_config()
+            print(f"Weave Configuration")
+            print(f"==================")
+            print(f"Root: {cfg.root}")
+            print(f"Scripts: {cfg.scripts_dir}")
+            print(f"Templates: {cfg.templates_dir}")
+            print(f"Python Path: {cfg.python_path}")
+            print(f"\nEnvironment variables:")
+            for key, value in cfg.get_env_vars().items():
+                print(f"  {key}={value}")
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        return 0
 
-        if not script:
-            print("Error: create_project.sh not found", file=sys.stderr)
-            print("Searched locations:", file=sys.stderr)
-            possible = [
-                Path(__file__).parent / "scripts" / "create_project.sh",
-                Path(__file__).parent.parent / "scripts" / "create_project.sh",
-                Path("/usr/local/lib/weave/scripts/create_project.sh"),
-            ]
-            for p in possible:
-                print(f"  - {p}", file=sys.stderr)
-            return 1
+    if args.cmd == "new":
+        try:
+            cfg = get_config()
+        except Exception as e:
+            print(f"Error loading configuration: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        script = cfg.get_script("create_project_sh")
+
+        if not script.exists():
+            print(f"Error: create_project.sh not found at {script}", file=sys.stderr)
+            sys.exit(1)
 
         script.chmod(0o755)
 
@@ -97,6 +106,8 @@ Examples:
 
         try:
             env = os.environ.copy()
+            env.update(cfg.get_env_vars())
+
             result = subprocess.run(cmd, env=env)
             return result.returncode
         except subprocess.CalledProcessError as e:
@@ -116,11 +127,15 @@ Examples:
         try:
             from weave.main import WeaveApp
 
+            cfg = get_config()
             app = WeaveApp()
             return app.run([])
         except ImportError:
             print("Error: GUI dependencies not installed", file=sys.stderr)
             print("Try: pip install PyGObject", file=sys.stderr)
+            return 1
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
             return 1
 
     else:

@@ -1,6 +1,21 @@
 #!/bin/bash
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-export PYTHONPATH="$SCRIPT_DIR/lib:${PYTHONPATH:-}"
-export WEAVE_TEMPLATE_DIR="$SCRIPT_DIR/templates"
-export WEAVE_SCRIPT_DIR="$SCRIPT_DIR/scripts"
+
+set -euo pipefail
+
+WEAVE_LAUNCHER_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+if [ -f "$WEAVE_LAUNCHER_DIR/weave-config.json" ]; then
+    export WEAVE_ROOT="$WEAVE_LAUNCHER_DIR"
+elif [ -f "$WEAVE_LAUNCHER_DIR/../weave-config.json" ]; then
+    export WEAVE_ROOT="$(cd "$WEAVE_LAUNCHER_DIR/.." && pwd)"
+else
+    echo "Error: weave-config.json not found" >&2
+    echo "Expected at: $WEAVE_LAUNCHER_DIR/weave-config.json" >&2
+    exit 1
+fi
+
+export WEAVE_LAUNCHER_DIR
+
+export PYTHONPATH="$WEAVE_ROOT/lib:${PYTHONPATH:-}"
+
 exec python3 -m weave.main "$@"

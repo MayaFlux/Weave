@@ -1,6 +1,4 @@
 #!/bin/bash
-# File: .github/scripts/verify-linux-build.sh
-# Verify Linux build artifacts
 
 set -euo pipefail
 
@@ -34,11 +32,9 @@ echo "   Size: ${TARBALL_SIZE_MB} MB"
 echo ""
 echo "Verifying tarball contents..."
 
-# Save all entries to a variable to avoid pipe issues
 ENTRIES=$(tar -tzf "$TARBALL")
 ENTRY_COUNT=$(echo "$ENTRIES" | wc -l)
 
-# Show first 20 entries
 echo "$ENTRIES" | head -20
 echo "✅ Tarball contains $ENTRY_COUNT entries"
 
@@ -46,16 +42,23 @@ echo ""
 echo "Required files in tarball:"
 
 required_items=(
-    "Weave/lib/weave/main.py"
-    "Weave/templates/CMakeLists.txt"
-    "Weave/templates/main.cpp"
-    "Weave/scripts/create_project.sh"
+    "Weave/weave-config.json"
     "Weave/Weave"
+    "Weave/lib/weave/config.py"
+    "Weave/lib/weave/main.py"
+    "Weave/lib/weave/cli.py"
+    "Weave/lib/weave/modes"
+    "Weave/lib/weave/ui"
+    "Weave/lib/weave/templates/CMakeLists.txt"
+    "Weave/lib/weave/templates/main.cpp"
+    "Weave/lib/weave/templates/user_project.hpp"
+    "Weave/lib/weave/scripts/create_project.sh"
+    "Weave/lib/weave/scripts/install_deps.sh"
 )
 
 all_present=true
 for item in "${required_items[@]}"; do
-    if echo "$ENTRIES" | grep -q "^$item$"; then
+    if echo "$ENTRIES" | grep -q "^$item"; then
         echo "✅ $item"
     else
         echo "❌ Missing: $item"
@@ -67,10 +70,11 @@ echo ""
 
 if [ "$all_present" = true ]; then
     echo "========================================"
-    echo "  Linux Build Verified"
+    echo "  Linux Build Verified ✅"
     echo "========================================"
     echo ""
     echo "✅ Ready for distribution: $TARBALL"
+    exit 0
 else
     echo "❌ Tarball is missing required items"
     exit 1
