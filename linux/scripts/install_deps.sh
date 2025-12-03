@@ -93,6 +93,10 @@ install_arch() {
 
     show_gui_message "Arch Linux Detected" "Installing MayaFlux for Arch Linux.\n\nThis will install mayaflux-dev-bin from AUR."
 
+    # Dummy sudo call to trigger GUI password prompt and cache it for AUR helper
+    echo "Caching sudo password for AUR installation..."
+    run_with_sudo true
+
     if command -v yay &>/dev/null; then
         echo "Found yay, installing mayaflux-dev-bin from AUR..."
         yay -S --noconfirm mayaflux-dev-bin
