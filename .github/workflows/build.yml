@@ -150,88 +150,66 @@ jobs:
         shell: powershell
         run: .\.github\scripts\verify-windows-files.ps1
 
-      - name: Restore dependencies
+      - name: Restore NuGet dependencies
         shell: powershell
         run: |
-          dotnet restore windows\Weave.sln
-          if ($LASTEXITCODE -ne 0) {
-            exit 1
-          }
+          dotnet restore windows\Weave.sln -p:RuntimeIdentifier=win-x64
+          if ($LASTEXITCODE -ne 0) { exit 1 }
 
-      - name: Build solution (Release x64)
+      - name: Build solution
         shell: powershell
         run: |
-          dotnet build windows\Weave.sln `
-            --configuration Release `
-            -p:Platform=x64
+          dotnet build windows\Weave.sln -c Release -p:Platform=x64 --no-restore
+          if ($LASTEXITCODE -ne 0) { exit 1 }
 
-          if ($LASTEXITCODE -ne 0) {
-            exit 1
-          }
-
-      - name: Verify templates directory
+      - name: Publish executable
         shell: powershell
         run: |
-          if (-not (Test-Path "templates")) {
-            Write-Host "Error: Templates directory not found"
+          dotnet publish windows/Weave/Weave.csproj -c Release -p:Platform=x64 -p:PublishSingleFile=true -p:SelfContained=true -p:RuntimeIdentifier=win-x64 -p:IncludeNativeLibrariesForSelfExtract=true
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Verify executable size
+        shell: powershell
+        run: |
+          $exePath = "windows/Weave/bin/x64/Release/net8.0-windows/win-x64/publish/Weave.exe"
+          if (-not (Test-Path $exePath)) {
+            Write-Host "FAIL: Executable not found"
             exit 1
           }
-          $templateCount = @(Get-ChildItem "templates" -Recurse).Count
-          Write-Host "OK: Templates directory found with $templateCount items"
+          $sizeMB = [Math]::Round((Get-Item $exePath).Length / 1MB, 1)
+          Write-Host "INFO: Weave.exe size is $sizeMB MB (need 140+ MB)"
+          if ($sizeMB -lt 100) {
+            Write-Host "FAIL: Executable too small - resources not embedded"
+            exit 1
+          }
 
       - name: Create distribution package
         shell: powershell
         run: |
-          $buildDir = "build\windows"
-          $releaseDir = "windows\Weave\bin\x64\Release\net8.0-windows\win-x64"
-
-          if (-not (Test-Path $releaseDir)) {
-            Write-Host "Error: Release directory not found"
-            exit 1
-          }
-
-          if (-not (Test-Path $buildDir)) {
-            New-Item -ItemType Directory -Path $buildDir | Out-Null
-          }
-
-          # Create staging directory for all files
-          $stagingDir = "$buildDir\staging"
+          $publishDir = "windows/Weave/bin/x64/Release/net8.0-windows/win-x64/publish"
+          $stagingDir = "build/windows/staging"
           New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
-
-          # Copy exe
-          Copy-Item "$releaseDir\Weave.exe" -Destination "$stagingDir\Weave.exe" -Force
-
-          # Copy scripts from source
-          Copy-Item "windows\scripts\install_package.ps1" -Destination "$stagingDir\install_package.ps1" -Force
-          Copy-Item "windows\scripts\packages.psd1" -Destination "$stagingDir\packages.psd1" -Force
-
-          # Copy templates directory
+          Copy-Item "$publishDir/Weave.exe" -Destination "$stagingDir/Weave.exe" -Force
+          Copy-Item "windows/scripts/install_package.ps1" -Destination "$stagingDir/install_package.ps1" -Force
+          Copy-Item "windows/scripts/packages.psd1" -Destination "$stagingDir/packages.psd1" -Force
           if (Test-Path "templates") {
-            Copy-Item "templates" -Destination "$stagingDir\templates" -Recurse -Force
+            Copy-Item "templates" -Destination "$stagingDir/templates" -Recurse -Force
           }
 
-      - name: Create ZIP archive
+      - name: Create ZIP
         shell: powershell
         run: |
-          $buildDir = "build\windows"
-          $stagingDir = "$buildDir\staging"
-          $zipPath = "$buildDir\Weave.zip"
-
+          $stagingDir = "build/windows/staging"
+          $zipPath = "build/windows/Weave.zip"
           Compress-Archive -Path $stagingDir -DestinationPath $zipPath -Force
+          $zipMB = [Math]::Round((Get-Item $zipPath).Length / 1MB, 1)
+          Write-Host "INFO: ZIP created - size is $zipMB MB"
 
-      - name: Verify build
-        shell: powershell
-        run: .\.github\scripts\verify-windows-build.ps1
-
-      - name: Generate SHA256 hash
+      - name: Generate hash
         id: hash
         shell: powershell
         run: |
-          $zipPath = "build\windows\Weave.zip"
-          if (-not (Test-Path $zipPath)) {
-            Write-Host "Error: ZIP file not found at $zipPath"
-            exit 1
-          }
+          $zipPath = "build/windows/Weave.zip"
           $hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash
           echo "SHA256=$hash" >> $env:GITHUB_OUTPUT
 
@@ -241,16 +219,6 @@ jobs:
           name: weave-windows
           path: build/windows/Weave.zip
           retention-days: 30
-
-      - name: Upload debug artifacts (on failure)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-debug-windows
-          path: |
-            build/windows/
-            windows/Weave/bin/Release/
-          retention-days: 7
 
   build-linux:
     runs-on: ubuntu-latest

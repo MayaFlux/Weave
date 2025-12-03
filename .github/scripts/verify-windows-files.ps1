@@ -4,52 +4,72 @@
 $ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  Verifying Windows Source Files" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "Verifying Windows Source Files"
 Write-Host ""
 
 $allPresent = $true
 
-$requiredFiles = @(
-    @{ Path = "windows\Weave.sln"; Name = "Weave Solution" },
-    @{ Path = "windows\Weave\Weave.csproj"; Name = "Weave Project" },
-    @{ Path = "windows\Shared\Shared.csproj"; Name = "Shared Project" },
-    @{ Path = "windows\scripts\install_package.ps1"; Name = "Install Package Script" },
-    @{ Path = "windows\scripts\packages.psd1"; Name = "Packages Definition" },
-    @{ Path = "templates"; Name = "Project Templates (embedded in exe)" }
+Write-Host "Checking project files..."
+if (Test-Path "windows\Weave.sln") {
+    Write-Host "[OK] Weave Solution"
+} else {
+    Write-Host "[ERROR] Weave.sln missing"
+    $allPresent = $false
+}
+
+if (Test-Path "windows\Weave\Weave.csproj") {
+    Write-Host "[OK] Weave Project"
+} else {
+    Write-Host "[ERROR] Weave.csproj missing"
+    $allPresent = $false
+}
+
+if (Test-Path "windows\Shared\Shared.csproj") {
+    Write-Host "[OK] Shared Library"
+} else {
+    Write-Host "[ERROR] Shared.csproj missing"
+    $allPresent = $false
+}
+
+Write-Host ""
+Write-Host "Checking templates..."
+$templates = @(
+    "templates\CMakeLists.txt",
+    "templates\main.cpp",
+    "templates\user_project.hpp",
+    "templates\vscode\settings.json",
+    "templates\vscode\tasks.json",
+    "templates\vscode\launch.json"
 )
-
-Write-Host "Checking required files..." -ForegroundColor Yellow
-echo ""
-
-foreach ($file in $requiredFiles) {
-    $path = $file.Path
-    $name = $file.Name
-    
-    if (Test-Path $path) {
-        if ((Get-Item $path) -is [System.IO.DirectoryInfo]) {
-            $itemCount = @(Get-ChildItem $path -Recurse -ErrorAction SilentlyContinue).Count
-            Write-Host "[OK] $name (directory, $itemCount items)" -ForegroundColor Green
-        } else {
-            $fileSize = (Get-Item $path).Length
-            $fileSizeKB = [Math]::Round($fileSize / 1KB, 1)
-            Write-Host "[OK] $name ($fileSizeKB KB)" -ForegroundColor Green
-        }
+foreach ($t in $templates) {
+    if (Test-Path $t) {
+        Write-Host "[OK] $t"
     } else {
-        Write-Host "[ERROR] Missing: $name at $path" -ForegroundColor Red
+        Write-Host "[ERROR] $t missing"
         $allPresent = $false
     }
 }
 
-echo ""
+Write-Host ""
+Write-Host "Checking scripts..."
+$scripts = @(
+    "windows\scripts\install_package.ps1",
+    "windows\scripts\packages.psd1"
+)
+foreach ($s in $scripts) {
+    if (Test-Path $s) {
+        Write-Host "[OK] $s"
+    } else {
+        Write-Host "[ERROR] $s missing"
+        $allPresent = $false
+    }
+}
 
+Write-Host ""
 if ($allPresent) {
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "  All Required Files Present" -ForegroundColor Cyan
-    Write-Host "========================================" -ForegroundColor Cyan
-    echo ""
+    Write-Host "All files present - ready for build"
+    exit 0
 } else {
-    Write-Host "[ERROR] Some required files are missing" -ForegroundColor Red
+    Write-Host "Missing files - build cannot proceed"
     exit 1
 }

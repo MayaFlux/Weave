@@ -1,64 +1,37 @@
 #!/usr/bin/env powershell
+# Verify Windows build output
 
 $ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  Verifying Windows Build" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "Verifying Windows Build"
 Write-Host ""
 
-$buildDir = "build\windows"
-$zipPath = "$buildDir\Weave.zip"
-
-# Check if ZIP exists
-Write-Host "Checking installer..." -ForegroundColor Yellow
-if (Test-Path $zipPath) {
-    $fileSize = (Get-Item $zipPath).Length
-    $fileSizeMB = [Math]::Round($fileSize / 1MB, 2)
-    Write-Host "OK: Installer found" -ForegroundColor Green
-    Write-Host "    Path: $zipPath" -ForegroundColor Green
-    Write-Host "    Size: $fileSizeMB MB" -ForegroundColor Green
-} else {
-    Write-Host "Error: Installer not found at: $zipPath" -ForegroundColor Red
+$zipPath = "build\windows\Weave.zip"
+if (-not (Test-Path $zipPath)) {
+    Write-Host "ERROR: ZIP not found at $zipPath"
     exit 1
 }
 
-# Check that scripts were included in the ZIP
-Write-Host ""
-Write-Host "Checking bundled resources..." -ForegroundColor Yellow
+Add-Type -AssemblyName System.IO.Compression
+$zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
 
-$requiredFiles = @(
-    "install_package.ps1",
-    "packages.psd1",
-    "Weave.exe"
-)
-
-$stagingDir = "$buildDir\staging"
-$allPresent = $true
-
-foreach ($file in $requiredFiles) {
-    $filePath = "$stagingDir\$file"
-    if (Test-Path $filePath) {
-        $fileSize = (Get-Item $filePath).Length / 1KB
-        Write-Host "OK: $file ($('{0:F1}' -f $fileSize) KB)" -ForegroundColor Green
-    } else {
-        Write-Host "Error: $file not found in staging directory" -ForegroundColor Red
-        $allPresent = $false
-    }
-}
-
-if (-not $allPresent) {
-    Write-Host ""
-    Write-Host "Error: Some required files are missing" -ForegroundColor Red
+$weaveEntry = $zip.Entries | Where-Object { $_.Name -eq "Weave.exe" }
+if ($null -eq $weaveEntry) {
+    Write-Host "ERROR: Weave.exe not found in ZIP"
+    $zip.Dispose()
     exit 1
 }
 
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  Build Verification Complete" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "OK: Installer ready for distribution:" -ForegroundColor Green
-Write-Host "   $zipPath" -ForegroundColor Green
-Write-Host ""
+$sizeMB = [Math]::Round($weaveEntry.Length / 1MB, 1)
+Write-Host "INFO: Weave.exe size is $sizeMB MB"
+
+if ($sizeMB -lt 100) {
+    Write-Host "ERROR: Executable too small - not self-contained"
+    $zip.Dispose()
+    exit 1
+}
+
+$zip.Dispose()
+Write-Host "INFO: ZIP verified successfully"
+exit 0

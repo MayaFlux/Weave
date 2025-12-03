@@ -53,38 +53,19 @@ public class DependenciesStep : IInstallationStep
         try
         {
             await LogAsync("=== Dependency Installation ===");
+            await LogAsync("");
 
-            string scriptPath = "";
-            string packagesFile = "";
+            await LogAsync("Extracting dependency installer...");
+            ResourceExtractor.ExtractAllResources(config.MayaFluxRoot);
 
-            var searchPaths = new[]
+            string scriptPath = Path.Combine(config.ScriptsDirectory, "install_package.ps1");
+            string packagesFile = Path.Combine(config.ScriptsDirectory, "packages.psd1");
+
+            if (!File.Exists(scriptPath))
             {
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "scripts", "install_package.ps1"),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "scripts", "install_package.ps1"),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "scripts", "install_package.ps1"),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "scripts", "install_package.ps1"),
-            };
-
-            foreach (var path in searchPaths)
-            {
-                var fullPath = Path.GetFullPath(path);
-                if (File.Exists(fullPath))
-                {
-                    scriptPath = fullPath;
-                    packagesFile = Path.Combine(Path.GetDirectoryName(fullPath), "packages.psd1");
-                    break;
-                }
-            }
-
-            if (string.IsNullOrEmpty(scriptPath) || !File.Exists(scriptPath))
-            {
-                await LogAsync("[ERROR] Dependency installer not found");
-                await LogAsync("[INFO] Searched locations:");
-                foreach (var path in searchPaths)
-                {
-                    await LogAsync($"  - {Path.GetFullPath(path)}");
-                }
-                await LogAsync("[INFO] Skipping dependency installation");
+                await LogAsync("ERROR: install_package.ps1 not found after extraction");
+                await LogAsync("Extracted to: " + config.ScriptsDirectory);
+                await LogAsync("Skipping dependency installation");
                 UpdateStatus(statusLabel, "Dependencies not found - skipping", ThemeColors.Warning);
                 EnableButtons();
                 return;
@@ -92,16 +73,14 @@ public class DependenciesStep : IInstallationStep
 
             if (!File.Exists(packagesFile))
             {
-                await LogAsync("[ERROR] Packages file not found at: " + packagesFile);
-                await LogAsync("[INFO] Skipping dependency installation");
+                await LogAsync("ERROR: packages.psd1 not found after extraction");
+                await LogAsync("Skipping dependency installation");
                 UpdateStatus(statusLabel, "Packages file not found - skipping", ThemeColors.Warning);
                 EnableButtons();
                 return;
             }
 
-            await LogAsync("Found dependency installer");
-            await LogAsync($"Script: {scriptPath}");
-            await LogAsync($"Packages file: {packagesFile}");
+            await LogAsync("Found dependency installer at: " + scriptPath);
             await LogAsync("");
             await LogAsync("Running dependency installer...");
 
@@ -120,24 +99,24 @@ public class DependenciesStep : IInstallationStep
             if (exitCode == 0)
             {
                 await LogAsync("");
-                await LogAsync("[OK] Dependencies installed successfully");
+                await LogAsync("OK: Dependencies installed successfully");
                 installSuccess = true;
                 UpdateStatus(statusLabel, "Dependencies installed", ThemeColors.Success);
             }
             else
             {
                 await LogAsync("");
-                await LogAsync($"[WARN] Dependency installation exited with code: {exitCode}");
-                await LogAsync("[INFO] You may need to manually install dependencies");
-                await LogAsync("[INFO] Continuing with installation anyway...");
+                await LogAsync("INFO: Dependency installation exited with code: " + exitCode);
+                await LogAsync("INFO: You may need to manually install dependencies");
+                await LogAsync("INFO: Continuing with installation anyway...");
                 installSuccess = true;
                 UpdateStatus(statusLabel, "Dependencies installation completed with warnings", ThemeColors.Warning);
             }
         }
         catch (Exception ex)
         {
-            await LogAsync($"[ERROR] {ex.Message}");
-            await LogAsync("[INFO] Continuing with installation anyway...");
+            await LogAsync("ERROR: " + ex.Message);
+            await LogAsync("INFO: Continuing with installation anyway...");
             installSuccess = true;
             UpdateStatus(statusLabel, "Dependencies skipped - continuing", ThemeColors.Warning);
         }
