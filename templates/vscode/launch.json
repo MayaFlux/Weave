@@ -1,45 +1,67 @@
 {
-    "version": "0.2.0",
-    "configurations": [
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug @PROJECT_NAME@",
+      "type": "cppdbg",
+      "request": "launch",
+      "windows": {
+        "program": "${workspaceFolder}\\build\\Debug\\@PROJECT_NAME@.exe",
+        "MIMode": "gdb",
+        "miDebuggerPath": "gdb.exe"
+      },
+      "osx": {
+        "program": "${workspaceFolder}/build/@PROJECT_NAME@",
+        "MIMode": "lldb"
+      },
+      "linux": {
+        "program": "${workspaceFolder}/build/@PROJECT_NAME@",
+        "MIMode": "gdb"
+      },
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [
         {
-            "name": "Debug @PROJECT_NAME@",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/build/@PROJECT_NAME@",
-            "args": [],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
-            "environment": [
-                {
-                    "name": "MAYAFLUX_ROOT",
-                    "value": "${env:MAYAFLUX_ROOT}"
-                }
-            ],
-            "externalConsole": false,
-            "MIMode": "lldb",
-            "preLaunchTask": "Build Project"
+          "name": "MAYAFLUX_ROOT",
+          "value": "${env:MAYAFLUX_ROOT}"
+        }
+      ],
+      "externalConsole": false,
+      "preLaunchTask": "Build Project"
+    },
+    {
+      "name": "Debug @PROJECT_NAME@ (with logging)",
+      "type": "cppdbg",
+      "request": "launch",
+      "windows": {
+        "program": "${workspaceFolder}\\build\\Debug\\@PROJECT_NAME@.exe",
+        "MIMode": "gdb",
+        "miDebuggerPath": "gdb.exe"
+      },
+      "osx": {
+        "program": "${workspaceFolder}/build/@PROJECT_NAME@",
+        "MIMode": "lldb"
+      },
+      "linux": {
+        "program": "${workspaceFolder}/build/@PROJECT_NAME@",
+        "MIMode": "gdb"
+      },
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [
+        {
+          "name": "MAYAFLUX_ROOT",
+          "value": "${env:MAYAFLUX_ROOT}"
         },
         {
-            "name": "Debug @PROJECT_NAME@ (with audio logging)",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/build/@PROJECT_NAME@",
-            "args": [],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
-            "environment": [
-                {
-                    "name": "MAYAFLUX_ROOT",
-                    "value": "${env:MAYAFLUX_ROOT}"
-                },
-                {
-                    "name": "MAYAFLUX_DEBUG",
-                    "value": "1"
-                }
-            ],
-            "externalConsole": false,
-            "MIMode": "lldb",
-            "preLaunchTask": "Build Project"
+          "name": "MAYAFLUX_DEBUG",
+          "value": "1"
         }
-    ]
+      ],
+      "externalConsole": false,
+      "preLaunchTask": "Build Project"
+    }
+  ]
 }
