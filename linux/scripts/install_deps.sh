@@ -118,10 +118,10 @@ install_arch() {
 install_fedora() {
     echo "Installing for Fedora..."
     run_with_sudo dnf install -y \
-        @development-tools llvm llvm-libs clang cmake pkgconfig \
+        @development-tools llvm llvm-devel llvm-libs clang cmake pkgconfig \
         rtaudio-devel glfw-devel glm-devel eigen3-devel \
         spirv-headers-devel spirv-tools vulkan-headers vulkan-loader vulkan-tools \
-        vulkan-validation-layers ffmpeg-free-devel stb-devel magic_enum-devel
+        vulkan-validation-layers ffmpeg-free-devel stb-devel magic_enum-devel tbb-devel
 }
 
 install_ubuntu() {

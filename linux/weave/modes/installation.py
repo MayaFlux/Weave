@@ -207,8 +207,34 @@ class DownloadStep:
 
             self._log("✓ Download complete")
             self._log("Extracting...")
+
+            temp_extract = root / ".extract_temp"
+            temp_extract.mkdir(exist_ok=True)
+
             with tarfile.open(download_path, "r:gz") as tar:
-                tar.extractall(root)
+                tar.extractall(temp_extract)
+
+            extracted_dirs = [d for d in temp_extract.iterdir() if d.is_dir()]
+
+            if not extracted_dirs:
+                self._log("✗ No directories found in archive")
+                self.status.set_text("✗ Extraction failed")
+                return False
+
+            source_dir = extracted_dirs[0]
+            self._log(f"Found extracted directory: {source_dir.name}")
+
+            for item in source_dir.iterdir():
+                dest = root / item.name
+                if dest.exists():
+                    import shutil
+
+                    shutil.rmtree(dest) if dest.is_dir() else dest.unlink()
+                item.rename(dest)
+
+            import shutil
+
+            shutil.rmtree(temp_extract)
             download_path.unlink()
 
             self._log("✓ Extracted successfully")
@@ -217,17 +243,25 @@ class DownloadStep:
         except Exception as e:
             self._log(f"✗ Error: {e}")
             self.status.set_text("✗ Failed")
+            import traceback
+
+            self._log(traceback.format_exc())
             return False
 
     def _is_arch_linux(self) -> bool:
         """Check if running on Arch Linux"""
         try:
-            result = subprocess.run(
-                ["pacman", "--version"], capture_output=True, timeout=5, check=False
-            )
-            return result.returncode == 0
-        except:
-            return False
+            with open("/etc/os-release") as f:
+                content = f.read().lower()
+                if "id=arch" in content or "id_like=arch" in content:
+                    return True
+        except FileNotFoundError:
+            pass
+
+        if Path("/etc/arch-release").exists():
+            return True
+
+        return False
 
     async def _fetch_release(self) -> Optional[Dict]:
         """Fetch latest release from GitHub API"""
