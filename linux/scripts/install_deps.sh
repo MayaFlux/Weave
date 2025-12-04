@@ -118,9 +118,9 @@ install_arch() {
 install_fedora() {
     echo "Installing for Fedora..."
     run_with_sudo dnf install -y \
-        @development-tools llvm llvm-devel llvm-libs clang cmake pkgconfig \
+        @development-tools llvm llvm-devel llvm-libs clang clang-devel cmake pkgconfig \
         rtaudio-devel glfw-devel glm-devel eigen3-devel \
-        spirv-headers-devel spirv-tools vulkan-headers vulkan-loader vulkan-tools \
+        spirv-headers-devel spirv-tools vulkan-headers vulkan-loader vulkan-loader-devel vulkan-tools \
         vulkan-validation-layers ffmpeg-free-devel stb-devel magic_enum-devel tbb-devel
 }
 
@@ -128,11 +128,11 @@ install_ubuntu() {
     echo "Installing for Ubuntu/Debian..."
     run_with_sudo apt-get update
     run_with_sudo apt-get install -y \
-        build-essential cmake git pkg-config llvm llvm-dev clang \
+        build-essential cmake git pkg-config llvm llvm-dev clang libclang-dev \
         librtaudio-dev libglfw3-dev libglm-dev libeigen3-dev \
         libvulkan-dev vulkan-tools spirv-tools \
         ffmpeg libavcodec-dev libavformat-dev libavutil-dev libswscale-dev \
-        libstb-dev
+        libstb-dev libmagicenum-dev libtbb-dev
 }
 
 install_opensuse() {
