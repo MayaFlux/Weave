@@ -335,7 +335,7 @@ class DownloadStep:
         self._log(f"Looking for asset: {system}/{machine}")
 
         patterns = {
-            "linux": ["Linux", "x86_64"],
+            "linux": ["linux-fedora43", "x86_64"],
             "darwin": ["macos", "arm64"],
             "windows": ["windows", "x86_64"],
         }

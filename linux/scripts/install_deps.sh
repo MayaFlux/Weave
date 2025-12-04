@@ -1,4 +1,4 @@
-#!/bin/bash
+Linux#!/bin/bash
 
 set -e
 
@@ -121,7 +121,7 @@ install_fedora() {
         @development-tools llvm llvm-devel llvm-libs clang clang-devel cmake pkgconfig \
         rtaudio-devel glfw-devel glm-devel eigen3-devel \
         spirv-headers-devel spirv-tools vulkan-headers vulkan-loader vulkan-loader-devel vulkan-tools \
-        vulkan-validation-layers ffmpeg-free-devel stb-devel magic_enum-devel tbb-devel
+        vulkan-validation-layers ffmpeg-free-devel stb-devel magic_enum-devel tbb-devel glslc libshaderc-devel
 }
 
 install_ubuntu() {
@@ -132,7 +132,7 @@ install_ubuntu() {
         librtaudio-dev libglfw3-dev libglm-dev libeigen3-dev \
         libvulkan-dev vulkan-tools spirv-tools \
         ffmpeg libavcodec-dev libavformat-dev libavutil-dev libswscale-dev \
-        libstb-dev libmagicenum-dev libtbb-dev
+        libstb-dev libmagicenum-dev libtbb-dev glslc libhaderc-dev
 }
 
 install_opensuse() {
