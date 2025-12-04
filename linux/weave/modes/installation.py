@@ -335,7 +335,7 @@ class DownloadStep:
         self._log(f"Looking for asset: {system}/{machine}")
 
         patterns = {
-            "linux": ["linux-fedora43", "x86_64"],
+            "linux": ["linux", "x86_64"],
             "darwin": ["macos", "arm64"],
             "windows": ["windows", "x86_64"],
         }
@@ -349,7 +349,7 @@ class DownloadStep:
                 return asset
 
         for asset in assets:
-            if asset["name"].endswith(".tar.gz"):
+            if asset["name"].endswith("43-x64.tar.gz"):
                 self._log(f"⚠ Using fallback asset: {asset['name']}")
                 return asset
 
