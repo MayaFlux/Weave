@@ -199,11 +199,25 @@ jobs:
           Copy-Item "$publishDir/Weave.exe" -Destination "$stagingDir/Weave.exe" -Force
           Copy-Item "windows/scripts/install_package.ps1" -Destination "$stagingDir/install_package.ps1" -Force
           Copy-Item "windows/scripts/packages.psd1" -Destination "$stagingDir/packages.psd1" -Force
-          Copy-Item "windows/resources" -Destination "$stagingDir/resources" -Recurse -Force
-          if (Test-Path "templates") {
-            Copy-Item "templates" -Destination "$stagingDir/templates" -Recurse -Force
+          
+          # Only copy resources if it exists
+          if (Test-Path "windows/resources") {
+            Copy-Item "windows/resources" -Destination "$stagingDir/resources" -Recurse -Force
+            Write-Host "INFO: Copied windows/resources"
+          } else {
+            Write-Host "WARNING: windows/resources not found, skipping"
           }
           
+          # Only copy templates if they exist
+          if (Test-Path "templates") {
+            Copy-Item "templates" -Destination "$stagingDir/templates" -Recurse -Force
+            Write-Host "INFO: Copied templates"
+          } else {
+            Write-Host "ERROR: templates directory not found!"
+            exit 1
+          }
+          
+          Write-Host ""
           Write-Host "Distribution package contents:"
           Get-ChildItem -Path $stagingDir -Recurse | Select-Object FullName
 
@@ -212,6 +226,8 @@ jobs:
         run: |
           $stagingDir = "build/windows/staging"
           $zipPath = "build/windows/Weave.zip"
+          
+          # Get all items in staging directory
           $items = Get-ChildItem -Path $stagingDir -Force
           
           if ($items.Count -eq 0) {
@@ -219,11 +235,15 @@ jobs:
             exit 1
           }
           
-          Compress-Archive -Path $items -DestinationPath $zipPath -Force
+          Write-Host "INFO: Compressing $(if ($items -is [array]) { $items.Count } else { 1 }) items"
+          
+          # Compress the items
+          Compress-Archive -Path $items.FullName -DestinationPath $zipPath -Force
           $zipMB = [Math]::Round((Get-Item $zipPath).Length / 1MB, 1)
           Write-Host "INFO: ZIP created - size is $zipMB MB"
           
           # List ZIP contents to verify
+          Write-Host ""
           Write-Host "ZIP contents (first 20 entries):"
           Add-Type -AssemblyName System.IO.Compression
           $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
