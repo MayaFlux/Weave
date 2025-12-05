@@ -319,6 +319,18 @@ VULKAN_SDK_PATH=$(find "$VULKAN_SDK_ROOT" -mindepth 1 -maxdepth 1 -type d 2>/dev
 if [ -n "$VULKAN_SDK_PATH" ]; then
     append_if_missing "export VULKAN_SDK=\"$VULKAN_SDK_PATH/macOS\""
     append_if_missing "export PATH=\"\$VULKAN_SDK/bin:\$PATH\""
+
+    ICD_MANIFEST="$VULKAN_SDK_PATH/macOS/share/vulkan/icd.d/MoltenVK_icd.json"
+    
+    if [ -f "$ICD_MANIFEST" ]; then
+        log "  Configuring Vulkan ICD..."
+        append_if_missing "export VK_ICD_FILENAMES=\"$ICD_MANIFEST\""
+        show_complete "Vulkan ICD configured"
+    else
+        error "MoltenVK ICD manifest not found at: $ICD_MANIFEST"
+        log "  Available ICD files:"
+        find "$VULKAN_SDK_PATH" -name "*.json" -path "*/icd.d/*" 2>/dev/null || log "  No ICD manifests found"
+    fi
 fi
 
 append_if_missing 'export STB_ROOT="$HOME/Libraries"'
