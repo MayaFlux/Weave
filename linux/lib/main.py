@@ -11,7 +11,7 @@ if str(_lib_dir) not in sys.path:
     sys.path.insert(0, str(_lib_dir))
 
 try:
-    from weave.config import get_config
+    from lib.config import get_config
 
     cfg = get_config()
 
@@ -30,9 +30,9 @@ gi.require_version("Adw", "1")
 from gi.repository import Gtk, Adw
 from enum import Enum
 
-from weave.modes.installation import InstallationMode
-from weave.modes.project import ProjectCreationMode
-from weave.ui.theme import setup_css
+from lib.modes.installation import InstallationMode
+from lib.modes.project import ProjectCreationMode
+from lib.ui.theme import setup_css
 
 
 class Mode(Enum):

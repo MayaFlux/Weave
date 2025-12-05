@@ -20,7 +20,7 @@ export WEAVE_LAUNCHER_DIR
 export PYTHONPATH="$WEAVE_ROOT/lib:${PYTHONPATH:-}"
 
 if [ $# -eq 0 ]; then
-    exec python3 -m weave.main
+    exec python3 -m lib.main
 else
-    exec python3 -m weave.cli "$@"
+    exec python3 -m lib.cli "$@"
 fi

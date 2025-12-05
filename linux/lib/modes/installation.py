@@ -323,35 +323,31 @@ class DownloadStep:
         return None
 
     def _find_asset(self, release: Dict) -> Optional[Dict]:
-        """Find the appropriate asset for this platform"""
-        import platform as plat
+        """Find the appropriate asset for this platform
 
+        Explicitly prefers Fedora as the baseline distribution because Arch uses
+        newer libraries that break ABI compatibility with other distros.
+        This ensures Weave works across Ubuntu, Fedora, openSUSE, etc.
+        """
         assets = release.get("assets", [])
         if not assets:
             self._log("✗ No assets found in release")
             return None
-        system = plat.system().lower()
-        machine = plat.machine().lower()
-        self._log(f"Looking for asset: {system}/{machine}")
 
-        patterns = {
-            "linux": ["linux", "x86_64"],
-            "darwin": ["macos", "arm64"],
-            "windows": ["windows", "x86_64"],
-        }
-
-        target_patterns = patterns.get(system, [system])
+        self._log("ℹ Linux detected - preferring Fedora (ABI-compatible baseline)")
 
         for asset in assets:
             name = asset.get("name", "")
-            if all(p in name for p in target_patterns):
-                self._log(f"✓ Found matching asset: {asset['name']}")
+            if "linux-fedora" in name and "x64.tar.gz" in name:
+                self._log(f"✓ Found Fedora asset: {name}")
                 return asset
 
+        self._log("⚠ No Fedora asset found - this may cause ABI incompatibility")
+        self._log("Available Linux assets:")
         for asset in assets:
-            if asset["name"].endswith("43-x64.tar.gz"):
-                self._log(f"⚠ Using fallback asset: {asset['name']}")
-                return asset
+            name = asset.get("name", "")
+            if "linux" in name and "tar.gz" in name:
+                self._log(f"  - {name}")
 
         return None
 

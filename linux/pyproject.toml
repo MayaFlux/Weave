@@ -10,14 +10,14 @@ requires-python = ">=3.8"
 dependencies = ["PyGObject"]
 
 [project.scripts]
-weave-installer = "weave.main:main"
-weave = "weave.cli:main"
+weave-installer = "lib.main:main"
+weave = "lib.cli:main"
 
 [tool.setuptools]
-packages = ["weave", "weave.modes", "weave.ui"]
+packages = ["lib", "lib.modes", "lib.ui"]
 
 [tool.setuptools.package-dir]
 "" = "."
 
 [tool.setuptools.package-data]
-weave = ["ui/dark.css"]
+lib = ["ui/dark.css"]

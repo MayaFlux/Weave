@@ -11,22 +11,22 @@ echo "Building Weave distribution..."
 echo ""
 
 rm -rf "$DIST"
-mkdir -p "$DIST/lib/weave"
+mkdir -p "$DIST/lib/"
 
 echo "Copying Python modules..."
-cp -r "$LINUX_DIR/weave" "$DIST/lib/"
+cp -r "$LINUX_DIR/lib" "$DIST/"
 
-if [ ! -f "$DIST/lib/weave/config.py" ]; then
-    echo "ERROR: config.py not found in $LINUX_DIR/weave/" >&2
+if [ ! -f "$DIST/lib/config.py" ]; then
+    echo "ERROR: config.py not found in $LINUX_DIR/lib/" >&2
     exit 1
 fi
 
 echo "Copying scripts and templates..."
-mkdir -p "$DIST/lib/weave/scripts"
-cp "$LINUX_DIR/scripts"/{create_project.sh,install_deps.sh} "$DIST/lib/weave/scripts/"
-chmod +x "$DIST/lib/weave/scripts/"*
+mkdir -p "$DIST/lib/scripts"
+cp "$LINUX_DIR/scripts"/{create_project.sh,install_deps.sh} "$DIST/lib/scripts/"
+chmod +x "$DIST/lib/scripts/"*
 
-cp -r "$REPO_ROOT/templates" "$DIST/lib/weave/templates"
+cp -r "$REPO_ROOT/templates" "$DIST/lib/templates"
 
 echo "Copying configuration files..."
 cp "$LINUX_DIR/weave-config.json" "$DIST/weave-config.json"
@@ -40,11 +40,11 @@ echo ""
 echo "Verifying distribution structure..."
 test -f "$DIST/weave-config.json" && echo "  ✓ weave-config.json"
 test -f "$DIST/Weave" && echo "  ✓ Weave launcher"
-test -f "$DIST/lib/weave/config.py" && echo "  ✓ config.py"
-test -f "$DIST/lib/weave/main.py" && echo "  ✓ main.py"
-test -f "$DIST/lib/weave/cli.py" && echo "  ✓ cli.py"
-test -d "$DIST/lib/weave/scripts" && echo "  ✓ scripts directory"
-test -d "$DIST/lib/weave/templates" && echo "  ✓ templates directory"
+test -f "$DIST/lib/config.py" && echo "  ✓ config.py"
+test -f "$DIST/lib/main.py" && echo "  ✓ main.py"
+test -f "$DIST/lib/cli.py" && echo "  ✓ cli.py"
+test -d "$DIST/lib/scripts" && echo "  ✓ scripts directory"
+test -d "$DIST/lib/templates" && echo "  ✓ templates directory"
 
 echo ""
 echo "Creating distribution tarball..."

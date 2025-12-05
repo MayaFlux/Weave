@@ -13,7 +13,7 @@ if str(_lib_dir) not in sys.path:
     sys.path.insert(0, str(_lib_dir))
 
 try:
-    from weave.config import get_config
+    from lib.config import get_config
 except ImportError as e:
     print(
         "Error: Cannot import weave.config\n"
@@ -125,7 +125,7 @@ Examples:
 
     elif args.cmd == "gui":
         try:
-            from weave.main import WeaveApp
+            from lib.main import WeaveApp
 
             cfg = get_config()
             app = WeaveApp()
