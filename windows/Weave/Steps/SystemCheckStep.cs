@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Security.Principal;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -40,7 +41,7 @@ public class SystemCheckStep : IInstallationStep
         nextButton.Click += (s, e) => nextCallback();
         cancelButton.Click += (s, e) => Application.Exit();
 
-        Task.Delay(500).ContinueWith(_ => PerformChecksAsync());
+        Task.Run(() => PerformChecksAsync());
     }
 
     private async Task PerformChecksAsync()
@@ -48,11 +49,9 @@ public class SystemCheckStep : IInstallationStep
         checksPass = true;
 
         await LogAsync("Checking Windows architecture...");
-        await Task.Delay(200);
-
         if (IntPtr.Size == 8)
         {
-            await LogAsync("[OK] 64-bit Windows detected");
+            await LogAsync("[OK] 64-bit Windows");
         }
         else
         {
@@ -61,52 +60,125 @@ public class SystemCheckStep : IInstallationStep
         }
 
         await LogAsync("");
-        await LogAsync("Checking for 7-Zip...");
-        await Task.Delay(200);
-
-        var sevenZipPath = Find7zPath();
-        if (!string.IsNullOrEmpty(sevenZipPath))
-        {
-            await LogAsync($"[OK] 7-Zip found at: {sevenZipPath}");
-        }
-        else
-        {
-            await LogAsync("[WARN] 7-Zip not found - please install from https://www.7-zip.org/");
-            checksPass = false;
-        }
-
-        await LogAsync("");
         await LogAsync("Checking for administrator privileges...");
-        await Task.Delay(200);
-
         if (IsAdministrator())
         {
             await LogAsync("[OK] Running as administrator");
         }
         else
         {
-            await LogAsync("[WARN] Not running as administrator - installation may fail");
+            await LogAsync("[ERROR] Not running as administrator");
+            checksPass = false;
+            UpdateStatus("Admin privileges required", ThemeColors.Error);
+            EnableButton();
+            return;
         }
 
         await LogAsync("");
-        await LogAsync("[OK] System check complete");
+        await LogAsync("Checking for 7-Zip...");
 
-        if (statusLabel != null && statusLabel.Parent != null)
+        if (string.IsNullOrEmpty(Find7zPath()))
         {
-            statusLabel.Invoke(new Action(() =>
+            await LogAsync("[INSTALLING] Downloading 7-Zip...");
+            bool installed = await Install7ZipAsync();
+            if (installed)
             {
-                statusLabel.Text = checksPass ? "All checks passed!" : "Some checks failed.";
-                statusLabel.ForeColor = checksPass ? ThemeColors.Success : ThemeColors.Error;
-            }));
+                await LogAsync("[OK] 7-Zip installed");
+            }
+            else
+            {
+                await LogAsync("[ERROR] Failed to install 7-Zip");
+                checksPass = false;
+            }
+        }
+        else
+        {
+            await LogAsync("[OK] 7-Zip found");
         }
 
-        if (nextButton != null && nextButton.Parent != null)
+        await LogAsync("");
+        if (checksPass)
         {
-            nextButton.Invoke(new Action(() =>
-            {
-                nextButton.Enabled = true;
-            }));
+            await LogAsync("[OK] All prerequisites met");
+            UpdateStatus("Ready to proceed", ThemeColors.Success);
         }
+        else
+        {
+            await LogAsync("[ERROR] Cannot proceed");
+            UpdateStatus("Prerequisites missing", ThemeColors.Error);
+        }
+
+        EnableButton();
+    }
+
+    private async Task<bool> Install7ZipAsync()
+    {
+        try
+        {
+            string tempDir = Path.GetTempPath();
+            string installerPath = Path.Combine(tempDir, "7z-install.exe");
+
+            using (var client = new HttpClient())
+            {
+                client.Timeout = TimeSpan.FromMinutes(5);
+                var response = await client.GetAsync("https://www.7-zip.org/a/7z2301-x64.exe");
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    await LogAsync("[ERROR] Download failed");
+                    return false;
+                }
+
+                using (var fs = File.Create(installerPath))
+                {
+                    await response.Content.CopyToAsync(fs);
+                }
+            }
+
+            await LogAsync("[INSTALLING] Running installer...");
+
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = installerPath,
+                Arguments = "/S",
+                UseShellExecute = true,
+                CreateNoWindow = true
+            };
+
+            using (var process = System.Diagnostics.Process.Start(psi))
+            {
+                if (process == null)
+                {
+                    await LogAsync("[ERROR] Failed to start installer");
+                    return false;
+                }
+
+                process.WaitForExit(300000); 
+            }
+
+            await Task.Delay(3000);
+
+            bool found = !string.IsNullOrEmpty(Find7zPath());
+
+            try { File.Delete(installerPath); } catch { }
+
+            return found;
+        }
+        catch (Exception ex)
+        {
+            await LogAsync($"[ERROR] {ex.Message}");
+            return false;
+        }
+    }
+    private string? Find7zPath()
+    {
+        var possiblePaths = new[]
+        {
+            "C:\\Program Files\\7-Zip\\7z.exe",
+            "C:\\Program Files (x86)\\7-Zip\\7z.exe"
+        };
+
+        return possiblePaths.FirstOrDefault(path => File.Exists(path));
     }
 
     private async Task LogAsync(string message)
@@ -122,15 +194,27 @@ public class SystemCheckStep : IInstallationStep
         }
     }
 
-    private string? Find7zPath()
+    private void UpdateStatus(string text, Color color)
     {
-        var possiblePaths = new[]
+        if (statusLabel != null && statusLabel.Parent != null)
         {
-            "C:\\Program Files\\7-Zip\\7z.exe",
-            "C:\\Program Files (x86)\\7-Zip\\7z.exe"
-        };
+            statusLabel.Invoke(new Action(() =>
+            {
+                statusLabel.Text = text;
+                statusLabel.ForeColor = color;
+            }));
+        }
+    }
 
-        return possiblePaths.FirstOrDefault(path => File.Exists(path));
+    private void EnableButton()
+    {
+        if (nextButton != null && nextButton.Parent != null)
+        {
+            nextButton.Invoke(new Action(() =>
+            {
+                nextButton.Enabled = checksPass;
+            }));
+        }
     }
 
     private bool IsAdministrator()

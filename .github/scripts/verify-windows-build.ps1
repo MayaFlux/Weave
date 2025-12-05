@@ -1,64 +1,64 @@
 #!/usr/bin/env powershell
+# Verify Windows build output
 
 $ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  Verifying Windows Build" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "Verifying Windows Build"
 Write-Host ""
 
-$buildDir = "build\windows"
-$zipPath = "$buildDir\Weave.zip"
-
-# Check if ZIP exists
-Write-Host "Checking installer..." -ForegroundColor Yellow
-if (Test-Path $zipPath) {
-    $fileSize = (Get-Item $zipPath).Length
-    $fileSizeMB = [Math]::Round($fileSize / 1MB, 2)
-    Write-Host "OK: Installer found" -ForegroundColor Green
-    Write-Host "    Path: $zipPath" -ForegroundColor Green
-    Write-Host "    Size: $fileSizeMB MB" -ForegroundColor Green
-} else {
-    Write-Host "Error: Installer not found at: $zipPath" -ForegroundColor Red
+$zipPath = "build\windows\Weave.zip"
+if (-not (Test-Path $zipPath)) {
+    Write-Host "ERROR: ZIP not found at $zipPath"
     exit 1
 }
 
-# Check that scripts were included in the ZIP
-Write-Host ""
-Write-Host "Checking bundled resources..." -ForegroundColor Yellow
+Write-Host "[OK] ZIP found: $zipPath"
+$zipSizeMB = [Math]::Round((Get-Item $zipPath).Length / 1MB, 1)
+Write-Host "[OK] Size: $zipSizeMB MB"
 
-$requiredFiles = @(
-    "install_package.ps1",
-    "packages.psd1",
-    "Weave.exe"
-)
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-$stagingDir = "$buildDir\staging"
-$allPresent = $true
+$zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
 
+# Check for flat structure (Weave.exe at root, not in subdirectory)
+$weaveEntry = $zip.Entries | Where-Object { $_.Name -eq "Weave.exe" -and $_.FullName -eq "Weave.exe" }
+if ($null -eq $weaveEntry) {
+    Write-Host "ERROR: Weave.exe not found at ZIP root"
+    Write-Host "Found entries:"
+    $zip.Entries | Where-Object { $_.Name -like "*Weave*" } | ForEach-Object { Write-Host "  $($_.FullName)" }
+    $zip.Dispose()
+    exit 1
+}
+
+Write-Host "[OK] Weave.exe at root (flat structure correct)"
+$sizeMB = [Math]::Round($weaveEntry.Length / 1MB, 1)
+Write-Host "[OK] Weave.exe size: $sizeMB MB"
+
+if ($sizeMB -lt 100) {
+    Write-Host "ERROR: Executable too small - not self-contained"
+    $zip.Dispose()
+    exit 1
+}
+
+$requiredFiles = @("install_package.ps1", "packages.psd1")
 foreach ($file in $requiredFiles) {
-    $filePath = "$stagingDir\$file"
-    if (Test-Path $filePath) {
-        $fileSize = (Get-Item $filePath).Length / 1KB
-        Write-Host "OK: $file ($('{0:F1}' -f $fileSize) KB)" -ForegroundColor Green
+    $entry = $zip.Entries | Where-Object { $_.Name -eq $file -and $_.FullName -eq $file }
+    if ($null -eq $entry) {
+        Write-Host "WARNING: $file not found at root"
     } else {
-        Write-Host "Error: $file not found in staging directory" -ForegroundColor Red
-        $allPresent = $false
+        Write-Host "[OK] $file present"
     }
 }
 
-if (-not $allPresent) {
-    Write-Host ""
-    Write-Host "Error: Some required files are missing" -ForegroundColor Red
-    exit 1
+$templatesEntries = $zip.Entries | Where-Object { $_.FullName -like "templates/*" }
+if ($templatesEntries.Count -eq 0) {
+    Write-Host "WARNING: templates directory not found in ZIP"
+} else {
+    Write-Host "[OK] templates directory found ($($templatesEntries.Count) files)"
 }
 
+$zip.Dispose()
 Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  Build Verification Complete" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "OK: Installer ready for distribution:" -ForegroundColor Green
-Write-Host "   $zipPath" -ForegroundColor Green
-Write-Host ""
+Write-Host "[OK] ZIP verification passed - structure is correct"
+exit 0

@@ -10,6 +10,7 @@
     <AssemblyName>Weave</AssemblyName>
     <LangVersion>latest</LangVersion>
     <Platforms>AnyCPU;x64</Platforms>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -17,20 +18,31 @@
   </PropertyGroup>
 
 <ItemGroup>
-  <EmbeddedResource Include="..\..\templates\**\*">
-    <Link>Resources/templates/%(RecursiveDir)%(Filename)%(Extension)</Link>
-  </EmbeddedResource>
-</ItemGroup>
-
-  <ItemGroup>
-    <None Include="..\scripts\install_package.ps1">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>scripts\install_package.ps1</Link>
-    </None>
-    <None Include="..\scripts\packages.psd1">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>scripts\packages.psd1</Link>
-    </None>
+    <EmbeddedResource Include="..\..\templates\CMakeLists.txt">
+      <Link>Resources/templates/CMakeLists.txt</Link>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\main.cpp">
+      <Link>Resources/templates/main.cpp</Link>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\user_project.hpp">
+      <Link>Resources/templates/user_project.hpp</Link>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\vscode\settings.json">
+      <Link>Resources/templates/vscode/settings.json</Link>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\vscode\tasks.json">
+      <Link>Resources/templates/vscode/tasks.json</Link>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\vscode\launch.json">
+      <Link>Resources/templates/vscode/launch.json</Link>
+    </EmbeddedResource>
+    
+    <EmbeddedResource Include="..\..\windows\scripts\install_package.ps1">
+      <Link>Resources/scripts/install_package.ps1</Link>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\windows\scripts\packages.psd1">
+      <Link>Resources/scripts/packages.psd1</Link>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>

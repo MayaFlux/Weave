@@ -15,7 +15,8 @@ tar -xzf Weave-linux.tar.gz -C ~/.local/
 ~/.local/Weave/Weave
 
 # Or use CLI mode
-~/.local/Weave/scripts/create_project.sh new MyProject ~/Projects/
+~/.local/Weave/Weave new MyProject ~/Projects/
+
 ```
 
 **From Package Manager (recommended for distributions):**

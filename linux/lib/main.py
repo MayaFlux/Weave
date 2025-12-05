@@ -2,14 +2,25 @@
 """Weave - MayaFlux installer and project creator for Linux"""
 
 import os
+import sys
 from pathlib import Path
 
-TEMPLATE_DIR = Path(os.environ.get("WEAVE_TEMPLATE_DIR", "")) or (
-    Path(__file__).parent.parent.parent / "templates"
-)
-SCRIPT_DIR = Path(os.environ.get("WEAVE_SCRIPT_DIR", "")) or (
-    Path(__file__).parent.parent.parent / "linux" / "scripts"
-)
+_main_dir = Path(__file__).parent
+_lib_dir = _main_dir.parent
+if str(_lib_dir) not in sys.path:
+    sys.path.insert(0, str(_lib_dir))
+
+try:
+    from lib.config import get_config
+
+    cfg = get_config()
+
+    for key, value in cfg.get_env_vars().items():
+        os.environ.setdefault(key, value)
+
+except Exception as e:
+    print(f"Error loading Weave configuration: {e}", file=sys.stderr)
+    sys.exit(1)
 
 import gi
 
@@ -17,12 +28,11 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
 from gi.repository import Gtk, Adw
-import sys
 from enum import Enum
 
-from weave.modes.installation import InstallationMode
-from weave.modes.project import ProjectCreationMode
-from weave.ui.theme import setup_css
+from lib.modes.installation import InstallationMode
+from lib.modes.project import ProjectCreationMode
+from lib.ui.theme import setup_css
 
 
 class Mode(Enum):
@@ -92,9 +102,9 @@ class WeaveApp(Adw.Application):
 
     def _on_mode_selected(self, window, selector):
         if selector.selected_mode == Mode.INSTALLATION:
-            main_window = InstallationMode(self, SCRIPT_DIR)
+            main_window = InstallationMode(self, cfg.scripts_dir)
         elif selector.selected_mode == Mode.PROJECT_CREATION:
-            main_window = ProjectCreationMode(self, TEMPLATE_DIR, SCRIPT_DIR)
+            main_window = ProjectCreationMode(self, cfg.templates_dir, cfg.scripts_dir)
         else:
             self.quit()
             return

@@ -1,5 +1,6 @@
 using System.Reflection;
 using Weave.Shared;
+using System.IO;
 
 namespace Weave.Utils;
 
@@ -17,17 +18,23 @@ public static class ResourceExtractor
         Directory.CreateDirectory(templatesDir);
 
         var assembly = Assembly.GetExecutingAssembly();
-        var resourceNames = assembly.GetManifestResourceNames()
-            .Where(r => r.StartsWith(WeaveConstants.TEMPLATES_RESOURCE_PREFIX));
+        var resourceNames = assembly.GetManifestResourceNames();
 
-        foreach (var resourceName in resourceNames)
+        var templateResources = resourceNames
+            .Where(r => r.StartsWith("Weave.Resources.templates", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var resourceName in templateResources)
         {
-            var filename = ExtractResourceFilename(resourceName, WeaveConstants.TEMPLATES_RESOURCE_PREFIX);
-            var destPath = Path.Combine(templatesDir, filename);
-            
-            // Create subdirectories if needed
-            Directory.CreateDirectory(Path.GetDirectoryName(destPath) ?? templatesDir);
-            
+            var relativePath = ExtractResourceFilename(resourceName, "Weave.Resources.templates");
+            var destPath = Path.Combine(templatesDir, relativePath);
+
+            var destDir = Path.GetDirectoryName(destPath);
+            if (!string.IsNullOrEmpty(destDir))
+            {
+                Directory.CreateDirectory(destDir);
+            }
+
             using (var stream = assembly.GetManifestResourceStream(resourceName))
             {
                 if (stream != null)
@@ -47,13 +54,16 @@ public static class ResourceExtractor
         Directory.CreateDirectory(scriptsDir);
 
         var assembly = Assembly.GetExecutingAssembly();
-        var resourceNames = assembly.GetManifestResourceNames()
-            .Where(r => r.StartsWith(WeaveConstants.SCRIPTS_RESOURCE_PREFIX));
+        var resourceNames = assembly.GetManifestResourceNames();
 
-        foreach (var resourceName in resourceNames)
+        var scriptResources = resourceNames
+            .Where(r => r.StartsWith("Weave.Resources.scripts", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var resourceName in scriptResources)
         {
-            var filename = ExtractResourceFilename(resourceName, WeaveConstants.SCRIPTS_RESOURCE_PREFIX);
-            var destPath = Path.Combine(scriptsDir, filename);
+            var relativePath = ExtractResourceFilename(resourceName, "Weave.Resources.scripts");
+            var destPath = Path.Combine(scriptsDir, relativePath);
 
             using (var stream = assembly.GetManifestResourceStream(resourceName))
             {
@@ -68,33 +78,17 @@ public static class ResourceExtractor
         }
     }
 
-    public static string ExtractResourceAsText(string resourceName)
-    {
-        var assembly = Assembly.GetExecutingAssembly();
-        using (var stream = assembly.GetManifestResourceStream(resourceName))
-        {
-            if (stream == null)
-                throw new FileNotFoundException($"Resource not found: {resourceName}");
-
-            using (var reader = new StreamReader(stream))
-            {
-                return reader.ReadToEnd();
-            }
-        }
-    }
-
     private static string ExtractResourceFilename(string fullResourceName, string prefix)
     {
         var withoutPrefix = fullResourceName.Substring(prefix.Length).TrimStart('.');
-
         var lastDot = withoutPrefix.LastIndexOf('.');
-        if (lastDot > 0)
+        if (lastDot > 0 && lastDot < withoutPrefix.Length - 1)
         {
             var nameWithoutExt = withoutPrefix.Substring(0, lastDot);
             var ext = withoutPrefix.Substring(lastDot);
-            return nameWithoutExt.Replace('.', Path.DirectorySeparatorChar) + ext;
+            nameWithoutExt = nameWithoutExt.Replace('.', Path.DirectorySeparatorChar);
+            return nameWithoutExt + ext;
         }
-
         return withoutPrefix.Replace('.', Path.DirectorySeparatorChar);
     }
 }

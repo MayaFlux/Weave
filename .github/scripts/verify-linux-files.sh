@@ -13,12 +13,12 @@ echo ""
 all_present=true
 
 required_files=(
-    "linux/weave/main.py"
-    "linux/weave/cli.py"
-    "linux/weave/modes/installation.py"
-    "linux/weave/modes/project.py"
-    "linux/weave/ui/theme.py"
-    "linux/weave/ui/dark.css"
+    "linux/lib/main.py"
+    "linux/lib/cli.py"
+    "linux/lib/modes/installation.py"
+    "linux/lib/modes/project.py"
+    "linux/lib/ui/theme.py"
+    "linux/lib/ui/dark.css"
     "linux/scripts/create_project.sh"
     "linux/scripts/install_deps.sh"
     "linux/scripts/build_distribution.sh"
