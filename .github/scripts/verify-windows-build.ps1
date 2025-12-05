@@ -17,7 +17,8 @@ Write-Host "[OK] ZIP found: $zipPath"
 $zipSizeMB = [Math]::Round((Get-Item $zipPath).Length / 1MB, 1)
 Write-Host "[OK] Size: $zipSizeMB MB"
 
-Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
 $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
 
 # Check for flat structure (Weave.exe at root, not in subdirectory)
