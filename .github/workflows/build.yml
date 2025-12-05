@@ -173,7 +173,7 @@ jobs:
         run: |
           $exePath = "windows/Weave/bin/x64/Release/net8.0-windows/win-x64/publish/Weave.exe"
           if (-not (Test-Path $exePath)) {
-            Write-Host "FAIL: Executable not found"
+            Write-Host "FAIL: Executable not found at $exePath"
             exit 1
           }
           $sizeMB = [Math]::Round((Get-Item $exePath).Length / 1MB, 1)
@@ -188,23 +188,48 @@ jobs:
         run: |
           $publishDir = "windows/Weave/bin/x64/Release/net8.0-windows/win-x64/publish"
           $stagingDir = "build/windows/staging"
+          
+          if (-not (Test-Path "$publishDir/Weave.exe")) {
+            Write-Host "ERROR: Weave.exe not found at $publishDir"
+            Get-ChildItem -Path "windows/Weave/bin" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 20
+            exit 1
+          }
+          
           New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
           Copy-Item "$publishDir/Weave.exe" -Destination "$stagingDir/Weave.exe" -Force
           Copy-Item "windows/scripts/install_package.ps1" -Destination "$stagingDir/install_package.ps1" -Force
           Copy-Item "windows/scripts/packages.psd1" -Destination "$stagingDir/packages.psd1" -Force
+          Copy-Item "windows/resources" -Destination "$stagingDir/resources" -Recurse -Force
           if (Test-Path "templates") {
             Copy-Item "templates" -Destination "$stagingDir/templates" -Recurse -Force
           }
+          
+          Write-Host "Distribution package contents:"
+          Get-ChildItem -Path $stagingDir -Recurse | Select-Object FullName
 
       - name: Create ZIP
         shell: powershell
         run: |
           $stagingDir = "build/windows/staging"
           $zipPath = "build/windows/Weave.zip"
-          Compress-Archive -Path $stagingDir -DestinationPath $zipPath -Force
+          $items = Get-ChildItem -Path $stagingDir -Force
+          
+          if ($items.Count -eq 0) {
+            Write-Host "ERROR: Staging directory is empty!"
+            exit 1
+          }
+          
+          Compress-Archive -Path $items -DestinationPath $zipPath -Force
           $zipMB = [Math]::Round((Get-Item $zipPath).Length / 1MB, 1)
           Write-Host "INFO: ZIP created - size is $zipMB MB"
-
+          
+          # List ZIP contents to verify
+          Write-Host "ZIP contents (first 20 entries):"
+          Add-Type -AssemblyName System.IO.Compression
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+          $zip.Entries | Select-Object -First 20 | ForEach-Object { Write-Host "  $($_.FullName)" }
+          $zip.Dispose()
+      
       - name: Generate hash
         id: hash
         shell: powershell
@@ -219,6 +244,10 @@ jobs:
           name: weave-windows
           path: build/windows/Weave.zip
           retention-days: 30
+
+      - name: Verify Windows build (before upload)
+        shell: powershell
+        run: .\.github\scripts\verify-windows-build.ps1
 
   build-linux:
     runs-on: ubuntu-latest
