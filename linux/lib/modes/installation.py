@@ -214,25 +214,24 @@ class DownloadStep:
             with tarfile.open(download_path, "r:gz") as tar:
                 tar.extractall(temp_extract)
 
-            extracted_dirs = [d for d in temp_extract.iterdir() if d.is_dir()]
-
-            if not extracted_dirs:
-                self._log("✗ No directories found in archive")
+            extracted_items = list(temp_extract.iterdir())
+            if not extracted_items:
+                self._log("✗ No files found in archive")
                 self.status.set_text("✗ Extraction failed")
                 return False
 
-            source_dir = extracted_dirs[0]
-            self._log(f"Found extracted directory: {source_dir.name}")
-
-            for item in source_dir.iterdir():
-                dest = root / item.name
-                if dest.exists():
-                    import shutil
-
-                    shutil.rmtree(dest) if dest.is_dir() else dest.unlink()
-                item.rename(dest)
+            self._log(f"Extracted {len(extracted_items)} item(s)")
 
             import shutil
+
+            for item in extracted_items:
+                dest = root / item.name
+                self._log(f"  Moving: {item.name}")
+
+                if dest.exists():
+                    shutil.rmtree(dest) if dest.is_dir() else dest.unlink()
+
+                item.rename(dest)
 
             shutil.rmtree(temp_extract)
             download_path.unlink()
