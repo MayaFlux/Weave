@@ -624,15 +624,15 @@ git clone https://github.com/MayaFlux/Weave.git
 cd Weave
 
 # macOS
-./macos/scripts/create_pkg.sh 0.1.2
-# Output: build/macos/Weave-0.1.2.pkg
+./macos/scripts/create_pkg.sh 0.1.3
+# Output: build/macos/Weave-0.1.3.pkg
 
 # Windows
-.\windows\scripts\create_installer.ps1 -Version 0.1.2
-# Output: build\windows\Weave-0.1.2.exe
+.\windows\scripts\create_installer.ps1 -Version 0.1.3
+# Output: build\windows\Weave-0.1.3.exe
 
 # Linux
-./linux/scripts/create_installer.sh 0.1.2
+./linux/scripts/create_installer.sh 0.1.3
 ```
 
 ### Project Structure
