@@ -3,11 +3,15 @@
 **Platform:** Windows 10/11 (64-bit)  
 **Architecture:** x86_64
 
+<details>
+<parameter name="open">
+
 ### Installation
 
 **Double-click `Weave-{{VERSION}}.exe`** to launch the installer.
 
 The installer will:
+
 1. Show a mode selection dialog (Install MayaFlux or Create Project)
 2. Run step-by-step installation with progress tracking
 3. Download MayaFlux framework (~100 MB)
@@ -39,6 +43,7 @@ The installer will:
 ### Environment Setup
 
 After installation, your system has:
+
 - `MAYAFLUX_ROOT` - Points to installation directory
 - `PATH` - Updated with MayaFlux and build tools
 - `CMAKE_PREFIX_PATH` - For CMake discovery
@@ -57,4 +62,4 @@ The GUI shows real-time output of project generation.
 
 ---
 
-
+</details>

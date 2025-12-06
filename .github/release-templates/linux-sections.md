@@ -3,6 +3,9 @@
 **Platform:** Linux (x86_64)
 **Requirements:** Python 3.8+, GTK4, pip
 
+<details>
+<parameter name="open">
+
 ### Installation
 
 **Quick Install (all-in-one):**
@@ -118,3 +121,5 @@ weave new TestProject ~/test-project
 cd ~/test-project && mkdir build && cd build
 cmake .. && make && ./TestProject
 ```
+
+</details>

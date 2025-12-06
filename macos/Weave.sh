@@ -19,14 +19,13 @@ done
 if [ -z "${MAYAFLUX_ROOT:-}" ]; then
     if [ -n "$BREW_CMD" ]; then
         MAYAFLUX_ROOT=$("$BREW_CMD" --prefix mayaflux-dev)
-else
+    else
         echo "[Weave ERROR] MAYAFLUX_ROOT not set and Homebrew not found. Please set MAYAFLUX_ROOT environment variable to your MayaFlux installation location."
         exit 1
     fi
 fi
-WEAVE_ROOT="${/Library/Weave}"
+WEAVE_ROOT="/Library/Weave"
 TEMPLATES_DIR="$WEAVE_ROOT/templates"
-
 
 # ============================================================================
 # UTILITIES
@@ -124,7 +123,6 @@ mkdir -p "$PROJECT_DIR/src"
 
 MAYAFLUX_CMAKE_PATH="$MAYAFLUX_ROOT/lib/cmake/MayaFlux"
 
-# Prepare Lila link block
 if [ "$WITH_LILA" = true ]; then
     LILA_LINK_BLOCK='if(TARGET MayaFlux::Lila)
     target_link_libraries(${PROJECT_NAME} PRIVATE MayaFlux::Lila)
@@ -136,10 +134,9 @@ else
     LILA_LINK_BLOCK='# Lila live coding not enabled'
 fi
 
-# Read template and perform substitutions
 sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" "$TEMPLATES_DIR/CMakeLists.txt" |
     sed "s|@MAYAFLUX_CMAKE_PATH@|$MAYAFLUX_CMAKE_PATH|g" |
-    awk -v lila="$LILA_LINK_BLOCK" '{gsub(/@LILA_LINK_BLOCK@/, lila)}1' |
+    awk -v lila="$LILA_LINK_BLOCK" '{gsub(/@LILA_LINK_BLOCK@/, lila)}1' \
         >"$PROJECT_DIR/CMakeLists.txt"
 
 echo "✅ CMakeLists.txt generated"
