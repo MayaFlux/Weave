@@ -91,10 +91,12 @@ target_link_libraries(${PROJECT_NAME} PRIVATE MayaFlux::MayaFluxLib)
 # ============================================================================
 
 if(PLATFORM_MACOS)
-    # macOS: Set rpath for dynamic library discovery
+    # macOS: Combine both Homebrew locations AND relative paths
     set_target_properties(${PROJECT_NAME} PROPERTIES
-        INSTALL_RPATH "@loader_path/../lib;@executable_path/../lib;${MayaFlux_LIB_DIR}"
+        BUILD_RPATH "/usr/local/lib;/opt/homebrew/lib;@loader_path/../lib;@executable_path/../lib;${MayaFlux_LIB_DIR}"
+        INSTALL_RPATH "/usr/local/lib;/opt/homebrew/lib;@loader_path/../lib;@executable_path/../lib;${MayaFlux_LIB_DIR}"
         BUILD_WITH_INSTALL_RPATH TRUE
+        MACOSX_RPATH ON
     )
     
 elseif(PLATFORM_LINUX)

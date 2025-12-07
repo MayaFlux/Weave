@@ -4,7 +4,7 @@
 **Requirements:** Python 3.8+, GTK4, pip
 
 <details>
-<parameter name="open">
+<summary>Click to expand</summary>
 
 ### Installation
 

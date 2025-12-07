@@ -4,7 +4,7 @@
 **Architecture:** x86_64
 
 <details>
-<parameter name="open">
+<summary>Click to expand</summary>
 
 ### Installation
 
