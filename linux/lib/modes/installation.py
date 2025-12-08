@@ -124,7 +124,7 @@ class SystemCheckStep:
 
 
 class DownloadStep:
-    """Step 2: Download MayaFlux (skip for Arch)"""
+    """Step 2: Download MayaFlux (skip for distros with native packages)"""
 
     def build_ui(self, container):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15)
@@ -162,23 +162,39 @@ class DownloadStep:
         container.append(box)
 
     async def execute(self):
-        if self._is_arch_linux():
-            self._log("✓ Arch Linux detected - MayaFlux available in AUR")
+        distro = self._detect_distro()
+
+        # Check if this distro has native package management for MayaFlux
+        if self._has_package_manager_support(distro):
+            self._log(
+                f"✓ {distro.title()} detected - MayaFlux available via package manager"
+            )
             self._log("")
-            self._log("Install with: yay -S mayaflux-dev-bin")
-            self._log("          or: paru -S mayaflux-dev-bin")
+
+            if distro == "arch":
+                self._log("Install with: yay -S mayaflux-dev-bin")
+                self._log("          or: paru -S mayaflux-dev-bin")
+            elif distro == "fedora":
+                self._log(
+                    "Install with: sudo dnf copr enable ranjithshegde/mayaflux-dev"
+                )
+                self._log("              sudo dnf install mayaflux-dev")
+
             self._log("")
             self._log("Skipping binary download step.")
-            self.status.set_text("ℹ Arch Linux - use AUR for MayaFlux")
+            self.status.set_text(
+                f"ℹ {distro.title()} - use package manager for MayaFlux"
+            )
             return True
 
+        # For other distros, check if already installed
         root = Path.home() / "MayaFlux"
-
         if (root / "lib" / "libMayaFluxLib.so").exists():
             self._log("✓ Already installed")
             self.status.set_text("✓ Already installed")
             return True
 
+        # Proceed with manual download for unsupported distros
         try:
             self._log("Fetching latest release...")
             release = await self._fetch_release()
@@ -247,20 +263,33 @@ class DownloadStep:
             self._log(traceback.format_exc())
             return False
 
-    def _is_arch_linux(self) -> bool:
-        """Check if running on Arch Linux"""
+    def _detect_distro(self) -> str:
+        """Detect the Linux distribution"""
         try:
             with open("/etc/os-release") as f:
                 content = f.read().lower()
                 if "id=arch" in content or "id_like=arch" in content:
-                    return True
+                    return "arch"
+                elif "id=fedora" in content or "id_like=fedora" in content:
+                    return "fedora"
+                elif "id=ubuntu" in content or "id=debian" in content:
+                    return "ubuntu"
+                elif "id=opensuse" in content or "id_like=suse" in content:
+                    return "opensuse"
         except FileNotFoundError:
             pass
 
+        # Fallback checks
         if Path("/etc/arch-release").exists():
-            return True
+            return "arch"
+        elif Path("/etc/fedora-release").exists():
+            return "fedora"
 
-        return False
+        return "unknown"
+
+    def _has_package_manager_support(self, distro: str) -> bool:
+        """Check if the distro has native MayaFlux package support"""
+        return distro in ["arch", "fedora"]
 
     async def _fetch_release(self) -> Optional[Dict]:
         """Fetch latest release from GitHub API"""
@@ -324,9 +353,8 @@ class DownloadStep:
     def _find_asset(self, release: Dict) -> Optional[Dict]:
         """Find the appropriate asset for this platform
 
-        Explicitly prefers Fedora as the baseline distribution because Arch uses
+        Prefers Fedora as the baseline distribution because Arch uses
         newer libraries that break ABI compatibility with other distros.
-        This ensures Weave works across Ubuntu, Fedora, openSUSE, etc.
         """
         assets = release.get("assets", [])
         if not assets:
@@ -446,7 +474,6 @@ class DependenciesStep:
         container.append(box)
 
     async def execute(self):
-        # script = Path(__file__).parent.parent.parent / "scripts" / "install_deps.sh"
         script = self.script_dir / "install_deps.sh"
         if not script.exists():
             self._log("✗ install_deps.sh not found")
