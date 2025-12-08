@@ -50,32 +50,6 @@ fi
 
 if [ ! -f ".github/release-templates/linux-section.md" ]; then
     cat >".github/release-templates/linux-section.md" <<'LINUX'
-**Platform:** Linux (x86_64)
-**Requirements:** Python 3.8+, GTK4, ~2GB disk space
-
-### Installation
-
-**Quick Install:**
-```bash
-tar -xzf Weave-{{VERSION}}-linux.tar.gz -C ~/.local/
-~/.local/Weave-{{VERSION}}/Weave        # GUI mode
-```
-
-### What Gets Installed
-
-1. **Weave GUI Application** - GTK4-based installer and project creator
-2. **Weave CLI Tool** - Command-line project creation
-3. **Project Templates** - CMakeLists.txt, source files, VS Code configuration
-4. **Dependency Installer** - Automated setup for all required libraries
-
-### Supported Distributions
-
-- Arch Linux (pacman)
-- Fedora (dnf)
-- Ubuntu/Debian (apt)
-- openSUSE (zypper)
-
-Weave automatically detects your distribution and installs dependencies.
 LINUX
 fi
 
@@ -102,29 +76,6 @@ $(cat .github/release-templates/header.md)
 $(cat .github/release-templates/macos-section.md)
 
 **SHA256:** \`$MACOS_SHA256\`
-
-## Standalone Weave.app
-
-For users who want just the GUI application without the full installer, download $(Weave-app-{{VERSION}}.zip).
-
-**Usage:**
-1. Download and unzip $(Weave-app-{{VERSION}}.zip)
-2. Drag $(Weave.app) to your $(/Applications) folder
-3. Launch from Applications or Spotlight
-
-**Note:** The standalone app requires the Weave files and templates to be already installed via the full installer.
-
-**Installation:**
-1. Download and open \`Weave-${VERSION}.pkg\`
-2. Follow the installer prompts (installs Weave.app and files)
-3. Terminal will open automatically with installation progress
-4. Watch real-time progress for MayaFlux download and dependency installation
-
-**What's installed:**
-- Weave.app in \`/Applications\` (GUI project creator)
-- Project templates and CLI tool in \`/Library/Weave\`
-- MayaFlux framework to \`/Library/MayaFlux\` (via post-install script)
-- Dependencies via Homebrew (via post-install script)
 
 ## Linux Distribution Package
 

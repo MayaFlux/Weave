@@ -58,6 +58,22 @@ weave new MyProject ~/Projects/ --with-lila     # With live coding
 weave new MyProject ~/Projects/ --no-vscode    # Without VS Code config
 ```
 
+**Note:** The standalone app requires the Weave files and templates to be already installed via the full installer.
+
+**Installation:**
+
+1. Download and open \`Weave-${VERSION}.pkg\`
+2. Follow the installer prompts (installs Weave.app and files)
+3. Terminal will open automatically with installation progress
+4. Watch real-time progress for MayaFlux download and dependency installation
+
+**What's installed:**
+
+- Weave.app in \`/Applications\` (GUI project creator)
+- Project templates and CLI tool in \`/Library/Weave\`
+- MayaFlux framework to \`/Library/MayaFlux\` (via post-install script)
+- Dependencies via Homebrew (via post-install script)
+
 ---
 
 </details>

@@ -1,10 +1,40 @@
-## Linux Installation Guide
+## linux-section.md
 
 **Platform:** Linux (x86_64)
-**Requirements:** Python 3.8+, GTK4, pip
+**Requirements:** Python 3.8+, GTK4, ~2GB disk space
 
 <details>
 <summary>Click to expand</summary>
+
+### Installation
+
+**Quick Install:**
+
+```bash
+tar -xzf Weave-{{VERSION}}-linux.tar.gz -C ~/.local/
+~/.local/Weave-{{VERSION}}/Weave        # GUI mode
+```
+
+### What Gets Installed
+
+1. **Weave GUI Application** - GTK4-based installer and project creator
+2. **Weave CLI Tool** - Command-line project creation
+3. **Project Templates** - CMakeLists.txt, source files, VS Code configuration
+4. **Dependency Installer** - Automated setup for all required libraries
+
+### Supported Distributions
+
+- Arch Linux (pacman)
+- Fedora (dnf)
+- Ubuntu/Debian (apt)
+- openSUSE (zypper)
+
+Weave automatically detects your distribution and installs dependencies.
+
+### Linux Installation Guide
+
+**Platform:** Linux (x86_64)
+**Requirements:** Python 3.8+, GTK4, pip
 
 ### Installation
 
