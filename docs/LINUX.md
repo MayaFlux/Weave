@@ -366,4 +366,3 @@ code .
 
 - **[MayaFlux Framework](https://github.com/MayaFlux/MayaFlux)** - Learn the API
 - **[Back to README](../README.md)** - Overview and quick start
-- **[FAQ](FAQ.md)** - Cross-platform questions

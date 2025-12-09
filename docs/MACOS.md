@@ -265,4 +265,3 @@ A: Yes. Use whichever is more convenient for your workflow. Both create the same
 
 - **[MayaFlux Framework](https://github.com/MayaFlux/MayaFlux)** - Learn the API
 - **[Back to README](../README.md)** - Overview and quick start
-- **[FAQ](FAQ.md)** - Cross-platform questions

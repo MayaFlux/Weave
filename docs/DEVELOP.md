@@ -144,8 +144,7 @@ Weave/
     ├── MACOS.md
     ├── WINDOWS.md
     ├── LINUX.md
-    ├── FAQ.md
-    └── DEVELOPMENT.md (this file)
+    └── DEVELOP.md (this file)
 ```
 
 ---
