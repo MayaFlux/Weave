@@ -85,84 +85,171 @@ detect_distro() {
         echo "ubuntu"
     elif command -v zypper &>/dev/null; then
         echo "opensuse"
-    else echo "unknown"; fi
-}
-
-install_arch() {
-    echo "Installing for Arch Linux..."
-
-    show_gui_message "Arch Linux Detected" "Installing MayaFlux for Arch Linux.\n\nThis will install mayaflux-dev-bin from AUR."
-
-    # Dummy sudo call to trigger GUI password prompt and cache it for AUR helper
-    echo "Caching sudo password for AUR installation..."
-    run_with_sudo true
-
-    if command -v yay &>/dev/null; then
-        echo "Found yay, installing mayaflux-dev-bin from AUR..."
-        yay -S --noconfirm mayaflux-dev-bin
-    elif command -v paru &>/dev/null; then
-        echo "Found paru, installing mayaflux-dev-bin from AUR..."
-        paru -S --noconfirm mayaflux-dev-bin
     else
-        echo "No AUR helper found. Building mayaflux-dev-bin from AUR manually..."
-        BUILD_DIR=$(mktemp -d)
-        cd "$BUILD_DIR"
-        git clone https://aur.archlinux.org/mayaflux-dev-bin.git
-        cd mayaflux-dev-bin
-        makepkg -si --noconfirm
-        cd /
-        rm -rf "$BUILD_DIR"
+        echo "unknown"
     fi
 }
 
-install_fedora() {
-    echo "Installing for Fedora..."
-    run_with_sudo dnf install -y \
-        @development-tools llvm llvm-devel llvm-libs clang clang-devel cmake pkgconfig \
-        rtaudio-devel glfw-devel glm-devel eigen3-devel \
-        spirv-headers-devel spirv-tools vulkan-headers vulkan-loader vulkan-loader-devel vulkan-tools \
-        vulkan-validation-layers ffmpeg-free-devel stb-devel magic_enum-devel tbb-devel glslc libshaderc-devel
+install_via_package_manager() {
+    # This function handles distros where MayaFlux is available via native package managers
+    # Currently: Arch Linux (AUR) and Fedora (COPR)
+
+    local distro="$1"
+
+    case "$distro" in
+    arch)
+        echo "Installing for Arch Linux..."
+        show_gui_message "Arch Linux Detected" "Installing MayaFlux for Arch Linux.\n\nThis will install mayaflux-dev-bin from AUR."
+
+        # Dummy sudo call to trigger GUI password prompt and cache it for AUR helper
+        echo "Caching sudo password for AUR installation..."
+        run_with_sudo true
+
+        if command -v yay &>/dev/null; then
+            echo "Found yay, installing mayaflux-dev-bin from AUR..."
+            yay -S --noconfirm mayaflux-dev-bin
+        elif command -v paru &>/dev/null; then
+            echo "Found paru, installing mayaflux-dev-bin from AUR..."
+            paru -S --noconfirm mayaflux-dev-bin
+        else
+            echo "No AUR helper found. Building mayaflux-dev-bin from AUR manually..."
+            BUILD_DIR=$(mktemp -d)
+            cd "$BUILD_DIR"
+            git clone https://aur.archlinux.org/mayaflux-dev-bin.git
+            cd mayaflux-dev-bin
+            makepkg -si --noconfirm
+            cd /
+            rm -rf "$BUILD_DIR"
+        fi
+        ;;
+
+    fedora)
+        echo "Installing for Fedora..."
+        show_gui_message "Fedora Detected" "Installing MayaFlux for Fedora.\n\nThis will enable the COPR repository and install mayaflux-dev."
+
+        echo "Enabling COPR repository..."
+        run_with_sudo dnf copr enable -y ranjithshegde/mayaflux-dev
+
+        echo "Installing mayaflux-dev..."
+        run_with_sudo dnf install -y mayaflux-dev
+        ;;
+
+    *)
+        echo "ERROR: Package manager installation requested for unsupported distro: $distro"
+        return 1
+        ;;
+    esac
+
+    return 0
 }
 
-install_ubuntu() {
-    echo "Installing for Ubuntu/Debian..."
-    run_with_sudo apt-get update
-    run_with_sudo apt-get install -y \
-        build-essential cmake git pkg-config llvm llvm-dev clang libclang-dev \
-        librtaudio-dev libglfw3-dev libglm-dev libeigen3-dev \
-        libvulkan-dev vulkan-tools spirv-tools \
-        ffmpeg libavcodec-dev libavformat-dev libavutil-dev libswscale-dev \
-        libstb-dev libmagicenum-dev libtbb-dev glslc libhaderc-dev
+install_manual_deps() {
+    # This function installs dependencies manually for distros without native MayaFlux packages
+    # Used for: Ubuntu/Debian, openSUSE, and other unsupported distros
+
+    local distro="$1"
+
+    case "$distro" in
+    ubuntu)
+        echo "Installing dependencies for Ubuntu/Debian..."
+        run_with_sudo apt-get update
+        run_with_sudo apt-get install -y \
+            g++ gcc \
+            clang llvm llvm-dev libclang-dev \
+            cmake ninja-build pkg-config git \
+            librtaudio-dev \
+            libglfw3-dev \
+            libglm-dev \
+            libeigen3-dev \
+            spirv-headers spirv-tools \
+            libvulkan-dev vulkan-headers vulkan-tools vulkan-validationlayers \
+            libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libavdevice-dev \
+            libstb-dev \
+            libmagicenum-dev \
+            libtbb-dev \
+            libgtest-dev \
+            libshaderc-dev glslc \
+            libwayland-dev
+        ;;
+
+    opensuse)
+        echo "Installing dependencies for openSUSE..."
+        run_with_sudo zypper install -y \
+            gcc-c++ gcc \
+            clang llvm llvm-devel clang-devel \
+            cmake ninja pkg-config git \
+            rtaudio-devel \
+            glfw-devel \
+            glm-devel \
+            eigen3-devel \
+            spirv-headers spirv-tools \
+            vulkan-headers vulkan-loader vulkan-loader-devel vulkan-tools vulkan-validationlayers \
+            ffmpeg-4-libavcodec-devel ffmpeg-4-libavformat-devel ffmpeg-4-libavutil-devel \
+            ffmpeg-4-libswscale-devel ffmpeg-4-libavdevice-devel \
+            stb-devel \
+            magic_enum-devel \
+            tbb-devel \
+            gtest \
+            shaderc-devel \
+            wayland-devel
+        ;;
+
+    *)
+        echo "WARNING: Unsupported distribution: $distro"
+        echo "MayaFlux installation may require manual dependency setup."
+        show_gui_message "Unsupported Distribution" "Sorry, Weave Installer doesn't fully support $distro yet.\n\nPlease check our documentation for manual installation instructions."
+        return 1
+        ;;
+    esac
+
+    return 0
 }
 
-install_opensuse() {
-    echo "Installing for openSUSE..."
-    run_with_sudo zypper install -y \
-        gcc gcc-c++ cmake git pkg-config llvm-devel clang \
-        rtaudio-devel glfw-devel glm-devel eigen3-devel \
-        vulkan-devel vulkan-tools spirv-tools \
-        ffmpeg-4-libavcodec-devel ffmpeg-4-libavformat-devel ffmpeg-4-libavutil-devel ffmpeg-4-libswscale-devel
-}
+# ============================================================================
+# MAIN EXECUTION
+# ============================================================================
 
 show_sudo_warning
 
 DISTRO=$(detect_distro)
 
-show_gui_message "Distribution Detected" "Detected: $DISTRO\n\nProceeding with installation."
+echo "Detected distribution: $DISTRO"
 
 case "$DISTRO" in
-arch) install_arch ;;
-fedora) install_fedora ;;
-ubuntu) install_ubuntu ;;
-opensuse) install_opensuse ;;
-*)
-    echo "Unsupported distro: $DISTRO"
-    show_gui_message "Unsupported Distribution" "Sorry, Weave Installer doesn't support $DISTRO yet.\n\nPlease check our documentation for manual installation instructions."
+arch | fedora)
+    # These distros have native MayaFlux packages - use package manager
+    show_gui_message "Distribution Detected" "Detected: $DISTRO\n\nMayaFlux will be installed via package manager."
+
+    if install_via_package_manager "$DISTRO"; then
+        echo "✓ MayaFlux and dependencies installed successfully"
+        show_gui_message "Installation Complete" "Weave installation complete! 🎉\n\nNext steps:\n1. Restart your terminal or run: source ~/.bashrc (or ~/.zshrc)\n2. Create a project: weave new MyProject ~/Projects/\n3. Build and run your project"
+    else
+        echo "✗ Installation failed"
+        exit 1
+    fi
+    ;;
+
+ubuntu | opensuse)
+    # These distros don't have native MayaFlux packages - install deps manually
+    show_gui_message "Distribution Detected" "Detected: $DISTRO\n\nInstalling dependencies manually.\n\nYou will need to download MayaFlux separately."
+
+    if install_manual_deps "$DISTRO"; then
+        echo "✓ Dependencies installed successfully"
+        echo ""
+        echo "NOTE: MayaFlux framework must be downloaded separately."
+        echo "The installer will handle this in the next step."
+        show_gui_message "Dependencies Installed" "Development dependencies installed.\n\nMayaFlux framework will be downloaded in the next step."
+    else
+        echo "✗ Dependency installation failed"
+        exit 1
+    fi
+    ;;
+
+unknown)
+    echo "ERROR: Could not detect Linux distribution"
+    show_gui_message "Unknown Distribution" "Could not detect your Linux distribution.\n\nPlease install dependencies manually."
     exit 1
     ;;
 esac
 
 unset SUDO_PASSWORD
-
-echo "✓ Dependencies installed"
-show_gui_message "Installation Complete" "Weave installation complete! 🎉\n\nNext steps:\n1. Restart your terminal or run: source ~/.bashrc (or ~/.zshrc)\n2. Create a project: weave new MyProject ~/Projects/\n3. Build and run your project"

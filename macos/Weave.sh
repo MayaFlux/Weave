@@ -8,8 +8,24 @@ set -euo pipefail
 # CONFIGURATION
 # ============================================================================
 
-MAYAFLUX_ROOT="${MAYAFLUX_ROOT:-/Library/MayaFlux}"
-TEMPLATES_DIR="$MAYAFLUX_ROOT/share/weave/templates"
+BREW_CMD=""
+for brew_path in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+    if [ -f "$brew_path" ] && [ -x "$brew_path" ]; then
+        BREW_CMD="$brew_path"
+        break
+    fi
+done
+
+if [ -z "${MAYAFLUX_ROOT:-}" ]; then
+    if [ -n "$BREW_CMD" ]; then
+        MAYAFLUX_ROOT=$("$BREW_CMD" --prefix mayaflux-dev)
+    else
+        echo "[Weave ERROR] MAYAFLUX_ROOT not set and Homebrew not found. Please set MAYAFLUX_ROOT environment variable to your MayaFlux installation location."
+        exit 1
+    fi
+fi
+WEAVE_ROOT="/Library/Weave"
+TEMPLATES_DIR="$WEAVE_ROOT/templates"
 
 # ============================================================================
 # UTILITIES
@@ -34,7 +50,7 @@ Options:
 
 Environment Variables:
   MAYAFLUX_ROOT  Override MayaFlux installation location
-                 (default: ~/MayaFlux)
+                 (default: determined via Homebrew)
 EOF
     exit 0
 }
@@ -107,7 +123,6 @@ mkdir -p "$PROJECT_DIR/src"
 
 MAYAFLUX_CMAKE_PATH="$MAYAFLUX_ROOT/lib/cmake/MayaFlux"
 
-# Prepare Lila link block
 if [ "$WITH_LILA" = true ]; then
     LILA_LINK_BLOCK='if(TARGET MayaFlux::Lila)
     target_link_libraries(${PROJECT_NAME} PRIVATE MayaFlux::Lila)
@@ -115,24 +130,13 @@ if [ "$WITH_LILA" = true ]; then
 else()
     message(WARNING "Lila not found - live coding disabled")
 endif()'
-
-    LILA_DLL_COPY='if(EXISTS "$ENV{MAYAFLUX_ROOT}/bin/Lila.dll")
-            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "$ENV{MAYAFLUX_ROOT}/bin/Lila.dll"
-                    $<TARGET_FILE_DIR:${PROJECT_NAME}>
-            )
-        endif()'
 else
     LILA_LINK_BLOCK='# Lila live coding not enabled'
-    LILA_DLL_COPY='# Lila DLL copy not needed'
 fi
 
-# Read template and perform substitutions
 sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" "$TEMPLATES_DIR/CMakeLists.txt" |
     sed "s|@MAYAFLUX_CMAKE_PATH@|$MAYAFLUX_CMAKE_PATH|g" |
-    awk -v lila="$LILA_LINK_BLOCK" '{gsub(/@LILA_LINK_BLOCK@/, lila)}1' |
-    awk -v lila_dll="$LILA_DLL_COPY" '{gsub(/@LILA_DLL_COPY@/, lila_dll)}1' \
+    awk -v lila="$LILA_LINK_BLOCK" '{gsub(/@LILA_LINK_BLOCK@/, lila)}1' \
         >"$PROJECT_DIR/CMakeLists.txt"
 
 echo "✅ CMakeLists.txt generated"
