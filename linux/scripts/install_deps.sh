@@ -143,11 +143,6 @@ install_via_package_manager() {
         run_with_sudo dnf install -y mayaflux-dev
         ;;
 
-    *)
-        echo "ERROR: Package manager installation requested for unsupported distro: $distro"
-        return 1
-        ;;
-
     ubuntu)
         echo "Installing for Ubuntu..."
         show_gui_message "Ubuntu Detected" \
@@ -160,6 +155,11 @@ install_via_package_manager() {
 
         echo "Installing mayaflux-edge..."
         run_with_sudo apt-get install -y mayaflux-edge
+        ;;
+
+    *)
+        echo "ERROR: Package manager installation requested for unsupported distro: $distro"
+        return 1
         ;;
     esac
 
