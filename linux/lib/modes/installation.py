@@ -179,6 +179,11 @@ class DownloadStep:
                     "Install with: sudo dnf copr enable ranjithshegde/mayaflux-dev"
                 )
                 self._log("              sudo dnf install mayaflux-dev")
+            elif distro == "ubuntu":
+                self._log("Install with:")
+                self._log("  sudo add-apt-repository ppa:mayaflux/mayaflux-dev")
+                self._log("  sudo apt update")
+                self._log("  sudo apt install mayaflux-edge")
 
             self._log("")
             self._log("Skipping binary download step.")
@@ -289,7 +294,7 @@ class DownloadStep:
 
     def _has_package_manager_support(self, distro: str) -> bool:
         """Check if the distro has native MayaFlux package support"""
-        return distro in ["arch", "fedora"]
+        return distro in ["arch", "fedora", "ubuntu"]
 
     async def _fetch_release(self) -> Optional[Dict]:
         """Fetch latest release from GitHub API"""
@@ -544,9 +549,38 @@ class EnvironmentStep:
             container.remove(container.get_first_child())
         container.append(box)
 
+    def _detect_distro(self) -> str:
+        try:
+            with open("/etc/os-release") as f:
+                content = f.read().lower()
+                if "id=arch" in content or "id_like=arch" in content:
+                    return "arch"
+                elif "id=fedora" in content or "id_like=fedora" in content:
+                    return "fedora"
+                elif "id=ubuntu" in content or "id=debian" in content:
+                    return "ubuntu"
+        except FileNotFoundError:
+            pass
+
+        return "unknown"
+
     async def execute(self):
+        distro = self._detect_distro()
+
+        if distro in ("arch", "fedora", "ubuntu"):
+            self._log(f"{distro.title()} detected")
+            self._log("Environment is managed system-wide.")
+            self._log("Using /etc/profile.d/mayaflux.sh")
+            self._log("")
+            self._log("✓ No user environment changes required")
+            self._log("")
+            self._log("Restart your terminal or log out/in to apply changes.")
+            return True
+
+        # Fallback: user-managed install
         root = Path.home() / "MayaFlux"
 
+        self._log("Configuring user environment (~/.bashrc, ~/.zshrc, ~/.profile)")
         self._log("Setting MAYAFLUX_ROOT...")
         self._set_env("MAYAFLUX_ROOT", str(root))
 

@@ -90,6 +90,14 @@ detect_distro() {
     fi
 }
 
+ensure_add_apt_repository() {
+    if ! command -v add-apt-repository >/dev/null 2>&1; then
+        echo "add-apt-repository not found. Installing software-properties-common..."
+        run_with_sudo apt-get update
+        run_with_sudo apt-get install -y software-properties-common
+    fi
+}
+
 install_via_package_manager() {
     # This function handles distros where MayaFlux is available via native package managers
     # Currently: Arch Linux (AUR) and Fedora (COPR)
@@ -128,6 +136,7 @@ install_via_package_manager() {
         show_gui_message "Fedora Detected" "Installing MayaFlux for Fedora.\n\nThis will enable the COPR repository and install mayaflux-dev."
 
         echo "Enabling COPR repository..."
+        run_with_sudo dnf copr enable -y ranjithshegde/spirv-cross
         run_with_sudo dnf copr enable -y ranjithshegde/mayaflux-dev
 
         echo "Installing mayaflux-dev..."
@@ -137,6 +146,20 @@ install_via_package_manager() {
     *)
         echo "ERROR: Package manager installation requested for unsupported distro: $distro"
         return 1
+        ;;
+
+    ubuntu)
+        echo "Installing for Ubuntu..."
+        show_gui_message "Ubuntu Detected" \
+            "Installing MayaFlux for Ubuntu.\n\nThis will enable the Launchpad PPA and install mayaflux-dev."
+
+        echo "Enabling MayaFlux PPA..."
+        ensure_add_apt_repository
+        run_with_sudo add-apt-repository -y ppa:mayaflux/mayaflux-dev
+        run_with_sudo apt-get update
+
+        echo "Installing mayaflux-edge..."
+        run_with_sudo apt-get install -y mayaflux-edge
         ;;
     esac
 
@@ -150,28 +173,6 @@ install_manual_deps() {
     local distro="$1"
 
     case "$distro" in
-    ubuntu)
-        echo "Installing dependencies for Ubuntu/Debian..."
-        run_with_sudo apt-get update
-        run_with_sudo apt-get install -y \
-            g++ gcc \
-            clang llvm llvm-dev libclang-dev \
-            cmake ninja-build pkg-config git \
-            librtaudio-dev \
-            libglfw3-dev \
-            libglm-dev \
-            libeigen3-dev \
-            spirv-headers spirv-tools \
-            libvulkan-dev vulkan-headers vulkan-tools vulkan-validationlayers \
-            libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libavdevice-dev \
-            libstb-dev \
-            libmagicenum-dev \
-            libtbb-dev \
-            libgtest-dev \
-            libshaderc-dev glslc \
-            libwayland-dev
-        ;;
-
     opensuse)
         echo "Installing dependencies for openSUSE..."
         run_with_sudo zypper install -y \
@@ -216,7 +217,7 @@ DISTRO=$(detect_distro)
 echo "Detected distribution: $DISTRO"
 
 case "$DISTRO" in
-arch | fedora)
+arch | fedora | ubuntu)
     # These distros have native MayaFlux packages - use package manager
     show_gui_message "Distribution Detected" "Detected: $DISTRO\n\nMayaFlux will be installed via package manager."
 
@@ -229,7 +230,7 @@ arch | fedora)
     fi
     ;;
 
-ubuntu | opensuse)
+opensuse)
     # These distros don't have native MayaFlux packages - install deps manually
     show_gui_message "Distribution Detected" "Detected: $DISTRO\n\nInstalling dependencies manually.\n\nYou will need to download MayaFlux separately."
 
