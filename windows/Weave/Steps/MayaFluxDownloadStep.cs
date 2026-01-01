@@ -17,10 +17,17 @@ namespace Weave.UI.Pages;
 public class MayaFluxDownloadStep : IInstallationStep
 {
     private Logger logger = new();
+    private ReleaseType releaseType;
     private bool downloadSuccess = false;
     private TextBox? logBox;
     private ProgressBar? progressBar;
     private Button? nextButton;
+
+    public MayaFluxDownloadStep(ReleaseType releaseType)
+    {
+        this.releaseType = releaseType;
+        System.Diagnostics.Debug.WriteLine($"[DEBUG] MayaFluxDownloadStep constructor - releaseType = {releaseType}");
+    }
 
     public void BuildUI(
         LayoutManager layout,
@@ -50,7 +57,7 @@ public class MayaFluxDownloadStep : IInstallationStep
     {
         try
         {
-            await LogAsync("=== MayaFlux Download ===");
+            await LogAsync($"=== MayaFlux Download ({(releaseType == ReleaseType.Stable ? "Stable" : "Development")}) ===");
 
             if (FileOperations.VerifyInstallation(config.MayaFluxRoot, logger))
             {
@@ -79,22 +86,52 @@ public class MayaFluxDownloadStep : IInstallationStep
             {
                 client.DefaultRequestHeaders.Add("User-Agent", "PowerShell/7.0");
 
-                var response = await client.GetAsync("https://api.github.com/repos/MayaFlux/MayaFlux/releases");
+                string apiUrl = releaseType == ReleaseType.Stable
+                    ? "https://api.github.com/repos/MayaFlux/MayaFlux/releases/latest"
+                    : "https://api.github.com/repos/MayaFlux/MayaFlux/releases";
+
+                var response = await client.GetAsync(apiUrl);
                 response.EnsureSuccessStatusCode();
 
                 var json = await response.Content.ReadAsStringAsync();
                 using (var doc = JsonDocument.Parse(json))
                 {
-                    var root = doc.RootElement;
+                    JsonElement release;
 
-                    if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() == 0)
+                    if (releaseType == ReleaseType.Stable)
                     {
-                        throw new Exception("No releases found");
+                        release = doc.RootElement;
+                    }
+                    else
+                    {
+                        var root = doc.RootElement;
+
+                        if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() == 0)
+                        {
+                            throw new Exception("No releases found");
+                        }
+
+                        JsonElement? devRelease = null;
+                        foreach (var rel in root.EnumerateArray())
+                        {
+                            var tagName = rel.GetProperty("tag_name").GetString();
+                            if (tagName != null && tagName.Contains("-dev"))
+                            {
+                                devRelease = rel;
+                                await LogAsync($"[DEBUG] Found dev release with tag: {tagName}");
+                                break;
+                            }
+                        }
+
+                        if (devRelease == null)
+                        {
+                            throw new Exception("No development release found (no tags containing '-dev')");
+                        }
+
+                        release = devRelease.Value;
                     }
 
-                    var release = root[0];
                     var tag = release.GetProperty("tag_name").GetString();
-
                     await LogAsync($"Tag: {tag}");
 
                     var assets = release.GetProperty("assets");
@@ -103,10 +140,27 @@ public class MayaFluxDownloadStep : IInstallationStep
                     foreach (var asset in assets.EnumerateArray())
                     {
                         var name = asset.GetProperty("name").GetString();
-                        if (name != null && name.EndsWith("windows-x64.7z"))
+                        if (name == null) continue;
+
+                        if (!name.EndsWith("windows-x64.7z")) continue;
+
+                        if (releaseType == ReleaseType.Development)
                         {
-                            targetAsset = asset;
-                            break;
+                            if (name.Contains("-dev-"))
+                            {
+                                targetAsset = asset;
+                                await LogAsync($"[DEBUG] Matched DEV asset: {name}");
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            if (!name.Contains("-dev-"))
+                            {
+                                targetAsset = asset;
+                                await LogAsync($"[DEBUG] Matched STABLE asset: {name}");
+                                break;
+                            }
                         }
                     }
 
@@ -117,7 +171,12 @@ public class MayaFluxDownloadStep : IInstallationStep
                         {
                             assetNames.Add(asset.GetProperty("name").GetString() ?? "");
                         }
-                        throw new Exception($"No Windows .7z asset found. Available: {string.Join(", ", assetNames)}");
+                        
+                        string expected = releaseType == ReleaseType.Development 
+                            ? "asset containing '-dev-windows-x64.7z'" 
+                            : "asset matching 'windows-x64.7z' (without -dev)";
+                        
+                        throw new Exception($"No matching Windows asset found. Expected: {expected}\nAvailable: {string.Join(", ", assetNames)}");
                     }
 
                     var assetName = targetAsset.Value.GetProperty("name").GetString();

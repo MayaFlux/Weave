@@ -11,10 +11,16 @@ namespace Weave.Modes;
 public class InstallationMode : IWeaveMode
 {
     private InstallationConfig config = new();
+    private ReleaseType releaseType;
     private Panel? containerPanel;
     private LayoutManager? layoutManager;
     private int currentStep = 0;
     private IInstallationStep[] steps = Array.Empty<IInstallationStep>();
+
+    public InstallationMode(ReleaseType releaseType)
+    {
+        this.releaseType = releaseType;
+    }
 
     public void Initialize(Panel container)
     {
@@ -27,7 +33,7 @@ public class InstallationMode : IWeaveMode
         steps = new IInstallationStep[]
         {
             new SystemCheckStep(),
-            new MayaFluxDownloadStep(),
+            new MayaFluxDownloadStep(releaseType),
             new DependenciesStep(),
             new EnvironmentSetupStep(),
             new TemplatesInstallStep(),
