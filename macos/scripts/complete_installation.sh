@@ -51,8 +51,21 @@ log "✅ Homebrew ready"
 
 #----- Install MayaFlux -----
 log "➤ Installing MayaFlux via Homebrew..."
+
+RELEASE_TYPE=$(osascript -e 'choose from list {"Stable", "Development (latest)"} with prompt "Select MayaFlux release channel:" default items {"Stable"}' 2>/dev/null)
+
+if [[ "$RELEASE_TYPE" == "false" ]]; then
+    exit 0
+fi
+
+if [[ "$RELEASE_TYPE" == "Development (latest)" ]]; then
+    FORMULA="mayaflux-dev"
+else
+    FORMULA="mayaflux"
+fi
+
 "$BREW_CMD" tap mayaflux/mayaflux
-"$BREW_CMD" install mayaflux-dev
+"$BREW_CMD" install "$FORMULA"
 log "✅ MayaFlux installed"
 
 #----- Setup Environment -----
