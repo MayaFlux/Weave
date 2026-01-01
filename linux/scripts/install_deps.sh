@@ -2,6 +2,8 @@
 
 set -e
 
+RELEASE_TYPE="${1:-stable}"
+
 get_sudo_password() {
     local password=""
 
@@ -107,24 +109,30 @@ install_via_package_manager() {
     case "$distro" in
     arch)
         echo "Installing for Arch Linux..."
-        show_gui_message "Arch Linux Detected" "Installing MayaFlux for Arch Linux.\n\nThis will install mayaflux-dev-bin from AUR."
+        show_gui_message "Arch Linux Detected" "Installing MayaFlux for Arch Linux.\n\nThis will install $RELEASE_TYPE from the AUR."
 
         # Dummy sudo call to trigger GUI password prompt and cache it for AUR helper
         echo "Caching sudo password for AUR installation..."
         run_with_sudo true
 
+        if [[ "$RELEASE_TYPE" == "dev" ]]; then
+            PACKAGE="mayaflux-dev-bin"
+        else
+            PACKAGE="mayaflux"
+        fi
+
         if command -v yay &>/dev/null; then
             echo "Found yay, installing mayaflux-dev-bin from AUR..."
-            yay -S --noconfirm mayaflux-dev-bin
+            yay -S --noconfirm "$PACKAGE"
         elif command -v paru &>/dev/null; then
             echo "Found paru, installing mayaflux-dev-bin from AUR..."
-            paru -S --noconfirm mayaflux-dev-bin
+            paru -S --noconfirm "$PACKAGE"
         else
             echo "No AUR helper found. Building mayaflux-dev-bin from AUR manually..."
             BUILD_DIR=$(mktemp -d)
             cd "$BUILD_DIR"
-            git clone https://aur.archlinux.org/mayaflux-dev-bin.git
-            cd mayaflux-dev-bin
+            git clone https://aur.archlinux.org/$PACKAGE.git
+            cd "$PACKAGE"
             makepkg -si --noconfirm
             cd /
             rm -rf "$BUILD_DIR"
@@ -133,28 +141,42 @@ install_via_package_manager() {
 
     fedora)
         echo "Installing for Fedora..."
-        show_gui_message "Fedora Detected" "Installing MayaFlux for Fedora.\n\nThis will enable the COPR repository and install mayaflux-dev."
+        show_gui_message "Fedora Detected" "Installing MayaFlux for Fedora.\n\nThis will enable the COPR repository and install $RELEASE_TYPE"
+
+        if [[ "$RELEASE_TYPE" == "dev" ]]; then
+            PACKAGE="mayaflux-dev"
+        else
+            PACKAGE="mayaflux"
+        fi
 
         echo "Enabling COPR repository..."
         run_with_sudo dnf copr enable -y ranjithshegde/spirv-cross
-        run_with_sudo dnf copr enable -y ranjithshegde/mayaflux-dev
+        run_with_sudo dnf copr enable -y ranjithshegde/$PACKAGE
 
-        echo "Installing mayaflux-dev..."
-        run_with_sudo dnf install -y mayaflux-dev
+        echo "Installing mayaflux-$PACKAGE..."
+        run_with_sudo dnf install -y $PACKAGE
         ;;
 
     ubuntu)
         echo "Installing for Ubuntu..."
         show_gui_message "Ubuntu Detected" \
-            "Installing MayaFlux for Ubuntu.\n\nThis will enable the Launchpad PPA and install mayaflux-dev."
+            "Installing MayaFlux for Ubuntu.\n\nThis will enable the Launchpad PPA and install $RELEASE_TYPE."
+
+        if [[ "$RELEASE_TYPE" == "dev" ]]; then
+            PACKAGE="mayaflux-edge"
+            PPA="mayaflux-dev"
+        else
+            PACKAGE="mayaflux"
+            PPA="mayaflux"
+        fi
 
         echo "Enabling MayaFlux PPA..."
         ensure_add_apt_repository
-        run_with_sudo add-apt-repository -y ppa:mayaflux/mayaflux-dev
+        run_with_sudo add-apt-repository -y ppa:mayaflux/$PPA
         run_with_sudo apt-get update
 
-        echo "Installing mayaflux-edge..."
-        run_with_sudo apt-get install -y mayaflux-edge
+        echo "Installing $PACKAGE..."
+        run_with_sudo apt-get install -y $PACKAGE
         ;;
 
     *)

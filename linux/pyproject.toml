@@ -21,3 +21,10 @@ packages = ["lib", "lib.modes", "lib.ui"]
 
 [tool.setuptools.package-data]
 lib = ["ui/dark.css"]
+
+[tool.pyright]
+typeCheckingMode = "off"
+
+[tool.ruff]
+select = ["E", "F"]
+ignore = ["E402", "E501"]
