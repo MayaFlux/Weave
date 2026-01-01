@@ -21,7 +21,20 @@ static class Program
         }
 
         var mode = modeSelector.SelectedMode.Value;
-        var mainWindow = new MainWindow(mode);
+        ReleaseType releaseType = ReleaseType.Stable;
+
+        if (mode == WeaveMode.Installation)
+        {
+            var releaseSelector = new ReleaseTypeSelector();
+            if (releaseSelector.ShowDialog() != DialogResult.OK || releaseSelector.SelectedType == null)
+            {
+                Application.Exit();
+                return;
+            }
+            releaseType = releaseSelector.SelectedType.Value;
+        }
+
+        var mainWindow = new MainWindow(mode, releaseType);
         Application.Run(mainWindow);
     }
 }

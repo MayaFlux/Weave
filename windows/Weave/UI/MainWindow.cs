@@ -10,12 +10,14 @@ namespace Weave.UI;
 public partial class MainWindow : Form
 {
     private WeaveMode currentMode;
+    private ReleaseType releaseType;
     private IWeaveMode? modeHandler;
     private Panel? contentPanel;
 
-    public MainWindow(WeaveMode mode)
+    public MainWindow(WeaveMode mode, ReleaseType release = ReleaseType.Stable)
     {
         currentMode = mode;
+        releaseType = release;
         InitializeComponent();
         SetupUI();
         ShowMode();
@@ -23,7 +25,7 @@ public partial class MainWindow : Form
 
     private void InitializeComponent()
     {
-        // WinForms designer - can be empty if not using designer
+        // WinForms designer - empty for not using designer
     }
 
     private void SetupUI()
@@ -55,7 +57,7 @@ public partial class MainWindow : Form
         switch (currentMode)
         {
             case WeaveMode.Installation:
-                modeHandler = new InstallationMode();
+                modeHandler = new InstallationMode(releaseType);
                 break;
             case WeaveMode.ProjectCreation:
                 modeHandler = new ProjectCreationMode();

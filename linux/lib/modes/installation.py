@@ -56,6 +56,92 @@ class ConfirmationStep:
         return True
 
 
+class ReleaseTypeStep:
+    """Step 0.5: Choose Stable or Development release"""
+
+    def build_ui(self, container):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
+        box.set_margin_top(30)
+        box.set_margin_start(30)
+        box.set_margin_end(30)
+
+        title = Gtk.Label()
+        title.set_markup(
+            "<span size='18000' weight='bold'>Select Release Channel</span>"
+        )
+        title.set_halign(Gtk.Align.START)
+        box.append(title)
+
+        subtitle = Gtk.Label()
+        subtitle.set_markup("Choose which version of MayaFlux to install:")
+        subtitle.set_halign(Gtk.Align.START)
+        subtitle.add_css_class("dim-label")
+        box.append(subtitle)
+
+        stable_frame = Gtk.Frame()
+        stable_frame.set_margin_top(10)
+        stable_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        stable_box.set_margin_top(15)
+        stable_box.set_margin_bottom(15)
+        stable_box.set_margin_start(15)
+        stable_box.set_margin_end(15)
+
+        self.stable_radio = Gtk.CheckButton(label="Stable Release (Recommended)")
+        self.stable_radio.set_active(True)
+        stable_box.append(self.stable_radio)
+
+        stable_desc = Gtk.Label()
+        stable_desc.set_markup(
+            "<span size='small'>Production-ready release. Tested and stable.\nRecommended for general use and production environments.</span>"
+        )
+        stable_desc.set_halign(Gtk.Align.START)
+        stable_desc.set_margin_start(25)
+        stable_desc.add_css_class("dim-label")
+        stable_box.append(stable_desc)
+
+        stable_frame.set_child(stable_box)
+        box.append(stable_frame)
+
+        dev_frame = Gtk.Frame()
+        dev_frame.set_margin_top(10)
+        dev_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        dev_box.set_margin_top(15)
+        dev_box.set_margin_bottom(15)
+        dev_box.set_margin_start(15)
+        dev_box.set_margin_end(15)
+
+        self.dev_radio = Gtk.CheckButton(label="Development Release")
+        self.dev_radio.set_group(self.stable_radio)
+        dev_box.append(self.dev_radio)
+
+        dev_desc = Gtk.Label()
+        dev_desc.set_markup(
+            "<span size='small'>Latest features and improvements. May contain bugs.\nFor testing and early access to new functionality.</span>"
+        )
+        dev_desc.set_halign(Gtk.Align.START)
+        dev_desc.set_margin_start(25)
+        dev_desc.add_css_class("dim-label")
+        dev_box.append(dev_desc)
+
+        dev_frame.set_child(dev_box)
+        box.append(dev_frame)
+
+        spacer = Gtk.Box()
+        spacer.set_vexpand(True)
+        box.append(spacer)
+
+        while container.get_first_child():
+            container.remove(container.get_first_child())
+        container.append(box)
+
+    async def execute(self):
+        return True
+
+    def get_release_type(self):
+        release_type = "dev" if self.dev_radio.get_active() else "stable"
+        return release_type
+
+
 class SystemCheckStep:
     """Step 1: System verification"""
 
@@ -164,7 +250,6 @@ class DownloadStep:
     async def execute(self):
         distro = self._detect_distro()
 
-        # Check if this distro has native package management for MayaFlux
         if self._has_package_manager_support(distro):
             self._log(
                 f"✓ {distro.title()} detected - MayaFlux available via package manager"
@@ -192,14 +277,12 @@ class DownloadStep:
             )
             return True
 
-        # For other distros, check if already installed
         root = Path.home() / "MayaFlux"
         if (root / "lib" / "libMayaFluxLib.so").exists():
             self._log("✓ Already installed")
             self.status.set_text("✓ Already installed")
             return True
 
-        # Proceed with manual download for unsupported distros
         try:
             self._log("Fetching latest release...")
             release = await self._fetch_release()
@@ -284,7 +367,6 @@ class DownloadStep:
         except FileNotFoundError:
             pass
 
-        # Fallback checks
         if Path("/etc/arch-release").exists():
             return "arch"
         elif Path("/etc/fedora-release").exists():
@@ -298,35 +380,46 @@ class DownloadStep:
 
     async def _fetch_release(self) -> Optional[Dict]:
         """Fetch latest release from GitHub API"""
-        url = "https://api.github.com/repos/MayaFlux/MayaFlux/releases"
+
+        if hasattr(self, "release_type") and self.release_type == "dev":
+            url = "https://api.github.com/repos/MayaFlux/MayaFlux/releases"
+        else:
+            url = "https://api.github.com/repos/MayaFlux/MayaFlux/releases/latest"
         max_retries = 3
 
         for attempt in range(max_retries):
             try:
                 req = urllib.request.Request(url)
-                req.add_header("User-Agent", "Weave-Installer/1.0")
+                req.add_header("User-Agent", "Weave-Installer/0.2.0")
 
                 with urllib.request.urlopen(req, timeout=10) as response:
                     if response.status != 200:
                         self._log(f"✗ GitHub API returned status {response.status}")
                         return None
 
-                    releases = json.loads(response.read().decode())
+                    data = json.loads(response.read().decode())
 
-                    if not releases:
-                        self._log("✗ No releases found")
+                    if hasattr(self, "release_type") and self.release_type == "dev":
+                        if not isinstance(data, list) or len(data) == 0:
+                            self._log("✗ No releases found")
+                            return None
+
+                        for release in data:
+                            tag = release.get("tag_name", "")
+                            if "-dev" in tag:
+                                self._log(f"✓ Found dev release: {tag}")
+                                return {"tag": tag, "assets": release.get("assets", [])}
+
+                        self._log("✗ No dev releases found")
                         return None
+                    else:
+                        tag = data.get("tag_name")
+                        if not tag:
+                            self._log("✗ No tag_name in release")
+                            return None
 
-                    release = releases[0]
-                    tag = release.get("tag_name")
-
-                    if not tag:
-                        self._log("✗ No tag_name in release")
-                        return None
-
-                    self._log(f"✓ Found release: {tag}")
-
-                    return {"tag": tag, "assets": release.get("assets", [])}
+                        self._log(f"✓ Found release: {tag}")
+                        return {"tag": tag, "assets": data.get("assets", [])}
 
             except urllib.error.HTTPError as e:
                 if e.code == 403:
@@ -445,6 +538,7 @@ class DependenciesStep:
 
     def __init__(self, script_dir):
         self.script_dir = script_dir
+        self.release_type = "stable"
 
     def build_ui(self, container):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15)
@@ -488,9 +582,11 @@ class DependenciesStep:
         os.chmod(script, 0o755)
 
         try:
-            self._log(f"Running: {script}")
+            self._log(f"[DEBUG] self.release_type = {self.release_type}")
+            self._log(f"Running: {script} (release: {self.release_type})")
             process = await asyncio.create_subprocess_exec(
                 str(script),
+                self.release_type,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
             )
@@ -577,7 +673,6 @@ class EnvironmentStep:
             self._log("Restart your terminal or log out/in to apply changes.")
             return True
 
-        # Fallback: user-managed install
         root = Path.home() / "MayaFlux"
 
         self._log("Configuring user environment (~/.bashrc, ~/.zshrc, ~/.profile)")
@@ -677,6 +772,7 @@ class InstallationMode(Gtk.ApplicationWindow):
 
         self.steps = [
             ConfirmationStep(),
+            ReleaseTypeStep(),
             SystemCheckStep(),
             DownloadStep(),
             DependenciesStep(script_dir),
@@ -752,6 +848,14 @@ class InstallationMode(Gtk.ApplicationWindow):
 
     def _on_next(self, btn):
         if self.current < len(self.steps) - 1:
+            if self.current == 1:
+                step = self.steps[1]
+
+                if hasattr(step, "get_release_type"):
+                    self.release_type = step.get_release_type()
+                    self.steps[3].release_type = self.release_type
+                    self.steps[4].release_type = self.release_type
+
             self._show_step(self.current + 1)
         else:
             self.close()
