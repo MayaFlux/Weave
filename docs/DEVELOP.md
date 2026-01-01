@@ -24,8 +24,8 @@ For developers contributing to Weave itself.
 git clone https://github.com/MayaFlux/Weave.git
 cd Weave
 
-./macos/scripts/create_pkg.sh 0.1.3
-# Output: build/macos/Weave-0.1.3.pkg
+./macos/scripts/create_pkg.sh 0.2.0
+# Output: build/macos/Weave-0.2.0.pkg
 ```
 
 The `.pkg` installer uses a composite package design with three components:
@@ -47,8 +47,8 @@ The `.pkg` installer uses a composite package design with three components:
 git clone https://github.com/MayaFlux/Weave.git
 cd Weave
 
-.\windows\scripts\create_installer.ps1 -Version 0.1.3
-# Output: build\windows\Weave-0.1.3.exe
+.\windows\scripts\create_installer.ps1 -Version 0.2.0
+# Output: build\windows\Weave-0.2.0.exe
 ```
 
 **Windows Architecture Notes:**
