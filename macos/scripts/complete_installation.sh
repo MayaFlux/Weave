@@ -70,7 +70,7 @@ log "✅ MayaFlux installed"
 
 #----- Setup Environment -----
 log "➤ Configuring environment..."
-MAYAFLUX_PREFIX=$("$BREW_CMD" --prefix mayaflux-dev)
+MAYAFLUX_PREFIX=$("$BREW_CMD" --prefix "$FORMULA")
 ZSHENV="${ZDOTDIR:-$HOME}/.zshenv"
 
 if ! grep -q "MAYAFLUX_ROOT" "$ZSHENV" 2>/dev/null; then
