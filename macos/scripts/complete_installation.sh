@@ -49,9 +49,13 @@ fi
 
 log "✅ Homebrew ready"
 
-#----- Install MayaFlux -----
-log "➤ Installing MayaFlux via Homebrew..."
+#----- Check for existing installations -----
+log "➤ Checking for existing MayaFlux installations..."
 
+MAYAFLUX_INSTALLED=$("$BREW_CMD" list --formula | grep -E '^mayaflux$' || true)
+MAYAFLUX_DEV_INSTALLED=$("$BREW_CMD" list --formula | grep -E '^mayaflux-dev$' || true)
+
+#----- Release Type Selection -----
 RELEASE_TYPE=$(osascript -e 'choose from list {"Stable", "Development (latest)"} with prompt "Select MayaFlux release channel:" default items {"Stable"}' 2>/dev/null)
 
 if [[ "$RELEASE_TYPE" == "false" ]]; then
@@ -60,9 +64,43 @@ fi
 
 if [[ "$RELEASE_TYPE" == "Development (latest)" ]]; then
     FORMULA="mayaflux-dev"
+    CONFLICTING_FORMULA="mayaflux"
 else
     FORMULA="mayaflux"
+    CONFLICTING_FORMULA="mayaflux-dev"
 fi
+
+#----- Handle conflicts -----
+if [[ "$FORMULA" == "mayaflux" && -n "$MAYAFLUX_DEV_INSTALLED" ]]; then
+    log "⚠️  Warning: mayaflux-dev is currently installed"
+
+    CHOICE=$(osascript -e 'display dialog "You have mayaflux-dev installed, but selected the Stable release.\n\nBoth versions cannot coexist. What would you like to do?" buttons {"Exit", "Remove Dev & Install Stable"} default button "Exit" with title "Conflicting Installation" with icon caution' 2>/dev/null | grep -oP 'button returned:\K.*' || echo "Exit")
+
+    if [[ "$CHOICE" == "Remove Dev & Install Stable" ]]; then
+        log "Removing mayaflux-dev..."
+        "$BREW_CMD" uninstall mayaflux-dev
+        log "✅ mayaflux-dev removed"
+    else
+        log "Installation cancelled by user"
+        exit 0
+    fi
+elif [[ "$FORMULA" == "mayaflux-dev" && -n "$MAYAFLUX_INSTALLED" ]]; then
+    log "⚠️  Warning: mayaflux (stable) is currently installed"
+
+    CHOICE=$(osascript -e 'display dialog "You have mayaflux (stable) installed, but selected Development.\n\nBoth versions cannot coexist. What would you like to do?" buttons {"Exit", "Remove Stable & Install Dev"} default button "Exit" with title "Conflicting Installation" with icon caution' 2>/dev/null | grep -oP 'button returned:\K.*' || echo "Exit")
+
+    if [[ "$CHOICE" == "Remove Stable & Install Dev" ]]; then
+        log "Removing mayaflux..."
+        "$BREW_CMD" uninstall mayaflux
+        log "✅ mayaflux removed"
+    else
+        log "Installation cancelled by user"
+        exit 0
+    fi
+fi
+
+#----- Install MayaFlux -----
+log "➤ Installing MayaFlux via Homebrew..."
 
 "$BREW_CMD" tap mayaflux/mayaflux
 "$BREW_CMD" install "$FORMULA"
@@ -73,14 +111,48 @@ log "➤ Configuring environment..."
 MAYAFLUX_PREFIX=$("$BREW_CMD" --prefix "$FORMULA")
 ZSHENV="${ZDOTDIR:-$HOME}/.zshenv"
 
-if ! grep -q "MAYAFLUX_ROOT" "$ZSHENV" 2>/dev/null; then
-    cat >>"$ZSHENV" <<EOF
+# Remove any existing MayaFlux configuration
+if [ -f "$ZSHENV" ]; then
+    log "Cleaning up old MayaFlux configuration..."
+
+    TEMP_ZSHENV=$(mktemp)
+
+    IN_MAYAFLUX_BLOCK=false
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^#.*MayaFlux ]]; then
+            IN_MAYAFLUX_BLOCK=true
+            continue
+        fi
+
+        if [[ "$line" =~ source.*/(mayaflux|mayaflux-dev)/env\.sh ]]; then
+            continue
+        fi
+
+        if [[ "$line" =~ MAYAFLUX_ROOT|HOME/\.local/bin.*PATH ]] && [[ "$IN_MAYAFLUX_BLOCK" == true ]]; then
+            continue
+        fi
+
+        if [[ -z "$line" ]] && [[ "$IN_MAYAFLUX_BLOCK" == true ]]; then
+            IN_MAYAFLUX_BLOCK=false
+            continue
+        fi
+
+        if [[ "$IN_MAYAFLUX_BLOCK" == false ]]; then
+            echo "$line" >>"$TEMP_ZSHENV"
+        fi
+    done <"$ZSHENV"
+
+    mv "$TEMP_ZSHENV" "$ZSHENV"
+    log "✅ Cleaned old configuration"
+fi
+
+cat >>"$ZSHENV" <<EOF
 
 # MayaFlux (installed via Homebrew)
 source "$MAYAFLUX_PREFIX/env.sh"
 export PATH="\$HOME/.local/bin:\$PATH"
 EOF
-fi
 
 log "✅ Environment configured"
 
