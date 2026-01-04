@@ -268,12 +268,25 @@ public class EnvironmentSetupStep : IInstallationStep
     private async Task SetupFFmpeg()
     {
         await LogAsync("Configuring FFmpeg...");
-
         var ffmpegRoot = @"C:\Program Files\FFmpeg";
-
+        
         if (Directory.Exists(ffmpegRoot))
         {
             ProcessRunner.SetEnvironmentVariable("FFMPEG_ROOT", ffmpegRoot, logger);
+            
+            var ffmpegBin = Path.Combine(ffmpegRoot, "bin");
+            if (Directory.Exists(ffmpegBin))
+            {
+                if (ProcessRunner.AddToPath(ffmpegBin, logger))
+                {
+                    await LogAsync($"  [OK] FFmpeg bin added to PATH");
+                }
+                else
+                {
+                    await LogAsync($"  [WARN] Failed to add FFmpeg bin to PATH");
+                }
+            }
+            
             await LogAsync($"  [OK] FFmpeg: {ffmpegRoot}");
         }
         else
