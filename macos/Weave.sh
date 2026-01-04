@@ -134,9 +134,12 @@ else
     LILA_LINK_BLOCK='# Lila live coding not enabled'
 fi
 
+LILA_DLL_COPY='# Lila DLL copy not needed'
+
 sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" "$TEMPLATES_DIR/CMakeLists.txt" |
     sed "s|@MAYAFLUX_CMAKE_PATH@|$MAYAFLUX_CMAKE_PATH|g" |
-    awk -v lila="$LILA_LINK_BLOCK" '{gsub(/@LILA_LINK_BLOCK@/, lila)}1' \
+    awk -v lila="$LILA_LINK_BLOCK" '{gsub(/@LILA_LINK_BLOCK@/, lila)}1' |
+    awk -v lila_dll="$LILA_DLL_COPY" '{gsub(/@LILA_DLL_COPY@/, lila_dll)}1' \
         >"$PROJECT_DIR/CMakeLists.txt"
 
 echo "✅ CMakeLists.txt generated"
