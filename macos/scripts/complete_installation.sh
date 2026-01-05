@@ -89,8 +89,7 @@ fi
 if [[ "$FORMULA" == "mayaflux" && -n "$MAYAFLUX_DEV_INSTALLED" ]]; then
     log "⚠️  Warning: mayaflux-dev is currently installed"
 
-    CHOICE=$(osascript -e 'display dialog "You have mayaflux-dev installed, but selected the Stable release.\n\nBoth versions cannot coexist. What would you like to do?" buttons {"Exit", "Remove Dev & Install Stable"} default button "Exit" with title "Conflicting Installation" with icon caution' 2>/dev/null | grep -oP 'button returned:\K.*' || echo "Exit")
-
+    CHOICE=$(osascript -e 'display dialog "You have mayaflux-dev installed, but selected the Stable release.\n\nBoth versions cannot coexist. What would you like to do?" buttons {"Exit", "Remove Dev & Install Stable"} default button "Exit" with title "Conflicting Installation" with icon caution' 2>/dev/null | sed -n 's/.*button returned:\([^,]*\).*/\1/p' || echo "Exit")
     if [[ "$CHOICE" == "Remove Dev & Install Stable" ]]; then
         log "Removing mayaflux-dev..."
         "$BREW_CMD" uninstall mayaflux-dev || error "Failed to uninstall mayaflux-dev"
@@ -102,8 +101,7 @@ if [[ "$FORMULA" == "mayaflux" && -n "$MAYAFLUX_DEV_INSTALLED" ]]; then
 elif [[ "$FORMULA" == "mayaflux-dev" && -n "$MAYAFLUX_INSTALLED" ]]; then
     log "⚠️  Warning: mayaflux (stable) is currently installed"
 
-    CHOICE=$(osascript -e 'display dialog "You have mayaflux (stable) installed, but selected Development.\n\nBoth versions cannot coexist. What would you like to do?" buttons {"Exit", "Remove Stable & Install Dev"} default button "Exit" with title "Conflicting Installation" with icon caution' 2>/dev/null | grep -oP 'button returned:\K.*' || echo "Exit")
-
+    CHOICE=$(osascript -e 'display dialog "You have mayaflux (stable) installed, but selected Development.\n\nBoth versions cannot coexist. What would you like to do?" buttons {"Exit", "Remove Stable & Install Dev"} default button "Exit" with title "Conflicting Installation" with icon caution' 2>/dev/null | sed -n 's/.*button returned:\([^,]*\).*/\1/p' || echo "Exit")
     if [[ "$CHOICE" == "Remove Stable & Install Dev" ]]; then
         log "Removing mayaflux..."
         "$BREW_CMD" uninstall mayaflux || error "Failed to uninstall mayaflux"
