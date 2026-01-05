@@ -35,6 +35,15 @@ log ""
 
 osascript -e 'Tell application "System Events" to display dialog "Welcome to Weave Installer!\n\nThis will install MayaFlux via Homebrew and set up your environment.\n\nYou will be asked for your password once." buttons {"Cancel", "Continue"} default button "Continue" with title "Weave Installer" with icon note' 2>/dev/null || echo "Continuing..."
 
+#----- Setup Weave CLI -----
+log "➤ Installing Weave CLI..."
+WEAVE_BIN="$HOME/.local/bin"
+mkdir -p "$WEAVE_BIN" || error "Failed to create $WEAVE_BIN"
+rm -f "$WEAVE_BIN/weave" || error "Failed to remove old weave executable"
+cp "$WEAVE_LOCATION/project_creator.sh" "$WEAVE_BIN/weave" || error "Failed to copy project_creator.sh"
+chmod +x "$WEAVE_BIN/weave" || error "Failed to make weave executable"
+log "✅ Weave CLI installed"
+
 #----- Homebrew -----
 log "➤ Checking for Homebrew..."
 
@@ -161,15 +170,6 @@ export PATH="\$HOME/.local/bin:\$PATH"
 EOF
 
 log "✅ Environment configured"
-
-#----- Setup Weave CLI -----
-log "➤ Installing Weave CLI..."
-WEAVE_BIN="$HOME/.local/bin"
-mkdir -p "$WEAVE_BIN" || error "Failed to create $WEAVE_BIN"
-rm -f "$WEAVE_BIN/weave" || error "Failed to remove old weave executable"
-cp "$WEAVE_LOCATION/project_creator.sh" "$WEAVE_BIN/weave" || error "Failed to copy project_creator.sh"
-chmod +x "$WEAVE_BIN/weave" || error "Failed to make weave executable"
-log "✅ Weave CLI installed"
 
 #----- Done -----
 log ""
