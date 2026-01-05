@@ -12,8 +12,13 @@ log() {
 error() {
     echo "ERROR: $*"
     echo "ERROR: $*" >>"$LOG_FILE"
+
+    osascript -e "Tell application \"System Events\" to display dialog \"Installation failed:\n\n$*\n\nCheck log: $LOG_FILE\" buttons {\"OK\"} default button \"OK\" with title \"Weave Installer Error\" with icon stop" 2>/dev/null || echo "ERROR: $*"
+
     exit 1
 }
+
+trap 'error "Unexpected error occurred. See log for details."' ERR
 
 clear
 cat <<'BANNER'
@@ -43,7 +48,7 @@ done
 
 if [ -z "$BREW_CMD" ]; then
     log "Installing Homebrew..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || error "Failed to install Homebrew"
     BREW_CMD=$(/opt/homebrew/bin/brew --prefix)/bin/brew
 fi
 
@@ -59,6 +64,7 @@ MAYAFLUX_DEV_INSTALLED=$("$BREW_CMD" list --formula | grep -E '^mayaflux-dev$' |
 RELEASE_TYPE=$(osascript -e 'choose from list {"Stable", "Development (latest)"} with prompt "Select MayaFlux release channel:" default items {"Stable"}' 2>/dev/null)
 
 if [[ "$RELEASE_TYPE" == "false" ]]; then
+    log "Installation cancelled by user"
     exit 0
 fi
 
@@ -78,7 +84,7 @@ if [[ "$FORMULA" == "mayaflux" && -n "$MAYAFLUX_DEV_INSTALLED" ]]; then
 
     if [[ "$CHOICE" == "Remove Dev & Install Stable" ]]; then
         log "Removing mayaflux-dev..."
-        "$BREW_CMD" uninstall mayaflux-dev
+        "$BREW_CMD" uninstall mayaflux-dev || error "Failed to uninstall mayaflux-dev"
         log "✅ mayaflux-dev removed"
     else
         log "Installation cancelled by user"
@@ -91,7 +97,7 @@ elif [[ "$FORMULA" == "mayaflux-dev" && -n "$MAYAFLUX_INSTALLED" ]]; then
 
     if [[ "$CHOICE" == "Remove Stable & Install Dev" ]]; then
         log "Removing mayaflux..."
-        "$BREW_CMD" uninstall mayaflux
+        "$BREW_CMD" uninstall mayaflux || error "Failed to uninstall mayaflux"
         log "✅ mayaflux removed"
     else
         log "Installation cancelled by user"
@@ -102,8 +108,8 @@ fi
 #----- Install MayaFlux -----
 log "➤ Installing MayaFlux via Homebrew..."
 
-"$BREW_CMD" tap mayaflux/mayaflux
-"$BREW_CMD" install "$FORMULA"
+"$BREW_CMD" tap mayaflux/mayaflux || error "Failed to tap mayaflux/mayaflux"
+"$BREW_CMD" install "$FORMULA" || error "Failed to install $FORMULA"
 log "✅ MayaFlux installed"
 
 #----- Setup Environment -----
@@ -143,7 +149,7 @@ if [ -f "$ZSHENV" ]; then
         fi
     done <"$ZSHENV"
 
-    mv "$TEMP_ZSHENV" "$ZSHENV"
+    mv "$TEMP_ZSHENV" "$ZSHENV" || error "Failed to update $ZSHENV"
     log "✅ Cleaned old configuration"
 fi
 
@@ -159,9 +165,10 @@ log "✅ Environment configured"
 #----- Setup Weave CLI -----
 log "➤ Installing Weave CLI..."
 WEAVE_BIN="$HOME/.local/bin"
-mkdir -p "$WEAVE_BIN"
-cp "$WEAVE_LOCATION/project_creator.sh" "$WEAVE_BIN/weave"
-chmod +x "$WEAVE_BIN/weave"
+mkdir -p "$WEAVE_BIN" || error "Failed to create $WEAVE_BIN"
+rm -f "$WEAVE_BIN/weave" || error "Failed to remove old weave executable"
+cp "$WEAVE_LOCATION/project_creator.sh" "$WEAVE_BIN/weave" || error "Failed to copy project_creator.sh"
+chmod +x "$WEAVE_BIN/weave" || error "Failed to make weave executable"
 log "✅ Weave CLI installed"
 
 #----- Done -----
