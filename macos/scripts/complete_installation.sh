@@ -115,21 +115,26 @@ fi
 #----- Install MayaFlux -----
 log "➤ Installing MayaFlux via Homebrew..."
 
-"$BREW_CMD" tap mayaflux/mayaflux || error "Failed to tap mayaflux/mayaflux"
-"$BREW_CMD" install "$FORMULA" || error "Failed to install $FORMULA"
-log "✅ MayaFlux installed"
+"$BREW_CMD" tap mayaflux/mayaflux 2>/dev/null || true
+"$BREW_CMD" install "$FORMULA" 2>/dev/null || true
+log "✅ MayaFlux installation step completed"
 
-#----- Setup Environment -----
+#----- Verify MayaFlux was installed -----
+if ! "$BREW_CMD" list --formula | grep -q "^$FORMULA$"; then
+    error "MayaFlux ($FORMULA) installation failed"
+fi
+log "✅ MayaFlux verified"
+
+#----- Setup Environment (always happens at the end) -----
 log "➤ Configuring environment..."
 MAYAFLUX_PREFIX=$("$BREW_CMD" --prefix "$FORMULA")
 ZSHENV="${ZDOTDIR:-$HOME}/.zshenv"
 
-# Remove any existing MayaFlux configuration
+log "Cleaning up old MayaFlux configuration..."
+
+TEMP_ZSHENV=$(mktemp)
+
 if [ -f "$ZSHENV" ]; then
-    log "Cleaning up old MayaFlux configuration..."
-
-    TEMP_ZSHENV=$(mktemp)
-
     IN_MAYAFLUX_BLOCK=false
 
     while IFS= read -r line; do
@@ -155,10 +160,10 @@ if [ -f "$ZSHENV" ]; then
             echo "$line" >>"$TEMP_ZSHENV"
         fi
     done <"$ZSHENV"
-
-    mv "$TEMP_ZSHENV" "$ZSHENV" || error "Failed to update $ZSHENV"
-    log "✅ Cleaned old configuration"
 fi
+
+mv "$TEMP_ZSHENV" "$ZSHENV" || error "Failed to update $ZSHENV"
+log "✅ Cleaned old configuration"
 
 cat >>"$ZSHENV" <<EOF
 
