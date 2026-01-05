@@ -60,9 +60,16 @@
       "linux": {
         "command": "build/@PROJECT_NAME@"
       },
-      "group": "test",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
       "dependsOn": ["Build Project"],
-      "problemMatcher": []
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
     }
   ]
 }
