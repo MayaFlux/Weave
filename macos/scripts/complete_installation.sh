@@ -132,37 +132,17 @@ ZSHENV="${ZDOTDIR:-$HOME}/.zshenv"
 
 log "Cleaning up old MayaFlux configuration..."
 
-TEMP_ZSHENV=$(mktemp)
-
 if [ -f "$ZSHENV" ]; then
-    IN_MAYAFLUX_BLOCK=false
+    sed -i '' '/# MayaFlux/d' "$ZSHENV"
+    sed -i '' '/MAYAFLUX_ROOT/d' "$ZSHENV"
+    sed -i '' '/mayaflux_env\.sh/d' "$ZSHENV"
+    sed -i '' '/source.*mayaflux.*\/env\.sh/d' "$ZSHENV"
+    sed -i '' '/\.local\/bin.*\$PATH/d' "$ZSHENV"
 
-    while IFS= read -r line; do
-        if [[ "$line" =~ ^#.*MayaFlux ]]; then
-            IN_MAYAFLUX_BLOCK=true
-            continue
-        fi
-
-        if [[ "$line" =~ source.*/(mayaflux|mayaflux-dev)/env\.sh ]]; then
-            continue
-        fi
-
-        if [[ "$line" =~ MAYAFLUX_ROOT|HOME/\.local/bin.*PATH ]] && [[ "$IN_MAYAFLUX_BLOCK" == true ]]; then
-            continue
-        fi
-
-        if [[ -z "$line" ]] && [[ "$IN_MAYAFLUX_BLOCK" == true ]]; then
-            IN_MAYAFLUX_BLOCK=false
-            continue
-        fi
-
-        if [[ "$IN_MAYAFLUX_BLOCK" == false ]]; then
-            echo "$line" >>"$TEMP_ZSHENV"
-        fi
-    done <"$ZSHENV"
+    # Optional: Clean up trailing empty lines that might accumulate
+    sed -i '' '/./,$!d' "$ZSHENV"
 fi
 
-mv "$TEMP_ZSHENV" "$ZSHENV" || error "Failed to update $ZSHENV"
 log "✅ Cleaned old configuration"
 
 cat >>"$ZSHENV" <<EOF
