@@ -85,6 +85,14 @@ public class EnvironmentSetupStep : IInstallationStep
                 await LogAsync($"  [WARN] Failed to set CMAKE_PREFIX_PATH");
             }
 
+            var mayaFluxInclude = Path.Combine(config.MayaFluxRoot, "include");
+            ProcessRunner.AddIncludeDirectory(mayaFluxInclude, logger);
+            await LogAsync($"  [OK] Added to INCLUDE/CPATH: {mayaFluxInclude}");
+
+            var mayaFluxLib = Path.Combine(config.MayaFluxRoot, "lib");
+            ProcessRunner.AddLibraryDirectory(mayaFluxLib, logger);
+            await LogAsync($"  [OK] Added to LIB/LIBRARY_PATH: {mayaFluxLib}");
+
             await LogAsync("");
 
             // ========================================
@@ -206,13 +214,20 @@ public class EnvironmentSetupStep : IInstallationStep
 
         if (Directory.Exists(vulkanBase))
         {
-            var versionDirs = Directory.GetDirectories(vulkanBase);
+            var versionDirs = Directory.GetDirectories(vulkanBase).OrderByDescending(d => d).ToArray();
+
             if (versionDirs.Length > 0)
             {
                 var vulkanPath = versionDirs[0];
+                var includePath = Path.Combine(vulkanPath, "Include");
+
                 ProcessRunner.SetEnvironmentVariable("VULKAN_SDK", vulkanPath, logger);
                 ProcessRunner.SetEnvironmentVariable("VK_SDK_PATH", vulkanPath, logger);
+
+                ProcessRunner.AppendToEnvironmentVariable("CPATH", includePath, logger);
+
                 await LogAsync($"  [OK] Vulkan SDK: {vulkanPath}");
+                await LogAsync($"  [OK] Added to CPATH: {includePath}");
             }
             else
             {
@@ -234,6 +249,10 @@ public class EnvironmentSetupStep : IInstallationStep
         if (Directory.Exists(glfwRoot))
         {
             ProcessRunner.SetEnvironmentVariable("GLFW_ROOT", glfwRoot, logger);
+
+            var glfwInclude = Path.Combine(glfwRoot, "include");
+            ProcessRunner.AddIncludeDirectory(glfwInclude, logger);
+            await LogAsync($"  [OK] Added to INCLUDE/CPATH: {glfwInclude}");
 
             // Detect lib directory (lib-vc2022, lib-vc2019, etc.)
             string? glfwLibDir = null;
@@ -333,6 +352,7 @@ public class EnvironmentSetupStep : IInstallationStep
             if (Directory.Exists(path))
             {
                 ProcessRunner.SetEnvironmentVariable(envVar, path, logger);
+                ProcessRunner.AddIncludeDirectory(path, logger);
                 foundCount++;
             }
         }
