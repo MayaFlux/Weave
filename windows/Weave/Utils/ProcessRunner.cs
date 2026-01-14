@@ -107,4 +107,31 @@ public static class ProcessRunner
             return false;
         }
     }
+
+    public static void AppendToEnvironmentVariable(string name, string path, Logger logger)
+    {
+        var existing = Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.Machine) ?? "";
+
+        if (!existing.Split(';').Contains(path))
+        {
+            var newValue = string.IsNullOrEmpty(existing) ? path : $"{existing};{path}";
+            SetEnvironmentVariable(name, newValue, logger);
+        }
+    }
+
+    public static void AddIncludeDirectory(string path, Logger logger)
+    {
+        if (Directory.Exists(path))
+        {
+            AppendToEnvironmentVariable("CPATH", path, logger);
+        }
+    }
+
+    public static void AddLibraryDirectory(string path, Logger logger)
+    {
+        if (Directory.Exists(path))
+        {
+            AppendToEnvironmentVariable("LIBRARY_PATH", path, logger);
+        }
+    }
 }
