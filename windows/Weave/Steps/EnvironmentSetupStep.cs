@@ -102,18 +102,9 @@ public class EnvironmentSetupStep : IInstallationStep
             await LogAsync("");
 
             await SetupDiaSDK();
-
             await SetupLLVM();
-
             await SetupVulkan();
-
-            await SetupGLFW();
-
-            await SetupFFmpeg();
-
-            await SetupRtAudio();
-
-            await SetupHeaderLibraries();
+            await SetupVcpkg();
 
             await LogAsync("");
             await LogAsync("=== Environment Setup Complete ===");
@@ -191,18 +182,19 @@ public class EnvironmentSetupStep : IInstallationStep
     {
         await LogAsync("Configuring LLVM/Clang...");
 
-        var llvmRoot = @"C:\Program Files\LLVM_Libs";
+        var llvmVersion = "21.1.8";
+        var llvmRoot = $@"C:\Program Files\LLVM_Libs\{llvmVersion}";
 
         if (Directory.Exists(llvmRoot))
         {
             ProcessRunner.SetEnvironmentVariable("LLVM_ROOT", llvmRoot, logger);
             ProcessRunner.SetEnvironmentVariable("LLVM_DIR", Path.Combine(llvmRoot, "lib", "cmake", "llvm"), logger);
             ProcessRunner.SetEnvironmentVariable("Clang_DIR", Path.Combine(llvmRoot, "lib", "cmake", "clang"), logger);
-            await LogAsync($"  [OK] LLVM environment configured");
+            await LogAsync($"  [OK] LLVM v{llvmVersion}: {llvmRoot}");
         }
         else
         {
-            await LogAsync($"  [WARN] LLVM not found at {llvmRoot}");
+            await LogAsync($"  [WARN] LLVM v{llvmVersion} not found at {llvmRoot}");
         }
     }
 
@@ -240,128 +232,35 @@ public class EnvironmentSetupStep : IInstallationStep
         }
     }
 
-    private async Task SetupGLFW()
+    private async Task SetupVcpkg()
     {
-        await LogAsync("Configuring GLFW...");
+        await LogAsync("Configuring vcpkg...");
 
-        var glfwRoot = @"C:\Program Files\GLFW";
-
-        if (Directory.Exists(glfwRoot))
+        var vcpkgRoot = Environment.GetEnvironmentVariable("VCPKG_ROOT", EnvironmentVariableTarget.Machine);
+        if (string.IsNullOrEmpty(vcpkgRoot))
         {
-            ProcessRunner.SetEnvironmentVariable("GLFW_ROOT", glfwRoot, logger);
+            vcpkgRoot = @"C:\vcpkg";
+        }
 
-            var glfwInclude = Path.Combine(glfwRoot, "include");
-            ProcessRunner.AddIncludeDirectory(glfwInclude, logger);
-            await LogAsync($"  [OK] Added to INCLUDE/CPATH: {glfwInclude}");
-
-            // Detect lib directory (lib-vc2022, lib-vc2019, etc.)
-            string? glfwLibDir = null;
-            foreach (var candidate in new[] { "lib-vc2022", "lib-vc2019", "lib-vc2017", "lib-vc2015" })
+        if (Directory.Exists(vcpkgRoot))
+        {
+            await LogAsync($"  [OK] vcpkg root: {vcpkgRoot}");
+            
+            var installedDir = Path.Combine(vcpkgRoot, "installed", "x64-windows");
+            if (Directory.Exists(installedDir))
             {
-                var testPath = Path.Combine(glfwRoot, candidate);
-                var dllLib = Path.Combine(testPath, "glfw3dll.lib");
-
-                if (File.Exists(dllLib))
-                {
-                    glfwLibDir = testPath;
-                    break;
-                }
-            }
-
-            if (glfwLibDir != null)
-            {
-                ProcessRunner.SetEnvironmentVariable("GLFW_LIB_DIR", glfwLibDir, logger);
-                await LogAsync($"  [OK] GLFW library: {glfwLibDir}");
+                await LogAsync($"  [OK] vcpkg packages installed to: {installedDir}");
+                await LogAsync("      MayaFluxConfig.cmake handles dependency resolution automatically");
             }
             else
             {
-                await LogAsync($"  [WARN] GLFW lib directory not found");
+                await LogAsync($"  [WARN] vcpkg packages not found at: {installedDir}");
             }
         }
         else
         {
-            await LogAsync($"  [WARN] GLFW not found at {glfwRoot}");
-        }
-    }
-
-    private async Task SetupFFmpeg()
-    {
-        await LogAsync("Configuring FFmpeg...");
-        var ffmpegRoot = @"C:\Program Files\FFmpeg";
-        
-        if (Directory.Exists(ffmpegRoot))
-        {
-            ProcessRunner.SetEnvironmentVariable("FFMPEG_ROOT", ffmpegRoot, logger);
-            
-            var ffmpegBin = Path.Combine(ffmpegRoot, "bin");
-            if (Directory.Exists(ffmpegBin))
-            {
-                if (ProcessRunner.AddToPath(ffmpegBin, logger))
-                {
-                    await LogAsync($"  [OK] FFmpeg bin added to PATH");
-                }
-                else
-                {
-                    await LogAsync($"  [WARN] Failed to add FFmpeg bin to PATH");
-                }
-            }
-            
-            await LogAsync($"  [OK] FFmpeg: {ffmpegRoot}");
-        }
-        else
-        {
-            await LogAsync($"  [WARN] FFmpeg not found at {ffmpegRoot}");
-        }
-    }
-
-    private async Task SetupRtAudio()
-    {
-        await LogAsync("Configuring RtAudio...");
-
-        var rtaudioRoot = @"C:\Program Files\RtAudio";
-
-        if (Directory.Exists(rtaudioRoot))
-        {
-            ProcessRunner.SetEnvironmentVariable("RTAUDIO_ROOT", rtaudioRoot, logger);
-            await LogAsync($"  [OK] RtAudio: {rtaudioRoot}");
-        }
-        else
-        {
-            await LogAsync($"  [WARN] RtAudio not found at {rtaudioRoot}");
-        }
-    }
-
-    private async Task SetupHeaderLibraries()
-    {
-        await LogAsync("Configuring header-only libraries...");
-
-        var headerLibs = new (string EnvVar, string Path)[]
-        {
-            ("EIGEN3_INCLUDE_DIR", @"C:\Program Files\Eigen3"),
-            ("GLM_INCLUDE_DIR", @"C:\Program Files\glm\include"),
-            ("STB_INCLUDE_DIR", @"C:\Program Files\stb\include"),
-            ("MAGIC_ENUM_INCLUDE_DIR", @"C:\Program Files\magic_enum\include"),
-            ("LIBXML2_INCLUDE_DIR", @"C:\Program Files\LibXml2\include")
-        };
-
-        int foundCount = 0;
-        int totalCount = headerLibs.Length;
-
-        foreach (var (envVar, path) in headerLibs)
-        {
-            if (Directory.Exists(path))
-            {
-                ProcessRunner.SetEnvironmentVariable(envVar, path, logger);
-                ProcessRunner.AddIncludeDirectory(path, logger);
-                foundCount++;
-            }
-        }
-
-        await LogAsync($"  [OK] Header libraries configured: {foundCount}/{totalCount}");
-
-        if (foundCount < totalCount)
-        {
-            await LogAsync($"  [WARN] Some header libraries not found - builds may fail");
+            await LogAsync($"  [WARN] vcpkg not found at {vcpkgRoot}");
+            await LogAsync("         Dependencies may not build correctly");
         }
     }
 

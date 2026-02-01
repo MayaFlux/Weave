@@ -36,7 +36,7 @@ function Add-ToSystemPath($path) {
     $current = [Environment]::GetEnvironmentVariable("Path", "Machine")
     if ($current -notmatch [Regex]::Escape($path)) {
         [Environment]::SetEnvironmentVariable("Path", "$current;$path", "Machine")
-        Write-Host " + Added to PATH: $path" -ForegroundColor Green
+        Write-Host "  + Added to PATH: $path" -ForegroundColor Green
     }
 }
 
@@ -46,7 +46,7 @@ function Add-ToSystemLib($path) {
     if ($current -notmatch [Regex]::Escape($path)) {
         $newLib = if ($current -eq "") { $path } else { "$current;$path" }
         [Environment]::SetEnvironmentVariable("LIB", $newLib, "Machine")
-        Write-Host " + Added to LIB: $path" -ForegroundColor Green
+        Write-Host "  + Added to LIB: $path" -ForegroundColor Green
     }
 }
 
@@ -56,7 +56,7 @@ function Add-ToSystemInclude($path) {
     if ($current -notmatch [Regex]::Escape($path)) {
         $newInclude = if ($current -eq "") { $path } else { "$current;$path" }
         [Environment]::SetEnvironmentVariable("INCLUDE", $newInclude, "Machine")
-        Write-Host " + Added to INCLUDE: $path" -ForegroundColor Green
+        Write-Host "  + Added to INCLUDE: $path" -ForegroundColor Green
     }
 }
 
@@ -239,6 +239,104 @@ try {
 # INSTALLATION HANDLERS
 # ===========================
 
+function Setup-And-Install-Vcpkg {
+    param([hashtable]$VcpkgPackages)
+
+    if (-not $VcpkgPackages -or $VcpkgPackages.Count -eq 0) { return }
+
+    Write-Host "`n=== vcpkg Setup & Packages ===" -ForegroundColor Magenta
+
+    $vcpkgRoot = $env:VCPKG_ROOT
+    $defaultRoot = 'C:\vcpkg'
+
+    # Install vcpkg if missing
+    if (-not $vcpkgRoot -or -not (Test-Path $vcpkgRoot)) {
+        $vcpkgRoot = $defaultRoot
+        Write-Host "  vcpkg not found. Installing to $vcpkgRoot..." -ForegroundColor Yellow
+
+        if (-not (Test-Path $vcpkgRoot)) {
+            git clone https://github.com/microsoft/vcpkg.git $vcpkgRoot
+            if ($LASTEXITCODE -ne 0) { throw "Failed to clone vcpkg repository" }
+        }
+
+        Push-Location $vcpkgRoot
+        try {
+            Write-Host "  Bootstrapping vcpkg..." -ForegroundColor Yellow
+            .\bootstrap-vcpkg.bat
+            if ($LASTEXITCODE -ne 0) { throw "vcpkg bootstrap failed" }
+        }
+        finally {
+            Pop-Location
+        }
+
+        [Environment]::SetEnvironmentVariable("VCPKG_ROOT", $vcpkgRoot, "Machine")
+        $env:VCPKG_ROOT = $vcpkgRoot
+        Write-Host "  [OK] VCPKG_ROOT set to $vcpkgRoot" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Using existing VCPKG_ROOT: $vcpkgRoot" -ForegroundColor Green
+    }
+
+    # Upgrade vcpkg and install packages
+    Push-Location $vcpkgRoot
+    try {
+        Write-Host "  Upgrading vcpkg (git pull + bootstrap)..." -ForegroundColor Yellow
+        git pull origin master --quiet
+        .\bootstrap-vcpkg.bat
+
+        $vcpkgExe = if (Test-Path "vcpkg.exe") { "vcpkg.exe" } else { "vcpkg" }
+        $triplet = "x64-windows"
+
+        foreach ($entry in $VcpkgPackages.GetEnumerator()) {
+            $port = $entry.Key
+            Write-Host "`n[$port] Installing $port`:$triplet ..." -ForegroundColor Cyan
+            & $vcpkgExe install "$port`:$triplet"
+            if ($LASTEXITCODE -ne 0) {
+                throw "vcpkg install failed for port: $port"
+            }
+            Write-Host "  [OK] $port installed" -ForegroundColor Green
+        }
+    }
+    finally {
+        Pop-Location
+    }
+
+    # Add standard vcpkg paths to system environment
+    $instDir = Join-Path $vcpkgRoot "installed\$triplet"
+    if (Test-Path $instDir) {
+        $inc = Join-Path $instDir "include"
+        if (Test-Path $inc) { Add-ToSystemInclude $inc }
+
+        $lib = Join-Path $instDir "lib"
+        if (Test-Path $lib) { Add-ToSystemLib $lib }
+
+        $bin = Join-Path $instDir "bin"
+        if (Test-Path $bin) { Add-ToSystemPath $bin }
+
+        $dbgLib = Join-Path $instDir "debug\lib"
+        if (Test-Path $dbgLib) { Add-ToSystemLib $dbgLib }
+
+        $dbgBin = Join-Path $instDir "debug\bin"
+        if (Test-Path $dbgBin) { Add-ToSystemPath $dbgBin }
+
+        Write-Host "  [OK] vcpkg paths added to INCLUDE/LIB/PATH" -ForegroundColor Green
+    }
+
+    # Set CMAKE_TOOLCHAIN_FILE (recommended and sufficient for local + CI)
+    $toolchainFile = Join-Path $vcpkgRoot "scripts\buildsystems\vcpkg.cmake"
+    if (Test-Path $toolchainFile) {
+        # Convert backslashes to forward slashes so CMake doesn't treat them as escape sequences
+        $toolchainFile = $toolchainFile -replace '\\', '/'
+        
+        [Environment]::SetEnvironmentVariable("MAYAFLUX_TOOLCHAIN_FILE", $toolchainFile, "Machine")
+        $env:CMAKE_TOOLCHAIN_FILE = $toolchainFile
+        Write-Host "  [OK] MAYAFLUX_TOOLCHAIN_FILE set to: $toolchainFile" -ForegroundColor Green
+    }
+    else {
+        Write-Warning "vcpkg toolchain file not found at expected location"
+    }
+}
+
 function Install-SystemTool($name, $config) {
     Write-Host "`n[$name] Checking system tool..." -ForegroundColor Cyan
 
@@ -270,6 +368,19 @@ function Install-SystemTool($name, $config) {
 
 function Install-BinaryPackage($name, $config) {
     Write-Host "`n[$name] Installing binary package..." -ForegroundColor Cyan
+
+    $effectiveRoot = if ($config.Version) {
+        Join-Path (Split-Path $config.InstallRoot -Parent) $config.Version
+    } else {
+        $config.InstallRoot
+    }
+
+    if ($config.Version) {
+        $config.InstallRoot = $effectiveRoot
+        if ($config.Verify -and $config.Verify -like "*LLVM_Libs\*") {
+            $config.Verify = $config.Verify -replace 'LLVM_Libs\\[^\\]+', "LLVM_Libs\$($config.Version)"
+        }
+    }
 
     if (Test-Path $config.Verify) {
         Write-Host "  [OK] Already installed at $($config.InstallRoot)" -ForegroundColor Green
@@ -312,7 +423,12 @@ function Install-BinaryPackage($name, $config) {
             Write-Host "  Vulkan SDK Installer" -ForegroundColor Cyan
             Write-Host "  ============================================" -ForegroundColor Cyan
             Write-Host "  The Vulkan SDK installer will now open." -ForegroundColor Yellow
+            Write-Host "  " -ForegroundColor Yellow
             Write-Host "  IMPORTANT: Install ALL components" -ForegroundColor Yellow
+            Write-Host "  (SDL2 is optional - install if needed)" -ForegroundColor Yellow
+            Write-Host "  (ARM components are not needed)" -ForegroundColor Yellow
+            Write-Host "  " -ForegroundColor Yellow
+            Write-Host "  The installer will run, please complete it." -ForegroundColor Yellow
             Write-Host "  ============================================" -ForegroundColor Cyan
             Write-Host ""
             Start-Sleep -Seconds 3
@@ -325,30 +441,42 @@ function Install-BinaryPackage($name, $config) {
         Start-Process -FilePath $downloadFile -ArgumentList $installArgs -Wait
     }    
     else {
+        # Extract archive
         Write-Host "  Extracting..." -ForegroundColor Yellow
-        
         $extractDir = Join-Path $env:TEMP "MayaFlux-extract\$name-$(Get-Random)"
         
         Expand-ArchiveSafe -archivePath $downloadFile -destination $extractDir
 
-        $extractedContent = Get-ChildItem $extractDir -Directory | Select-Object -First 1
-        
-        if ($extractedContent) {
-            Write-Host "  Moving extracted files to $($config.InstallRoot)..." -ForegroundColor Yellow
-            Get-ChildItem $extractedContent.FullName | Move-Item -Destination $config.InstallRoot -Force
-        } else {
-            Write-Host "  Moving files to $($config.InstallRoot)..." -ForegroundColor Yellow
-            Get-ChildItem $extractDir -File | Move-Item -Destination $config.InstallRoot -Force
+        # Remove the archive file to avoid interfering with content detection
+        Remove-Item $downloadFile -Force -ErrorAction SilentlyContinue
+
+        # === INTELLIGENT CONTENT MOVE (our wrapper handling) ===
+        Write-Host "  Organizing extracted files..." -ForegroundColor Yellow
+
+        $extractedItems = Get-ChildItem $extractDir -Force | Where-Object { -not $_.Name.StartsWith('.') }
+        $extractedDirs  = $extractedItems | Where-Object { $_.PSIsContainer }
+
+        if ($extractedDirs.Count -eq 1 -and $extractedItems.Count -eq 1) {
+            # Single wrapper directory case (GLFW, FFmpeg, LLVM, etc.)
+            $wrapperDir = $extractedDirs[0].FullName
+            Write-Host "  Stripping single wrapper directory: $($extractedDirs[0].Name)" -ForegroundColor Cyan
+            Get-ChildItem $wrapperDir -Force | Move-Item -Destination $config.InstallRoot -Force
         }
-        
+        else {
+            # Multiple top-level items (HIDAPI) or flat structure
+            Write-Host "  Moving all top-level items directly" -ForegroundColor Cyan
+            Get-ChildItem $extractDir -Force | Move-Item -Destination $config.InstallRoot -Force
+        }
+
+        # Cleanup extraction directory
         Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    Start-Sleep -Seconds 1
+    # Cleanup
     Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
 
     if (-not (Test-Path $config.Verify)) {
-        throw "Installation verification failed for $name - expected file not found: $($config.Verify)"
+        throw "Installation verification failed for $name"
     }
 
     Write-Host "  [OK] Installed to $($config.InstallRoot)" -ForegroundColor Green
@@ -637,6 +765,17 @@ foreach ($pkg in $packages.BinaryPackages.GetEnumerator()) {
     $installedPath = Install-BinaryPackage $pkg.Key $pkg.Value
     Set-PackageEnvironment $pkg.Key $pkg.Value $installedPath
 }
+
+# Install Winget packages
+Write-Host "`n=== Winget Packages ===" -ForegroundColor Magenta
+foreach ($pkg in $packages.WingetPackages.GetEnumerator()) {
+    if ($Only -and $pkg.Key -notin $Only) { continue }
+    Install-SystemTool $pkg.Key $pkg.Value
+}
+
+# Setup vcpkg + install packages
+Write-Host "`n=== Vcpkg Packages ===" -ForegroundColor Magenta
+Setup-And-Install-Vcpkg -VcpkgPackages $packages.VcpkgPackages
 
 # Install header-only packages
 Write-Host "`n=== Header-Only Packages ===" -ForegroundColor Magenta
