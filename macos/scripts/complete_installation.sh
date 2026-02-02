@@ -105,7 +105,7 @@ step_welcome() {
     cat <<'BANNER'
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
-║ 🎛️  Weave - MayaFlux Installer                            ║
+║ 🎛️  Weave - MayaFlux Installer                             ║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
 
@@ -317,7 +317,7 @@ step_install_mayaflux() {
 
     # Verify installation
     log "  Verifying installation..."
-    if ! "$BREW_CMD" list --formula | grep -q "^$FORMULA$"; then
+    if ! "$BREW_CMD" list --formula | grep "^$FORMULA$"; then
         error "MayaFlux ($FORMULA) installation verification failed.\n\nFormula not found in brew list."
     fi
 

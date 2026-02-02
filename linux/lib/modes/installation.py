@@ -390,7 +390,7 @@ class DownloadStep:
         for attempt in range(max_retries):
             try:
                 req = urllib.request.Request(url)
-                req.add_header("User-Agent", "Weave-Installer/0.2.1")
+                req.add_header("User-Agent", "Weave-Installer/0.2.2")
 
                 with urllib.request.urlopen(req, timeout=10) as response:
                     if response.status != 200:
