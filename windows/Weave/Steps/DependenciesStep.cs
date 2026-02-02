@@ -59,7 +59,7 @@ public class DependenciesStep : IInstallationStep
             await LogAsync("  • System Tools: CMake, Git, Ninja, 7-Zip");
             await LogAsync("  • Winget Packages: FFmpeg, Vulkan SDK");
             await LogAsync("  • Binary Package: LLVM 21.1.8");
-            await LogAsync("  • vcpkg Packages: glm, eigen3, magic-enum, stb, hidapi, glfw3, rtaudio");
+            await LogAsync("  • vcpkg Packages: glm, eigen3, magic-enum, stb, hidapi, glfw3, rtaudio, rtmidi");
             await LogAsync("");
             await LogAsync("Installation time: 10-30 minutes depending on internet speed");
             await LogAsync("");

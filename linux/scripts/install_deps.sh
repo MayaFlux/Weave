@@ -202,6 +202,8 @@ install_manual_deps() {
             clang llvm llvm-devel clang-devel \
             cmake ninja pkg-config git \
             rtaudio-devel \
+            rtmidi-devel \
+            hidapi-devel \
             glfw-devel \
             glm-devel \
             eigen3-devel \
