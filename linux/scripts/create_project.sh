@@ -233,6 +233,20 @@ cp "$TEMPLATES_DIR/user_project.hpp" "$PROJECT_DIR/src/user_project.hpp"
 log "  ✓ Generated user_project.hpp"
 
 # ============================================================================
+# CREATE data/shaders AND COPY TEMPLATE SHADERS
+# ============================================================================
+
+log "Creating data/shaders"
+mkdir -p "$PROJECT_DIR/data/shaders"
+
+if [ -d "$TEMPLATES_DIR/shaders" ] && [ -n "$(ls -A "$TEMPLATES_DIR/shaders" 2>/dev/null)" ]; then
+    cp "$TEMPLATES_DIR/shaders/"* "$PROJECT_DIR/data/shaders/"
+    log "  ✓ Copied template shaders"
+else
+    log "  ✓ Created empty data/shaders (no template shaders)"
+fi
+
+# ============================================================================
 # CREATE VS CODE CONFIGURATION (if enabled)
 # ============================================================================
 

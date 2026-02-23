@@ -36,6 +36,7 @@ Write-Host "Checking templates..."
 $templates = @(
     "templates\CMakeLists.txt",
     "templates\shaders.cmake",
+    "templates\shaders\"
     "templates\main.cpp",
     "templates\user_project.hpp",
     "templates\vscode\settings.json",

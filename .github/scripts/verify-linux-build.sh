@@ -53,6 +53,7 @@ required_items=(
     "Weave/lib/templates/shaders.cmake"
     "Weave/lib/templates/main.cpp"
     "Weave/lib/templates/user_project.hpp"
+    "Weave/lib/templates/shaders"
     "Weave/lib/scripts/create_project.sh"
     "Weave/lib/scripts/install_deps.sh"
 )

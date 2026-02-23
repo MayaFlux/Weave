@@ -214,6 +214,20 @@ endif()"
             Log("  WARNING: shaders.cmake template not found, skipping");
         }
 
+        var dataShadersDir = Path.Combine(projectDir, "data", "shaders");
+        Directory.CreateDirectory(dataShadersDir);
+        Log("  Created data/shaders");
+
+        var templateShadersDir = Path.Combine(templatesDir, "shaders");
+        if (Directory.Exists(templateShadersDir))
+        {
+            foreach (var shader in Directory.GetFiles(templateShadersDir))
+            {
+                File.Copy(shader, Path.Combine(dataShadersDir, Path.GetFileName(shader)));
+                Log($"  Copied {Path.GetFileName(shader)}");
+            }
+        }
+
         Log("Generating source files");
         var mainCpp = LoadTemplate("main.cpp");
         File.WriteAllText(Path.Combine(srcDir, "main.cpp"), mainCpp);

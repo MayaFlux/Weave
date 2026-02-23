@@ -46,6 +46,10 @@
     <EmbeddedResource Include="..\..\windows\scripts\packages.psd1">
       <Link>Resources/scripts/packages.psd1</Link>
     </EmbeddedResource>
+
+    <EmbeddedResource Include="..\..\templates\shaders\**\*">
+    <Link>Resources/templates/shaders/%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>
