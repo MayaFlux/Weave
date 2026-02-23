@@ -145,6 +145,19 @@ sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" "$TEMPLATES_DIR/CMakeLists.txt" |
 echo "✅ CMakeLists.txt generated"
 
 # ============================================================================
+# COPY shaders.cmake
+# ============================================================================
+
+log "Copying shaders.cmake"
+
+if [ -f "$TEMPLATES_DIR/shaders.cmake" ]; then
+    cp "$TEMPLATES_DIR/shaders.cmake" "$PROJECT_DIR/shaders.cmake"
+    echo "  ✓ Copied shaders.cmake"
+else
+    echo "  ⚠ shaders.cmake template not found, skipping"
+fi
+
+# ============================================================================
 # COPY main.cpp
 # ============================================================================
 

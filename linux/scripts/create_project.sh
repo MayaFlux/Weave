@@ -124,6 +124,7 @@ fi
 
 REQUIRED_TEMPLATES=(
     "CMakeLists.txt"
+    "shaders.cmake"
     "main.cpp"
     "user_project.hpp"
 )
@@ -193,6 +194,19 @@ fi
 } >"$PROJECT_DIR/CMakeLists.txt"
 
 log "  ✓ Generated CMakeLists.txt"
+
+# ============================================================================
+# COPY shaders.cmake
+# ============================================================================
+
+log "Copying shaders.cmake"
+
+if [ -f "$TEMPLATES_DIR/shaders.cmake" ]; then
+    cp "$TEMPLATES_DIR/shaders.cmake" "$PROJECT_DIR/shaders.cmake"
+    log "  ✓ Copied shaders.cmake"
+else
+    log "  ⚠ shaders.cmake template not found, skipping"
+fi
 
 # ============================================================================
 # COPY MAIN.CPP

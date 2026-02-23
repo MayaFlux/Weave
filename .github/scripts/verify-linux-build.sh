@@ -50,6 +50,7 @@ required_items=(
     "Weave/lib/modes"
     "Weave/lib/ui"
     "Weave/lib/templates/CMakeLists.txt"
+    "Weave/lib/templates/shaders.cmake"
     "Weave/lib/templates/main.cpp"
     "Weave/lib/templates/user_project.hpp"
     "Weave/lib/scripts/create_project.sh"

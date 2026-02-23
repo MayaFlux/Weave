@@ -71,12 +71,32 @@ endif()
 message(STATUS "Found MayaFlux ${MayaFlux_VERSION}: ${MayaFlux_DIR}")
 
 # ============================================================================
+# Shaders
+# ============================================================================
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}")
+include(shaders)
+
+# ============================================================================
+# Sources
+# ============================================================================
+file(GLOB_RECURSE USER_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/src/*.cpp"
+    "${CMAKE_SOURCE_DIR}/src/*.hpp"
+)
+
+# ============================================================================
 # Project Executable
 # ============================================================================
-add_executable(${PROJECT_NAME}
-    src/main.cpp
-    src/user_project.hpp
+add_executable(${PROJECT_NAME} ${USER_SOURCES})
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    MAYAFLUX_PROJECT_SHADER_DIR="${CMAKE_SOURCE_DIR}/data/shaders"
 )
+
+if(TARGET compile_project_shaders)
+    add_dependencies(${PROJECT_NAME} compile_project_shaders)
+endif()
+
 
 # ============================================================================
 # MayaFlux Linking

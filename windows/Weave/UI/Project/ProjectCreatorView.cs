@@ -202,6 +202,18 @@ endif()"
         File.WriteAllText(Path.Combine(projectDir, "CMakeLists.txt"), cmakelists);
         Log("  Generated CMakeLists.txt");
 
+        Log("Copying shaders.cmake");
+        var shadersCmakeSrc = Path.Combine(templatesDir, "shaders.cmake");
+        if (File.Exists(shadersCmakeSrc))
+        {
+            File.Copy(shadersCmakeSrc, Path.Combine(projectDir, "shaders.cmake"));
+            Log("  Copied shaders.cmake");
+        }
+        else
+        {
+            Log("  WARNING: shaders.cmake template not found, skipping");
+        }
+
         Log("Generating source files");
         var mainCpp = LoadTemplate("main.cpp");
         File.WriteAllText(Path.Combine(srcDir, "main.cpp"), mainCpp);

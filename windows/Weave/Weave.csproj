@@ -21,6 +21,9 @@
     <EmbeddedResource Include="..\..\templates\CMakeLists.txt">
       <Link>Resources/templates/CMakeLists.txt</Link>
     </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\shaders.cmake">
+      <Link>Resources/templates/shaders.cmake</Link>
+    </EmbeddedResource>
     <EmbeddedResource Include="..\..\templates\main.cpp">
       <Link>Resources/templates/main.cpp</Link>
     </EmbeddedResource>
