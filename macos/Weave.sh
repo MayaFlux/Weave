@@ -148,14 +148,14 @@ echo "✅ CMakeLists.txt generated"
 # COPY shaders.cmake
 # ============================================================================
 
-log "Copying shaders.cmake"
+echo "Copying shaders.cmake"
 
-if [ -f "$TEMPLATES_DIR/shaders.cmake" ]; then
-    cp "$TEMPLATES_DIR/shaders.cmake" "$PROJECT_DIR/shaders.cmake"
-    echo "  ✓ Copied shaders.cmake"
-else
-    echo "  ⚠ shaders.cmake template not found, skipping"
+if [ ! -f "$TEMPLATES_DIR/shaders.cmake" ]; then
+    error "shaders.cmake template not found at $TEMPLATES_DIR/shaders.cmake"
 fi
+
+cp "$TEMPLATES_DIR/shaders.cmake" "$PROJECT_DIR/shaders.cmake"
+echo "✅ shaders.cmake created"
 
 # ============================================================================
 # COPY main.cpp
