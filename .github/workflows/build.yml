@@ -188,18 +188,18 @@ jobs:
         run: |
           $publishDir = "windows/Weave/bin/x64/Release/net8.0-windows/win-x64/publish"
           $stagingDir = "build/windows/staging"
-          
+
           if (-not (Test-Path "$publishDir/Weave.exe")) {
             Write-Host "ERROR: Weave.exe not found at $publishDir"
             Get-ChildItem -Path "windows/Weave/bin" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 20
             exit 1
           }
-          
+
           New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
           Copy-Item "$publishDir/Weave.exe" -Destination "$stagingDir/Weave.exe" -Force
           Copy-Item "windows/scripts/install_package.ps1" -Destination "$stagingDir/install_package.ps1" -Force
           Copy-Item "windows/scripts/packages.psd1" -Destination "$stagingDir/packages.psd1" -Force
-          
+
           # Only copy resources if it exists
           if (Test-Path "windows/resources") {
             Copy-Item "windows/resources" -Destination "$stagingDir/resources" -Recurse -Force
@@ -207,7 +207,7 @@ jobs:
           } else {
             Write-Host "WARNING: windows/resources not found, skipping"
           }
-          
+
           # Only copy templates if they exist
           if (Test-Path "templates") {
             Copy-Item "templates" -Destination "$stagingDir/templates" -Recurse -Force
@@ -216,7 +216,7 @@ jobs:
             Write-Host "ERROR: templates directory not found!"
             exit 1
           }
-          
+
           Write-Host ""
           Write-Host "Distribution package contents:"
           Get-ChildItem -Path $stagingDir -Recurse | Select-Object FullName
@@ -226,22 +226,22 @@ jobs:
         run: |
           $stagingDir = "build/windows/staging"
           $zipPath = "build/windows/Weave.zip"
-          
+
           # Get all items in staging directory
           $items = Get-ChildItem -Path $stagingDir -Force
-          
+
           if ($items.Count -eq 0) {
             Write-Host "ERROR: Staging directory is empty!"
             exit 1
           }
-          
+
           Write-Host "INFO: Compressing $(if ($items -is [array]) { $items.Count } else { 1 }) items"
-          
+
           # Compress the items
           Compress-Archive -Path $items.FullName -DestinationPath $zipPath -Force
           $zipMB = [Math]::Round((Get-Item $zipPath).Length / 1MB, 1)
           Write-Host "INFO: ZIP created - size is $zipMB MB"
-          
+
           # List ZIP contents to verify
           Write-Host ""
           Write-Host "ZIP contents (first 20 entries):"
@@ -249,7 +249,7 @@ jobs:
           $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
           $zip.Entries | Select-Object -First 20 | ForEach-Object { Write-Host "  $($_.FullName)" }
           $zip.Dispose()
-      
+
       - name: Generate hash
         id: hash
         shell: powershell
@@ -390,40 +390,42 @@ jobs:
             VERSION=${LATEST_TAG#v}
             VERSION=${VERSION%-dev}
             IS_RELEASE=true
-            
-            echo "Release build for version: $VERSION"
-            
-            # CREATE THE STABLE TAG for the release
-            echo "Creating stable release tag: v$VERSION"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git config user.name "github-actions[bot]"
-            git tag "v$VERSION" "${GITHUB_SHA}"
-            git push origin "v$VERSION"
-            
+
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            # Triggered ON a tag directly
+            VERSION=${GITHUB_REF#refs/tags/v}
+            if [[ "$VERSION" != *-dev ]]; then
+              IS_RELEASE=true
+            else
+              IS_RELEASE=false
+            fi
+
           else
-            # Non-main branch = Dev build
-            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            # Branch push / workflow_dispatch = Dev build
+            # Read GITHUB_REF_NAME or fall back to git describe
+            LATEST_TAG=$(git tag --sort=-creatordate | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-dev$' | head -1)
+            if [[ -z "$LATEST_TAG" ]]; then
+              LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            fi
             if [[ -z "$LATEST_TAG" ]]; then
               echo "Error: No existing tag found for dev build"
               exit 1
             fi
-            
-            # Use the latest tag but ensure it has -dev suffix
             VERSION=${LATEST_TAG#v}
             if [[ "$VERSION" != *-dev ]]; then
               VERSION="$VERSION-dev"
             fi
             IS_RELEASE=false
-
-            echo "Preparing dev tag: v$VERSION -> ${GITHUB_SHA}"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git config user.name "github-actions[bot]"
-
-            git tag -f "v$VERSION" "${GITHUB_SHA}"
-            git push -f origin "v$VERSION"
           fi
+
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "IS_RELEASE=$IS_RELEASE" >> $GITHUB_OUTPUT
+          echo "Resolved version: $VERSION (is_release=$IS_RELEASE)"
+
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git tag -f "v$VERSION" "${GITHUB_SHA}"
+          git push -f origin "v$VERSION"
 
       - name: Rename artifacts for release
         run: |
