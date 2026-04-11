@@ -84,14 +84,8 @@ Weave/
 ├── macos/
 │   ├── scripts/
 │   │   ├── build_weave_app.sh      # Builds universal Weave.app
-│   │   ├── create_pkg.sh            # Packages .pkg installer
-│   │   └── complete_installation.sh # Real-time installation script
 │   ├── Weave.sh                     # CLI tool source
-│   ├── WeaveGUI.swift               # Weave.app GUI source
-│   └── resources/
-│       ├── Distribution.xml         # Installer orchestration
-│       ├── welcome.html
-│       └── conclusion.html
+│   └── WeaveGUI.sh                 # The primary installer and project manager
 │
 ├── windows/
 │   ├── scripts/

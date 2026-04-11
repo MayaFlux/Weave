@@ -10,22 +10,22 @@ Downloads the framework, installs dependencies, and gets you building in minutes
 
 ### Install
 
-1. Download `Weave-X.X.X.pkg` from [Releases](https://github.com/MayaFlux/Weave/releases)
-2. Double-click to open installer
+1. Download `Weave-macos.dmg` from [Releases](https://github.com/MayaFlux/Weave/releases)
+2. Open the DMG and double-click **Weave.app**
 3. **If "unverified developer" warning appears:**
    - Close the warning
    - Go to **System Settings → Privacy & Security**
-   - Scroll down to find **Weave.pkg**
+   - Scroll down to find **Weave**
    - Click **"Open Anyway"**
-   - Go back to the `.pkg` file and double-click again
-4. Follow the installer steps
-5. **Terminal window opens automatically** - shows installation progress
-6. When done, Terminal closes and you can create projects
+   - Double-click Weave.app again
+4. Choose **"Install MayaFlux"**
+5. Select a release channel and follow the prompts
+6. When done, restart your terminal
 
 **What gets installed:**
 
-- Weave.app and CLI tool (`/Library/Weave`, `~/.local/bin/weave`)
 - MayaFlux framework (via Homebrew)
+- `weave` CLI tool (`~/.local/bin/weave`)
 - Environment variables in `~/.zshenv`
 
 ### Create & Build
@@ -34,7 +34,7 @@ Downloads the framework, installs dependencies, and gets you building in minutes
 # Using CLI
 weave new MyProject ~/Projects/
 
-# Or open Weave.app from Applications folder
+# Or open Weave.app and choose "Create New Project"
 
 # Build
 cd MyProject && mkdir build && cd build
