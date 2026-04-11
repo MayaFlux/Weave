@@ -353,6 +353,29 @@ class InstallerState: ObservableObject {
         handle.closeFile()
 
         log("✅ Environment configured")
+
+        // --- Weave CLI ---
+        log("➤ Installing Weave CLI...")
+        let localBin = NSHomeDirectory() + "/.local/bin"
+        let weaveDest = localBin + "/weave"
+
+        guard let resourcePath = Bundle.main.resourcePath else {
+            step = .failed("Could not locate app bundle resources.")
+            return
+        }
+        let weaveSource = resourcePath + "/weave"
+
+        let cliCode = await run(
+            "mkdir -p \(shellEscape(localBin)) && " +
+            "cp \(shellEscape(weaveSource)) \(shellEscape(weaveDest)) && " +
+            "chmod +x \(shellEscape(weaveDest))"
+        )
+        guard cliCode == 0 else {
+            step = .failed("Failed to install Weave CLI to \(weaveDest).")
+            return
+        }
+        log("✅ Weave CLI installed to \(weaveDest)")
+
         step = .done
     }
 }

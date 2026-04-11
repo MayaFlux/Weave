@@ -90,6 +90,10 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 cp Weave "$APP_BUNDLE/Contents/MacOS/"
 cp Info.plist "$APP_BUNDLE/Contents/"
 
+echo "Copying Weave CLI into bundle resources..."
+cp "$MACOS_DIR/Weave.sh" "$APP_BUNDLE/Contents/Resources/weave"
+chmod +x "$APP_BUNDLE/Contents/Resources/weave"
+
 echo "Code signing universal binary..."
 codesign --force --deep --sign - "$APP_BUNDLE"
 
