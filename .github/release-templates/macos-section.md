@@ -1,6 +1,4 @@
-## macos-section.md
-
-**Platform:** macOS 14.0+ (Sonoma or later)  
+**Platform:** macOS 15.0+ (Sequoia or later)
 **Architecture:** Universal Binary (arm64 + x86_64)
 
 <details>
@@ -8,71 +6,44 @@
 
 ### Installation
 
-**Double-click the `.pkg` file** to start installation.
+**Open the `.dmg` file** and double-click **Weave.app** to launch the installer.
 
-The installer will:
-
-1. Install Weave.app to `/Applications`
-2. Copy templates and CLI tool to `/Library/Weave`
-3. Open a Terminal window showing real-time installation progress
-4. Download and install MayaFlux framework (~100 MB)
-5. Install dependencies via Homebrew (takes 10-30 minutes)
-
-**Command-line alternative:**
-
-```bash
-sudo installer -pkg Weave-{{VERSION}}.pkg -target /
-```
+Weave will:
+1. Install Homebrew if not already present (requires your password once)
+2. Download and install the MayaFlux framework via Homebrew (~100 MB)
+3. Configure your shell environment in `$ZDOTDIR/.zshenv`
+4. Install the `weave` CLI tool to `~/.local/bin/weave`
 
 ### What Gets Installed
 
-- **Weave.app** - Universal GUI application in `/Applications`
-- **CLI Tool** - Command-line tool at `~/.local/bin/weave`
-- **Project Templates** - Located at `/Library/Weave/templates`
-- **MayaFlux Framework** - Downloaded to `/Library/MayaFlux`
-- **Dependencies** - Installed via Homebrew (ffmpeg, rtaudio, glfw, eigen, vulkan-sdk, etc.)
+- **MayaFlux Framework** — installed via Homebrew
+- **CLI Tool** — `weave` at `~/.local/bin/weave`
+- **Shell Environment** — `source` line added to `$ZDOTDIR/.zshenv`
 
 ### Environment Setup
 
-Environment variables are added to `~/.zshenv` automatically:
+The following is added to `~/.zshenv` automatically:
 
-- `MAYAFLUX_ROOT` - Points to MayaFlux installation
-- `CMAKE_PREFIX_PATH` - For CMake package discovery
-- `PATH` - Updated with MayaFlux tools
+```zsh
+source "<homebrew-prefix>/env.sh"
+export PATH="$HOME/.local/bin:$PATH"
+```
 
-**Restart your terminal** or run `source ~/.zshenv` to activate immediately.
+**Restart your terminal** or run `source $ZDOTDIR/.zshenv` to activate immediately.
 
 ### Creating Your First Project
 
 **Using Weave.app (GUI):**
+1. Open **Weave.app** from the DMG (or move it to `/Applications` first)
+2. Choose **Create New Project**
+3. Enter a project name and location, then click **Create Project**
 
-1. Open `/Applications/Weave.app` or find it in Spotlight
-2. Enter project name and select location
-3. Click "Create Project"
-
-**Using CLI:**
-
+**Using CLI (after installation):**
 ```bash
 weave new MyProject ~/Projects/
 weave new MyProject ~/Projects/ --with-lila     # With live coding
-weave new MyProject ~/Projects/ --no-vscode    # Without VS Code config
+weave new MyProject ~/Projects/ --no-vscode     # Without VS Code config
 ```
-
-**Note:** The standalone app requires the Weave files and templates to be already installed via the full installer.
-
-**Installation:**
-
-1. Download and open \`Weave-${VERSION}.pkg\`
-2. Follow the installer prompts (installs Weave.app and files)
-3. Terminal will open automatically with installation progress
-4. Watch real-time progress for MayaFlux download and dependency installation
-
-**What's installed:**
-
-- Weave.app in \`/Applications\` (GUI project creator)
-- Project templates and CLI tool in \`/Library/Weave\`
-- MayaFlux framework to \`/Library/MayaFlux\` (via post-install script)
-- Dependencies via Homebrew (via post-install script)
 
 ---
 

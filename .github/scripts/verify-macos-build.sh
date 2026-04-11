@@ -8,25 +8,41 @@ fi
 echo "✅ Weave.app exists"
 
 echo ""
-echo "=== Checking component packages ==="
-for pkg in WeaveStep-files WeaveStep-gui WeaveStep-launcher; do
-    if [ ! -f "build/macos/${pkg}.pkg" ]; then
-        echo "❌ ${pkg}.pkg not found"
-        exit 1
-    fi
-    echo "✅ ${pkg}.pkg exists"
-done
-
-echo ""
-echo "=== Checking final package ==="
-FINAL_PKG=$(find build/macos -name "Weave-*.pkg" -type f | head -1)
-if [ -z "$FINAL_PKG" ]; then
-    echo "❌ Final package not found"
+echo "=== Checking bundle structure ==="
+if [ ! -f "build/macos/WeaveApp/Weave.app/Contents/MacOS/Weave" ]; then
+    echo "❌ Weave executable not found"
     exit 1
 fi
-echo "✅ Final package created: $FINAL_PKG"
-ls -lh "$FINAL_PKG"
+echo "✅ Weave executable exists"
+
+if [ ! -f "build/macos/WeaveApp/Weave.app/Contents/Info.plist" ]; then
+    echo "❌ Info.plist not found"
+    exit 1
+fi
+echo "✅ Info.plist exists"
+
+if [ ! -f "build/macos/WeaveApp/Weave.app/Contents/Resources/weave" ]; then
+    echo "❌ Weave CLI resource not found"
+    exit 1
+fi
+echo "✅ Weave CLI resource exists"
 
 echo ""
-echo "=== Package contents (first 30 files) ==="
-pkgutil --payload-files "$FINAL_PKG" | head -30
+echo "=== Checking universal binary ==="
+BINARY="build/macos/WeaveApp/Weave.app/Contents/MacOS/Weave"
+ARCHITECTURES=$(lipo -info "$BINARY")
+echo "Architectures: $ARCHITECTURES"
+
+if [[ "$ARCHITECTURES" != *"x86_64"* ]]; then
+    echo "❌ Missing x86_64 (Intel) architecture"
+    exit 1
+fi
+if [[ "$ARCHITECTURES" != *"arm64"* ]]; then
+    echo "❌ Missing arm64 (Apple Silicon) architecture"
+    exit 1
+fi
+echo "✅ Universal binary contains both x86_64 and arm64"
+
+echo ""
+echo "=== Bundle size ==="
+du -sh "build/macos/WeaveApp/Weave.app"

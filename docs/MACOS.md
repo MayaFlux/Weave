@@ -6,39 +6,40 @@ Complete guide for installing, using, and troubleshooting Weave on macOS.
 
 ### Prerequisites
 
-- **Apple Silicon:** macOS 14.0 (Sonoma) or later
-- **Intel:** macOS 15.0 (Sequoia) or later
+- macOS 15.0 (Sequoia) or later
 - ~2GB free disk space
 - Internet connection
 - Administrator access (for Homebrew)
 
-### Install from Installer Package
+### Install from DMG
 
-1. **Download** `Weave-X.X.X.pkg` from [Releases](https://github.com/MayaFlux/Weave/releases)
-2. **Double-click** the `.pkg` file
-3. **Standard macOS installer** appears - click "Install"
-4. **Terminal window opens automatically** - this is intentional
-   - Shows real-time progress of framework download and dependency installation
-   - May ask for your password (Homebrew needs admin privileges)
-   - Takes 10-30 minutes depending on internet speed
-5. **When complete**, Terminal shows success message
-6. **Close Terminal** when done
-7. **Weave.app may launch** - you can now create your first project
+1. **Download** `Weave-macos.dmg` from [Releases](https://github.com/MayaFlux/Weave/releases)
+2. **Open** the DMG and double-click **Weave.app**
+3. **If "unverified developer" warning appears:**
+   - Close the warning
+   - Go to **System Settings → Privacy & Security**
+   - Scroll down to find **Weave**
+   - Click **"Open Anyway"**
+   - Double-click Weave.app again
+4. Choose **"Install MayaFlux"**
+5. Select a release channel (Stable recommended)
+6. If Homebrew is not installed, enter your password when prompted
+7. Wait for installation to complete — progress is shown in the app
+8. Restart your terminal when done
 
 ### What Gets Installed
 
-- **`/Library/Weave/`** - Project creator CLI tool and templates
-- **`/Applications/Weave.app`** - Universal GUI application (arm64 + x86_64)
-- **Homebrew** - Manages MayaFlux framework installation
-- **`~/.local/bin/weave`** - Symlink to CLI tool
-- **`~/.zshenv`** - Sources environment from Homebrew MayaFlux package
+- **Homebrew** - manages the MayaFlux framework installation
+- **MayaFlux framework** - installed via `brew install mayaflux/mayaflux/mayaflux`
+- **`~/.local/bin/weave`** - CLI project creator tool
+- **`$ZDOTDIR/.zshenv`** - updated to source MayaFlux environment and extend `PATH`
 
 ### Post-Installation
 
 **Reload environment variables:**
 
 ```bash
-source ~/.zshenv
+source $ZDOTDIR/.zshenv
 ```
 
 Or simply restart your terminal.
@@ -46,11 +47,7 @@ Or simply restart your terminal.
 **Verify installation:**
 
 ```bash
-echo $MAYAFLUX_ROOT
-# Should output the MayaFlux installation path (set by Homebrew)
-
 weave --version
-# Should show version number
 ```
 
 ---
@@ -59,12 +56,12 @@ weave --version
 
 ### Using Weave.app (GUI)
 
-1. Open `/Applications/Weave.app` (or find via Spotlight)
-2. Enter **Project Name** (e.g., "MyFirstProject")
-3. Click **"Browse..."** to select location
-4. Optional: Enable "Live Coding (Lila)" or "Configure for VS Code"
-5. Click **"Create Project"**
-6. Success dialog shows your project location
+1. Open **Weave.app** (from the DMG, or move it to `/Applications` first)
+2. Choose **"Create New Project"**
+3. Enter a **Project Name** (e.g., "MyFirstProject")
+4. Click **"Browse..."** to select a location
+5. Optional: Enable **"Live Coding (Lila)"**
+6. Click **"Create Project"**
 
 ### Using CLI Tool
 
@@ -100,71 +97,47 @@ cmake --build . --parallel
 3. Terminal → Run Task → "Build Project"
 4. Press F5 to run with debugger (lldb)
 
-### Manual Build
-
-```bash
-cd MyProject/build
-cmake --build . --config Release --parallel 4
-```
-
 ---
 
 ## Environment Variables
 
-After installation, these are set in `~/.zshenv`:
+After installation, these are added to `$ZDOTDIR/.zshenv`:
 
-| Variable            | Value                     | Purpose            |
-| ------------------- | ------------------------- | ------------------ |
-| `MAYAFLUX_ROOT`     | Set by Homebrew           | Framework location |
-| `CMAKE_PREFIX_PATH` | Includes `$MAYAFLUX_ROOT` | CMake discovery    |
-| `PATH`              | Includes MayaFlux bin     | CLI tools          |
-| `VULKAN_SDK`        | Vulkan installation path  | GPU compute        |
+```zsh
+source "<homebrew-prefix>/env.sh"
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+The `env.sh` sourced from the Homebrew prefix sets any variables the framework requires (e.g. `MAYAFLUX_ROOT`, `CMAKE_PREFIX_PATH`, `VULKAN_SDK`).
 
 **To apply immediately without restarting:**
 
 ```bash
-source ~/.zshenv
+source $ZDOTDIR/.zshenv
 ```
 
 ---
 
 ## Troubleshooting
 
-### Installer Hangs or Stalls
-
-**Check progress in another terminal:**
-
-```bash
-tail -f ~/.weave_install.log
-```
-
-**Common causes:**
-
-- Large dependency compilation (LLVM, FFmpeg, Vulkan SDK)
-- Homebrew is fetching sources
-- System is busy
-
-**Solution:** Wait it out, or check the log file for actual errors.
-
 ### "weave: command not found"
 
-**Cause:** Environment variables not loaded
+**Cause:** Environment variables not loaded yet.
 
 **Fix:**
 
 ```bash
-source ~/.zshenv
-weave new MyProject
+source $ZDOTDIR/.zshenv
 ```
 
-Or restart your terminal completely.
+Or restart your terminal.
 
 ### "Weave.app won't open" or "damaged application"
 
 **Fix:**
 
 ```bash
-sudo xattr -rd com.apple.quarantine /Applications/Weave.app
+xattr -rd com.apple.quarantine /path/to/Weave.app
 ```
 
 Then try opening again.
@@ -175,20 +148,12 @@ Then try opening again.
 
 ```bash
 echo $MAYAFLUX_ROOT
-# Should show: /Library/MayaFlux
 ```
 
 **If empty, reload:**
 
 ```bash
-source ~/.zshenv
-```
-
-**If still not found, set manually in CMake:**
-
-```bash
-cd build
-cmake .. -DCMAKE_PREFIX_PATH=/Library/MayaFlux -DCMAKE_BUILD_TYPE=Release
+source $ZDOTDIR/.zshenv
 ```
 
 ### Build errors with C++23 features
@@ -197,67 +162,49 @@ cmake .. -DCMAKE_PREFIX_PATH=/Library/MayaFlux -DCMAKE_BUILD_TYPE=Release
 
 ```bash
 clang++ --version  # Should be 15+
-# or
-g++ --version      # Should be 12+
 ```
 
-**If compiler is too old, update via Homebrew:**
+**If too old, update via Homebrew:**
 
 ```bash
 brew install llvm
-# Then use: /usr/local/opt/llvm/bin/clang++
 ```
-
-### "Missing architecture" errors
-
-**Weave.app is universal (arm64 + x86_64).** If you get architecture errors building your project, ensure your project CMakeLists.txt doesn't force a specific architecture.
 
 ### Homebrew password prompt during install
 
-**This is normal.** Homebrew needs admin privileges to install system libraries. Provide your password when prompted.
+**This is normal.** Homebrew needs admin privileges to set up its directory structure on a fresh install. Your password is not stored.
 
 ---
 
 ## Uninstalling
 
-### Remove Everything
-
-```bash
-# Remove Weave app
-rm -rf /Applications/Weave.app
-
-# Remove installation files
-rm -rf /Library/Weave
-
-# Remove CLI symlink
-rm ~/.local/bin/weave
-
-# Remove environment setup (optional)
-nano ~/.zshenv
-# Find and delete lines sourcing MayaFlux environment file
-```
-
-### Remove Homebrew MayaFlux Package
-
 ```bash
 # Remove MayaFlux framework
-brew uninstall mayaflux-dev
-
-# Remove all unused dependencies
+brew uninstall mayaflux
 brew autoremove
+
+# Remove CLI tool
+rm ~/.local/bin/weave
+
+# Remove environment config (optional)
+# Edit $ZDOTDIR/.zshenv and delete the MayaFlux lines
 ```
 
 ---
 
 ## FAQ
 
-**Q: Why does installation take time?**
+**Q: Why does installation take a while?**
 
-A: Homebrew acquires heavy dependencies (LLVM, FFmpeg, Vulkan SDK). Timeframe depends on your machine and whether these are already cached. If you already have these installed via Homebrew, installation is much faster.
+A: Homebrew is downloading and building the MayaFlux framework and its dependencies (LLVM, FFmpeg, Vulkan SDK, etc.). If these are already cached on your machine, it's much faster.
 
-**Q: Can I use Weave.app and the CLI tool together?**
+**Q: Can I use Weave.app and the CLI together?**
 
-A: Yes. Use whichever is more convenient for your workflow. Both create the same project structure.
+A: Yes. Both create the same project structure - use whichever suits your workflow.
+
+**Q: Do I need to keep Weave.app after installing?**
+
+A: Only if you want to create new projects via the GUI. The CLI (`weave`) works independently once installed.
 
 ---
 

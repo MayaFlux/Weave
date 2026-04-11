@@ -37,7 +37,6 @@ jobs:
 
       - name: Make scripts executable
         run: |
-          chmod +x macos/scripts/create_pkg.sh
           chmod +x macos/scripts/build_weave_app.sh
           chmod +x macos/Weave.sh
 
@@ -46,80 +45,34 @@ jobs:
           chmod +x .github/scripts/verify-macos-build.sh
           chmod +x .github/scripts/generate-release-body.sh
 
-      - name: Build installer package
+      - name: Build Weave.app
         run: |
           mkdir -p build/macos
-          ./macos/scripts/create_pkg.sh
+          ./macos/scripts/build_weave_app.sh
 
       - name: Verify build outputs
         run: |
           ./.github/scripts/verify-macos-build.sh
 
-      - name: Test Weave.app (smoke test)
+      - name: Create DMG
         run: |
-          echo "=== Testing Weave.app bundle structure ==="
-          if [ ! -f "build/macos/WeaveApp/Weave.app/Contents/MacOS/Weave" ]; then
-            echo "❌ Weave executable not found in app bundle"
-            exit 1
-          fi
-          echo "✅ Weave executable exists"
-
-          if [ ! -f "build/macos/WeaveApp/Weave.app/Contents/Info.plist" ]; then
-            echo "❌ Info.plist not found"
-            exit 1
-          fi
-          echo "✅ Info.plist exists"
-
-      - name: Create Weave.app standalone archive
-        run: |
-          cd build/macos
-          mv WeaveApp/Weave.app WeaveProjects.app
-          echo "Created Weave.app standalone archive"
-
-      - name: Verify universal binary
-        run: |
-          echo "=== Verifying Universal Binary ==="
-          BINARY="build/macos/WeaveProjects.app/Contents/MacOS/Weave"
-          if [ ! -f "$BINARY" ]; then
-            echo "❌ Weave binary not found"
-            exit 1
-          fi
-
-          ARCHITECTURES=$(lipo -info "$BINARY")
-          echo "Architectures: $ARCHITECTURES"
-
-          if [[ "$ARCHITECTURES" != *"x86_64"* ]]; then
-            echo "❌ Missing x86_64 (Intel) architecture"
-            exit 1
-          fi
-
-          if [[ "$ARCHITECTURES" != *"arm64"* ]]; then
-            echo "❌ Missing arm64 (Apple Silicon) architecture"
-            exit 1
-          fi
-
-          echo "✅ Universal binary contains both x86_64 and arm64"
+          hdiutil create \
+            -volname "Weave" \
+            -srcfolder "build/macos/WeaveApp/Weave.app" \
+            -ov -format UDZO \
+            "build/macos/Weave.dmg"
 
       - name: Generate SHA256 hash
         id: hash
         run: |
-          FINAL_PKG=$(find build/macos -name "Weave-*.pkg" -type f | head -1)
-          if [ -z "$FINAL_PKG" ]; then
-            echo "Error: No final .pkg file found in build/macos"
-            exit 1
-          fi
-          SHA256=$(shasum -a 256 "$FINAL_PKG" | cut -d ' ' -f 1)
+          SHA256=$(shasum -a 256 "build/macos/Weave.dmg" | cut -d ' ' -f 1)
           echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
-          echo "PKG_PATH=$FINAL_PKG" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: weave-macos
-          path: |
-            build/macos/Weave-*.pkg
-            build/macos/WeaveStep-*.pkg
-            build/macos/WeaveProjects.app
+          path: build/macos/Weave.dmg
           retention-days: 30
 
       - name: Upload debug artifacts (on failure)
@@ -430,19 +383,12 @@ jobs:
         run: |
           mkdir -p ./release
 
-          # macOS PKG
-          MACOS_PKG=$(find ./packages/macos -name "Weave-*.pkg" | head -1)
-          if [ -z "$MACOS_PKG" ]; then
-            echo "Error: macOS package not found"
+          # macOS DMG
+          if [ ! -f "./packages/macos/Weave.dmg" ]; then
+            echo "Error: macOS DMG not found"
             exit 1
           fi
-          cp "$MACOS_PKG" "./release/Weave-installer-macos.pkg"
-
-          # macOS App
-          MACOS_APP=$(find ./packages/macos -name "WeaveProjects.app" | head -1)
-          if [ -n "$MACOS_APP" ]; then
-            cp -r "$MACOS_APP" "./release/Weave-project-macos.app"
-          fi
+          cp "./packages/macos/Weave.dmg" "./release/Weave-macos.dmg"
 
           # Linux
           LINUX_TARBALL=$(find ./packages/linux -name "Weave.tar.gz" | head -1)
@@ -476,8 +422,7 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.IS_RELEASE == 'true' && format('v{0}', steps.version.outputs.VERSION) || format('v{0}', steps.version.outputs.VERSION) }}
           files: |
-            release/Weave-installer-macos.pkg
-            release/Weave-project-macos.app
+            release/Weave-macos.dmg
             release/Weave-linux.tar.gz
             release/Weave-windows.zip
           body_path: release-body.md
