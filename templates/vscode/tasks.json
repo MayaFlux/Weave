@@ -2,40 +2,44 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Configure CMake",
+      "label": "Configure",
       "type": "shell",
       "command": "cmake",
       "args": [
-        "-B",
-        "build",
-        "-S",
-        ".",
-        "-DCMAKE_BUILD_TYPE=Release",
+        "-B", "build",
+        "-S", ".",
+        "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
       ],
       "group": "build",
       "problemMatcher": []
     },
     {
-      "label": "Build Project",
+      "label": "Build",
       "type": "shell",
       "command": "cmake",
-      "args": ["--build", "build", "--config", "Release", "--parallel"],
+      "args": ["--build", "build", "--parallel"],
       "group": {
         "kind": "build",
         "isDefault": true
       },
-      "dependsOn": ["Configure CMake"]
+      "dependsOn": ["Configure"],
+      "problemMatcher": ["$gcc"]
     },
     {
-      "label": "Clean Build",
+      "label": "Clean",
+      "type": "shell",
+      "command": "cmake",
+      "args": ["--build", "build", "--target", "clean"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Clean (destructive: deletes build dir)",
       "type": "shell",
       "windows": {
         "command": "powershell",
-        "args": [
-          "-Command",
-          "Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue"
-        ]
+        "args": ["-Command", "Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue"]
       },
       "osx": {
         "command": "rm",
@@ -47,29 +51,6 @@
       },
       "group": "build",
       "problemMatcher": []
-    },
-    {
-      "label": "Run @PROJECT_NAME@",
-      "type": "shell",
-      "windows": {
-        "command": "build\\Release\\@PROJECT_NAME@.exe"
-      },
-      "osx": {
-        "command": "build/@PROJECT_NAME@"
-      },
-      "linux": {
-        "command": "build/@PROJECT_NAME@"
-      },
-      "group": {
-        "kind": "test",
-        "isDefault": true
-      },
-      "dependsOn": ["Build Project"],
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "new"
-      }
     }
   ]
 }

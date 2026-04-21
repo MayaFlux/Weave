@@ -1,6 +1,9 @@
 {
+    "extensions.recommendations": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools"
+    ],
     "C_Cpp.default.cppStandard": "c++23",
-    "C_Cpp.default.compilerPath": "/usr/bin/clang++",
     "C_Cpp.default.includePath": [
         "${workspaceFolder}/src",
         "${env:MAYAFLUX_ROOT}/include"
@@ -9,10 +12,13 @@
     "C_Cpp.intelliSenseEngine": "default",
     "cmake.configureOnOpen": true,
     "cmake.buildDirectory": "${workspaceFolder}/build",
+    "cmake.buildType": "RelWithDebInfo",
+    "cmake.useCMakePresets": "never",
+    "cmake.defaultKit": "unspecified",
+    "cmake.launchTargetName": "@PROJECT_NAME@",
     "files.associations": {
         "*.hpp": "cpp",
         "*.h": "cpp"
     },
-    "editor.formatOnSave": false,
     "C_Cpp.errorSquiggles": "enabled"
 }
