@@ -51,6 +51,10 @@
         glfw3      = @{}
         rtaudio    = @{}
         rtmidi     = @{}
+        asio       = @{}
+        assimp     = @{}
+        freetype   = @{}
+        utf8proc   = @{}
     }
 
     SpecialPackages    = @{
