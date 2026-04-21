@@ -50,6 +50,11 @@ jobs:
           mkdir -p build/macos
           ./macos/scripts/build_weave_app.sh
 
+      - name: Sign Weave.app (ad-hoc)
+        run: |
+          codesign --sign - --deep --force --options runtime \
+            build/macos/WeaveApp/Weave.app
+
       - name: Verify build outputs
         run: |
           ./.github/scripts/verify-macos-build.sh
@@ -420,7 +425,9 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.IS_RELEASE == 'true' && format('v{0}', steps.version.outputs.VERSION) || format('v{0}', steps.version.outputs.VERSION) }}
+          tag_name: ${{ steps.version.outputs.IS_RELEASE == 'true' && format('v{0}',
+            steps.version.outputs.VERSION) || format('v{0}',
+            steps.version.outputs.VERSION) }}
           files: |
             release/Weave-macos.dmg
             release/Weave-linux.tar.gz
