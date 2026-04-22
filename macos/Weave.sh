@@ -24,8 +24,16 @@ if [ -z "${MAYAFLUX_ROOT:-}" ]; then
         exit 1
     fi
 fi
-WEAVE_ROOT="/Library/Weave"
-TEMPLATES_DIR="$WEAVE_ROOT/templates"
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -d "$SCRIPT_DIR/templates" ]; then
+    TEMPLATES_DIR="$SCRIPT_DIR/templates"
+elif [ -d "$HOME/.local/share/weave/templates" ]; then
+    TEMPLATES_DIR="$HOME/.local/share/weave/templates"
+else
+    echo "[Weave ERROR] Templates not found. Please reinstall MayaFlux." >&2
+    exit 1
+fi
 
 # ============================================================================
 # UTILITIES

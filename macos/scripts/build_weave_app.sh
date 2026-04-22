@@ -94,6 +94,9 @@ echo "Copying Weave CLI into bundle resources..."
 cp "$MACOS_DIR/Weave.sh" "$APP_BUNDLE/Contents/Resources/weave"
 chmod +x "$APP_BUNDLE/Contents/Resources/weave"
 
+echo "Copying templates into bundle resources..."
+cp -R "$ROOT_DIR/templates" "$APP_BUNDLE/Contents/Resources/templates"
+
 echo "Code signing universal binary..."
 codesign --force --deep --sign - "$APP_BUNDLE"
 

@@ -374,6 +374,20 @@ class InstallerState: ObservableObject {
             step = .failed("Failed to install Weave CLI to \(weaveDest).")
             return
         }
+
+        log("Installing templates...")
+        let templatesSource = resourcePath + "/templates"
+        let templatesDest = NSHomeDirectory() + "/.local/share/weave/templates"
+        let templatesCode = await run(
+            "mkdir -p \(shellEscape(templatesDest)) && " +
+            "cp -R \(shellEscape(templatesSource))/ \(shellEscape(templatesDest))/"
+        )
+        guard templatesCode == 0 else {
+            step = .failed("Failed to install templates to \(templatesDest).")
+            return
+        }
+        log("Templates installed")
+
         log("✅ Weave CLI installed to \(weaveDest)")
 
         step = .done
