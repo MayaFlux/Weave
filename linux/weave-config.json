@@ -1,5 +1,5 @@
 {
-  "version": "0.3.0",
+  "version": "0.3.2",
   "package_root": "${WEAVE_ROOT}",
   "paths": {
     "lib": "${WEAVE_ROOT}/lib",
