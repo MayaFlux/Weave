@@ -85,8 +85,6 @@ detect_distro() {
         echo "fedora"
     elif command -v apt-get &>/dev/null; then
         echo "ubuntu"
-    elif command -v zypper &>/dev/null; then
-        echo "opensuse"
     else
         echo "unknown"
     fi
@@ -151,6 +149,7 @@ install_via_package_manager() {
 
         echo "Enabling COPR repository..."
         run_with_sudo dnf copr enable -y ranjithshegde/spirv-cross
+        run_with_sudo dnf copr enable -y ranjithshegde/asio-standalone
         run_with_sudo dnf copr enable -y ranjithshegde/$PACKAGE
 
         echo "Installing mayaflux-$PACKAGE..."
@@ -188,48 +187,6 @@ install_via_package_manager() {
     return 0
 }
 
-install_manual_deps() {
-    # This function installs dependencies manually for distros without native MayaFlux packages
-    # Used for: Ubuntu/Debian, openSUSE, and other unsupported distros
-
-    local distro="$1"
-
-    case "$distro" in
-    opensuse)
-        echo "Installing dependencies for openSUSE..."
-        run_with_sudo zypper install -y \
-            gcc-c++ gcc \
-            clang llvm llvm-devel clang-devel \
-            cmake ninja pkg-config git \
-            rtaudio-devel \
-            rtmidi-devel \
-            hidapi-devel \
-            glfw-devel \
-            glm-devel \
-            eigen3-devel \
-            spirv-headers spirv-tools \
-            vulkan-headers vulkan-loader vulkan-loader-devel vulkan-tools vulkan-validationlayers \
-            ffmpeg-4-libavcodec-devel ffmpeg-4-libavformat-devel ffmpeg-4-libavutil-devel \
-            ffmpeg-4-libswscale-devel ffmpeg-4-libavdevice-devel \
-            stb-devel \
-            magic_enum-devel \
-            tbb-devel \
-            gtest \
-            shaderc-devel \
-            wayland-devel
-        ;;
-
-    *)
-        echo "WARNING: Unsupported distribution: $distro"
-        echo "MayaFlux installation may require manual dependency setup."
-        show_gui_message "Unsupported Distribution" "Sorry, Weave Installer doesn't fully support $distro yet.\n\nPlease check our documentation for manual installation instructions."
-        return 1
-        ;;
-    esac
-
-    return 0
-}
-
 # ============================================================================
 # MAIN EXECUTION
 # ============================================================================
@@ -254,25 +211,9 @@ arch | fedora | ubuntu)
     fi
     ;;
 
-opensuse)
-    # These distros don't have native MayaFlux packages - install deps manually
-    show_gui_message "Distribution Detected" "Detected: $DISTRO\n\nInstalling dependencies manually.\n\nYou will need to download MayaFlux separately."
-
-    if install_manual_deps "$DISTRO"; then
-        echo "✓ Dependencies installed successfully"
-        echo ""
-        echo "NOTE: MayaFlux framework must be downloaded separately."
-        echo "The installer will handle this in the next step."
-        show_gui_message "Dependencies Installed" "Development dependencies installed.\n\nMayaFlux framework will be downloaded in the next step."
-    else
-        echo "✗ Dependency installation failed"
-        exit 1
-    fi
-    ;;
-
 unknown)
-    echo "ERROR: Could not detect Linux distribution"
-    show_gui_message "Unknown Distribution" "Could not detect your Linux distribution.\n\nPlease install dependencies manually."
+    echo "ERROR: only Arch Linux, Fedora, and Ubuntu are currently supported for automatic package installation."
+    show_gui_message "Unsupported Distribution" "The current distributions do not have automated builds or packages for its native package manager.\n\nPlease get the ci release and follow the manual installation instructions in the README."
     exit 1
     ;;
 esac
