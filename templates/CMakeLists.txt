@@ -30,6 +30,7 @@ set(MAYAFLUX_SEARCH_PATHS "")
 # 1. Environment variable override (highest priority)
 if(DEFINED ENV{MAYAFLUX_ROOT})
     list(APPEND MAYAFLUX_SEARCH_PATHS "$ENV{MAYAFLUX_ROOT}/lib/cmake/MayaFlux")
+    list(APPEND MAYAFLUX_SEARCH_PATHS "$ENV{MAYAFLUX_ROOT}/lib64/cmake/MayaFlux")
     message(STATUS "Using MAYAFLUX_ROOT from environment: $ENV{MAYAFLUX_ROOT}")
 endif()
 
@@ -43,6 +44,7 @@ elseif(PLATFORM_LINUX)
     list(APPEND MAYAFLUX_SEARCH_PATHS 
         "/usr/local/lib/cmake/MayaFlux"
         "$ENV{HOME}/MayaFlux/lib/cmake/MayaFlux"
+        "$ENV{HOME}/MayaFlux/lib64/cmake/MayaFlux"
         "$ENV{HOME}/.local/lib/cmake/MayaFlux"
     )
 elseif(PLATFORM_WINDOWS)
@@ -144,7 +146,8 @@ elseif(PLATFORM_LINUX)
 elseif(PLATFORM_WINDOWS)
     # Windows: Set runtime library
     set_target_properties(${PROJECT_NAME} PROPERTIES
-        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
+        # MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
+        MSVC_RUNTIME_LIBRARY "MultiThreadedDLL"
     )
     
     # Copy MayaFlux DLLs to output directory using package-provided paths
