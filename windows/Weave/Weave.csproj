@@ -10,6 +10,7 @@
     <AssemblyName>Weave</AssemblyName>
     <LangVersion>latest</LangVersion>
     <Platforms>AnyCPU;x64</Platforms>
+    <ApplicationIcon>resources\weave.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
@@ -51,6 +52,12 @@
     <Link>Resources/templates/shaders/%(RecursiveDir)%(Filename)%(Extension)</Link>
     </EmbeddedResource>
   </ItemGroup>
+
+    <ItemGroup>
+    <Content Include="resources\weave.ico">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Shared\Shared.csproj" />

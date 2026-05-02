@@ -96,6 +96,10 @@ class WeaveApp(Adw.Application):
     def _on_activate(self, app):
         setup_css(app)
 
+        icon_path = Path(__file__).parent.parent / "resources" / "weave.png"
+        if icon_path.exists():
+            Gtk.Window.set_default_icon_from_file(str(icon_path))
+
         selector = ModeSelector(self)
         selector.present()
         selector.connect("close-request", self._on_mode_selected, selector)

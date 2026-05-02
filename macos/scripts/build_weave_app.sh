@@ -47,6 +47,8 @@ cat >"$TEMP_PROJECT/Info.plist" <<EOF
     <string></string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>CFBundleIconFile</key>
+    <string>weave</string>
 </dict>
 </plist>
 EOF
@@ -89,6 +91,7 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 
 cp Weave "$APP_BUNDLE/Contents/MacOS/"
 cp Info.plist "$APP_BUNDLE/Contents/"
+cp "$MACOS_DIR/resources/weave.icns" "$APP_BUNDLE/Contents/Resources/"
 
 echo "Copying Weave CLI into bundle resources..."
 cp "$MACOS_DIR/Weave.sh" "$APP_BUNDLE/Contents/Resources/weave"
