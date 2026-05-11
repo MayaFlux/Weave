@@ -19,6 +19,10 @@
     }
 
     WingetPackages = @{
+        LLVM = @{
+            WingetId = 'LLVM.LLVM'
+            Verify   = 'C:\Program Files\LLVM\bin\clang.exe'
+        }
         FFmpeg = @{
             WingetId = 'Gyan.FFmpeg'
             Verify   = 'ffmpeg'
@@ -29,33 +33,13 @@
         }
     }
 
-    BinaryPackages = @{
-        LLVM = @{
-            Version      = "21.1.8"
-            InstallRoot  = "C:\Program Files\LLVM_Libs\21.1.8"
-            Url          = "https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.8/clang+llvm-21.1.8-x86_64-pc-windows-msvc.tar.xz"
-            Verify       = "C:\Program Files\LLVM_Libs\21.1.8\lib\LLVMCore.lib"
-        }
-    }
+    BinaryPackages = @{}
 
     HeaderOnlyPackages = @{}
 
     SourcePackages     = @{}
 
-    VcpkgPackages = @{
-        glm        = @{}
-        eigen3     = @{}
-        "magic-enum" = @{}
-        stb        = @{}
-        hidapi     = @{}
-        glfw3      = @{}
-        rtaudio    = @{}
-        rtmidi     = @{}
-        asio       = @{}
-        assimp     = @{}
-        freetype   = @{}
-        utf8proc   = @{}
-    }
+    VcpkgPackages = @{}
 
     SpecialPackages    = @{
         VisualStudio = @{

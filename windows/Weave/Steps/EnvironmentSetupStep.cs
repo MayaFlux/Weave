@@ -101,10 +101,10 @@ public class EnvironmentSetupStep : IInstallationStep
             await LogAsync("=== Dependency Configuration ===");
             await LogAsync("");
 
-            await SetupDiaSDK();
-            await SetupLLVM();
+            // await SetupDiaSDK();
+            // await SetupLLVM();
             await SetupVulkan();
-            await SetupVcpkg();
+            // await SetupVcpkg();
 
             await LogAsync("");
             await LogAsync("=== Environment Setup Complete ===");
