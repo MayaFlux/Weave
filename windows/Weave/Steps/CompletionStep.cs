@@ -89,6 +89,35 @@ Documentation: https://github.com/MayaFlux/MayaFlux"
 
         layout.AddFlexibleSpacer();
 
+        if (config.NeedsReboot)
+        {
+            var rebootLabel = new Label
+            {
+                Text = "⚠ Restart Required",
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                ForeColor = Color.FromArgb(217, 119, 6),
+                BackColor = ThemeColors.BackgroundDark,
+                AutoSize = true
+            };
+            layout.AddToStack(rebootLabel, LayoutConstants.SpacingSmall);
+
+            var rebootBox = new TextBox
+            {
+                Multiline = true,
+                ReadOnly = true,
+                Font = new Font("Segoe UI", 9),
+                BackColor = Color.FromArgb(255, 251, 235),
+                ForeColor = Color.FromArgb(120, 53, 15),
+                BorderStyle = BorderStyle.FixedSingle,
+                Height = 50,
+                Width = layout.GetUsableWidth(),
+                Text = "Build tools were installed and require a system restart before\nyou can build projects. Restart when ready."
+            };
+            layout.AddToStack(rebootBox, LayoutConstants.SpacingLarge);
+        }
+
+        layout.AddFlexibleSpacer();
+
         var viewLogBtn = layout.AddButton("View Log", ThemeColors.ButtonSecondary);
         viewLogBtn.Click += (s, e) =>
         {
