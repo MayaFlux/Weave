@@ -155,8 +155,6 @@ jobs:
 
           New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
           Copy-Item "$publishDir/Weave.exe" -Destination "$stagingDir/Weave.exe" -Force
-          Copy-Item "windows/scripts/install_package.ps1" -Destination "$stagingDir/install_package.ps1" -Force
-          Copy-Item "windows/scripts/packages.psd1" -Destination "$stagingDir/packages.psd1" -Force
 
           # Only copy resources if it exists
           if (Test-Path "windows/resources") {

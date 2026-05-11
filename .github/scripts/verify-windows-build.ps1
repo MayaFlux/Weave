@@ -41,16 +41,6 @@ if ($sizeMB -lt 100) {
     exit 1
 }
 
-$requiredFiles = @("install_package.ps1", "packages.psd1")
-foreach ($file in $requiredFiles) {
-    $entry = $zip.Entries | Where-Object { $_.Name -eq $file -and $_.FullName -eq $file }
-    if ($null -eq $entry) {
-        Write-Host "WARNING: $file not found at root"
-    } else {
-        Write-Host "[OK] $file present"
-    }
-}
-
 $templatesEntries = $zip.Entries | Where-Object { $_.FullName -like "templates/*" }
 if ($templatesEntries.Count -eq 0) {
     Write-Host "WARNING: templates directory not found in ZIP"

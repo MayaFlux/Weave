@@ -41,13 +41,6 @@
       <Link>Resources/templates/vscode/launch.json</Link>
     </EmbeddedResource>
     
-    <EmbeddedResource Include="..\..\windows\scripts\install_package.ps1">
-      <Link>Resources/scripts/install_package.ps1</Link>
-    </EmbeddedResource>
-    <EmbeddedResource Include="..\..\windows\scripts\packages.psd1">
-      <Link>Resources/scripts/packages.psd1</Link>
-    </EmbeddedResource>
-
     <EmbeddedResource Include="..\..\templates\shaders\**\*">
     <Link>Resources/templates/shaders/%(RecursiveDir)%(Filename)%(Extension)</Link>
     </EmbeddedResource>

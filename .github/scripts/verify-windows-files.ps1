@@ -53,21 +53,6 @@ foreach ($t in $templates) {
 }
 
 Write-Host ""
-Write-Host "Checking scripts..."
-$scripts = @(
-    "windows\scripts\install_package.ps1",
-    "windows\scripts\packages.psd1"
-)
-foreach ($s in $scripts) {
-    if (Test-Path $s) {
-        Write-Host "[OK] $s"
-    } else {
-        Write-Host "[ERROR] $s missing"
-        $allPresent = $false
-    }
-}
-
-Write-Host ""
 if ($allPresent) {
     Write-Host "All files present - ready for build"
     exit 0
