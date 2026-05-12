@@ -236,10 +236,9 @@ public class SystemCheckStep : IInstallationStep
                 FileName = "winget",
                 Arguments = "install Microsoft.VisualStudio.2022.BuildTools " +
                             "--override \"--wait --quiet " +
-                            "--add Microsoft.VisualStudio.Workload.VCTools " +
                             "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 " +
                             "--add Microsoft.VisualStudio.Component.Windows11SDK.22621 " +
-                            "--includeRecommended\"",
+                            "--add Microsoft.VisualStudio.Component.VC.Redist.14.Latest\"",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
