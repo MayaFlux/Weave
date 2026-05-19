@@ -23,7 +23,7 @@ fi
 
 echo "Copying scripts and templates..."
 mkdir -p "$DIST/lib/scripts"
-cp "$LINUX_DIR/scripts"/{create_project.sh,install_deps.sh} "$DIST/lib/scripts/"
+cp "$LINUX_DIR/scripts"/create_project.sh "$DIST/lib/scripts/"
 chmod +x "$DIST/lib/scripts/"*
 
 cp -r "$REPO_ROOT/templates" "$DIST/lib/templates"
