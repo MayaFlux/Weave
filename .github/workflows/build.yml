@@ -374,12 +374,13 @@ jobs:
           cp "./packages/macos/Weave.dmg" "./release/Weave-macos.dmg"
 
           # Linux
-          LINUX_TARBALL=$(find ./packages/linux -name "Weave.tar.gz" | head -1)
-          if [ -z "$LINUX_TARBALL" ]; then
-            echo "Error: Linux tarball not found"
+          LINUX_APPIMAGE=$(find ./packages/linux -name "Weave-*.AppImage" | head -1)
+          if [ -z "$LINUX_APPIMAGE" ]; then
+            echo "Error: Linux AppImage not found"
             exit 1
           fi
-          cp "$LINUX_TARBALL" "./release/Weave-linux.tar.gz"
+          cp "$LINUX_APPIMAGE" "./release/Weave-linux.AppImage"
+          chmod +x "./release/Weave-linux.AppImage"
 
           # Windows
           WINDOWS_ZIP=$(find ./packages/windows -name "Weave.zip" | head -1)
@@ -408,7 +409,7 @@ jobs:
             steps.version.outputs.VERSION) }}
           files: |
             release/Weave-macos.dmg
-            release/Weave-linux.tar.gz
+            release/Weave-linux.AppImage
             release/Weave-windows.zip
           body_path: release-body.md
           draft: false
