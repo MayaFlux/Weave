@@ -229,10 +229,8 @@ fi
 TYPELIB_SRC="/usr/lib/x86_64-linux-gnu/girepository-1.0"
 TYPELIB_DST="$APPDIR/usr/lib/girepository-1.0"
 mkdir -p "$TYPELIB_DST"
-for lib in Gtk-4.0 Gdk-4.0 GdkWayland-4.0 GdkX11-4.0 Adw-1 GLib-2.0 GObject-2.0 Gio-2.0 GModule-2.0 Pango-1.0 PangoCairo-1.0 cairo-1.0 GdkPixbuf-2.0 HarfBuzz-0.0; do
-    src="$TYPELIB_SRC/${lib}.typelib"
-    [ -f "$src" ] && cp "$src" "$TYPELIB_DST/" || echo "  WARN: ${lib}.typelib not found"
-done
+echo "Copying all typelibs from $TYPELIB_SRC..."
+cp "$TYPELIB_SRC"/*.typelib "$TYPELIB_DST/"
 
 SCHEMA_SRC="/usr/share/glib-2.0/schemas"
 SCHEMA_DST="$APPDIR/usr/share/glib-2.0/schemas"

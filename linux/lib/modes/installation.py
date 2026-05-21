@@ -422,6 +422,11 @@ class CompletionStep:
         title.set_halign(Gtk.Align.CENTER)
         box.append(title)
 
+        self._status = Gtk.Label(label="Installing Weave CLI...")
+        self._status.set_halign(Gtk.Align.START)
+        self._status.add_css_class("dim-label")
+        box.append(self._status)
+
         info = Gtk.Label()
         info.set_markup(
             "<b>Next steps:</b>\n\n"
@@ -448,7 +453,51 @@ class CompletionStep:
         _swap(container, box)
 
     def run(self, done_cb):
-        done_cb(True)
+        threading.Thread(target=self._deploy_cli, args=(done_cb,), daemon=True).start()
+
+    def _deploy_cli(self, done_cb):
+        try:
+            weave_root = Path(os.environ.get("WEAVE_ROOT", ""))
+            if not weave_root or not weave_root.exists():
+                GLib.idle_add(
+                    self._status.set_text,
+                    "Warning: WEAVE_ROOT not set, skipping CLI install.",
+                )
+                GLib.idle_add(done_cb, True)
+                return
+
+            launcher_alt = weave_root / "usr" / "bin" / "Weave"
+            launcher = weave_root / "Weave"
+            actual_launcher = launcher if launcher.exists() else launcher_alt
+
+            if not actual_launcher.exists():
+                raise FileNotFoundError(
+                    f"Weave launcher not found at {launcher} or {launcher_alt}"
+                )
+
+            templates_src = weave_root / "lib" / "templates"
+            bin_dir = Path.home() / ".local" / "bin"
+            share_dir = Path.home() / ".local" / "share" / "weave" / "templates"
+
+            bin_dir.mkdir(parents=True, exist_ok=True)
+
+            dest_launcher = bin_dir / "weave"
+            shutil.copy2(actual_launcher, dest_launcher)
+            dest_launcher.chmod(0o755)
+
+            if templates_src.exists():
+                if share_dir.exists():
+                    shutil.rmtree(share_dir)
+                shutil.copytree(templates_src, share_dir)
+
+            GLib.idle_add(
+                self._status.set_text, "Weave CLI installed to ~/.local/bin/weave"
+            )
+        except Exception as e:
+            print(f"[weave deploy] ERROR: {e}")
+            GLib.idle_add(self._status.set_text, f"Warning: CLI install failed: {e}")
+
+        GLib.idle_add(done_cb, True)
 
 
 # ==============================================================================
