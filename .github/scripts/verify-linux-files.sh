@@ -12,7 +12,6 @@ all_present=true
 
 required_files=(
     "linux/lib/main.py"
-    "linux/lib/cli.py"
     "linux/lib/modes/installation.py"
     "linux/lib/modes/project.py"
     "linux/lib/ui/theme.py"

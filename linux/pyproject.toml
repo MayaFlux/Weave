@@ -11,7 +11,6 @@ dependencies = ["PyGObject"]
 
 [project.scripts]
 weave-installer = "lib.main:main"
-weave = "lib.cli:main"
 
 [tool.setuptools]
 packages = ["lib", "lib.modes", "lib.ui"]
