@@ -69,171 +69,167 @@ error() {
 }
 
 # ============================================================================
-# ARGUMENT PARSING
+# CMD: new
 # ============================================================================
 
-[ "$#" -eq 0 ] && usage
-[ "$1" = "--help" ] && usage
-[ "$1" != "new" ] && error "Unknown command: $1. Use 'weave new <name>'"
+cmd_new() {
+    local PROJECT_NAME="${1:-}"
+    local DEST_DIR="${2:-.}"
+    local WITH_LILA=false
+    local WITH_VSCODE=true
 
-shift
-PROJECT_NAME="${1:-}"
-DEST_DIR="${2:-.}"
-WITH_LILA=false
-WITH_VSCODE=true
+    shift 2 2>/dev/null || true
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+        --with-lila) WITH_LILA=true ;;
+        --no-vscode) WITH_VSCODE=false ;;
+        *) error "Unknown option: $1" ;;
+        esac
+        shift
+    done
 
-shift 2 2>/dev/null || true
-while [ "$#" -gt 0 ]; do
-    case "$1" in
-    --with-lila) WITH_LILA=true ;;
-    --no-vscode) WITH_VSCODE=false ;;
-    *) error "Unknown option: $1" ;;
-    esac
-    shift
-done
+    [ -z "$PROJECT_NAME" ] && error "Project name required"
 
-[ -z "$PROJECT_NAME" ] && error "Project name required"
+    local PROJECT_DIR="$DEST_DIR/$PROJECT_NAME"
 
-PROJECT_DIR="$DEST_DIR/$PROJECT_NAME"
+    # ============================================================================
+    # CHECK IF PROJECT EXISTS
+    # ============================================================================
 
-# ============================================================================
-# CHECK IF PROJECT EXISTS
-# ============================================================================
-
-if [ -d "$PROJECT_DIR" ]; then
-    if [ -f "$PROJECT_DIR/CMakeLists.txt" ] && grep -q "MayaFlux" "$PROJECT_DIR/CMakeLists.txt" 2>/dev/null; then
-        echo "[Weave] Project '$PROJECT_NAME' already exists and is a MayaFlux project."
-        echo "Nothing to do."
-        exit 0
-    else
-        error "Directory '$PROJECT_DIR' already exists but is not a MayaFlux project"
+    if [ -d "$PROJECT_DIR" ]; then
+        if [ -f "$PROJECT_DIR/CMakeLists.txt" ] && grep -q "MayaFlux" "$PROJECT_DIR/CMakeLists.txt" 2>/dev/null; then
+            echo "[Weave] Project '$PROJECT_NAME' already exists and is a MayaFlux project."
+            echo "Nothing to do."
+            exit 0
+        else
+            error "Directory '$PROJECT_DIR' already exists but is not a MayaFlux project"
+        fi
     fi
-fi
 
-# ============================================================================
-# CHECK TEMPLATES DIRECTORY
-# ============================================================================
+    # ============================================================================
+    # CHECK TEMPLATES DIRECTORY
+    # ============================================================================
 
-if [ ! -f "$TEMPLATES_DIR/CMakeLists.txt" ]; then
-    error "CMakeLists.txt template not found"
-fi
-if [ ! -f "$TEMPLATES_DIR/cmake/shaders.cmake" ]; then
-    error "cmake/shaders.cmake template not found"
-fi
-if [ ! -f "$TEMPLATES_DIR/cmake/build_community.cmake" ]; then
-    error "cmake/build_community.cmake template not found"
-fi
+    if [ ! -f "$TEMPLATES_DIR/CMakeLists.txt" ]; then
+        error "CMakeLists.txt template not found"
+    fi
+    if [ ! -f "$TEMPLATES_DIR/cmake/shaders.cmake" ]; then
+        error "cmake/shaders.cmake template not found"
+    fi
+    if [ ! -f "$TEMPLATES_DIR/cmake/build_community.cmake" ]; then
+        error "cmake/build_community.cmake template not found"
+    fi
 
-# ============================================================================
-# CREATE PROJECT STRUCTURE
-# ============================================================================
+    # ============================================================================
+    # CREATE PROJECT STRUCTURE
+    # ============================================================================
 
-echo "[Weave] Creating project: $PROJECT_NAME"
-mkdir -p "$PROJECT_DIR/src"
-mkdir -p "$PROJECT_DIR/cmake"
+    echo "[Weave] Creating project: $PROJECT_NAME"
+    mkdir -p "$PROJECT_DIR/src"
+    mkdir -p "$PROJECT_DIR/cmake"
 
-# ============================================================================
-# GENERATE CMakeLists.txt
-# ============================================================================
+    # ============================================================================
+    # GENERATE CMakeLists.txt
+    # ============================================================================
 
-if [ "$WITH_LILA" = true ]; then
-    LILA_LINK_BLOCK='target_link_libraries(${PROJECT_NAME} PRIVATE MayaFlux::MayaFluxHost)'
-    LILA_DEBUGGER_PATH='$<TARGET_FILE_DIR:MayaFlux::MayaFluxHost>;'
-    LILA_DLL_COPY='if(EXISTS "$ENV{MAYAFLUX_ROOT}/bin/MayaFluxHost.dll")
+    if [ "$WITH_LILA" = true ]; then
+        LILA_LINK_BLOCK='target_link_libraries(${PROJECT_NAME} PRIVATE MayaFlux::MayaFluxHost)'
+        LILA_DEBUGGER_PATH='$<TARGET_FILE_DIR:MayaFlux::MayaFluxHost>;'
+        LILA_DLL_COPY='if(EXISTS "$ENV{MAYAFLUX_ROOT}/bin/MayaFluxHost.dll")
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "$ENV{MAYAFLUX_ROOT}/bin/MayaFluxHost.dll"
                 $<TARGET_FILE_DIR:${PROJECT_NAME}>
         )
     endif()'
-else
-    LILA_LINK_BLOCK=''
-    LILA_DEBUGGER_PATH=''
-    LILA_DLL_COPY=''
-fi
-
-sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" "$TEMPLATES_DIR/CMakeLists.txt" |
-    sed "s|@LILA_LINK_BLOCK@|$LILA_LINK_BLOCK|g" |
-    sed "s|@LILA_DEBUGGER_PATH@||g" |
-    sed "s|@LILA_DLL_COPY@||g" \
-        >"$PROJECT_DIR/CMakeLists.txt"
-echo "✅ CMakeLists.txt generated"
-
-# ============================================================================
-# COPY cmake modules
-# ============================================================================
-
-cp "$TEMPLATES_DIR/cmake/shaders.cmake" "$PROJECT_DIR/cmake/shaders.cmake"
-echo "✅ cmake/shaders.cmake copied"
-cp "$TEMPLATES_DIR/cmake/build_community.cmake" "$PROJECT_DIR/cmake/build_community.cmake"
-echo "✅ cmake/build_community.cmake copied"
-
-# ============================================================================
-# COPY main.cpp
-# ============================================================================
-
-if [ ! -f "$TEMPLATES_DIR/main.cpp" ]; then
-    error "main.cpp template not found at $TEMPLATES_DIR/main.cpp"
-fi
-
-cp "$TEMPLATES_DIR/main.cpp" "$PROJECT_DIR/src/main.cpp"
-echo "✅ main.cpp created"
-
-# ============================================================================
-# COPY user_project.hpp
-# ============================================================================
-
-if [ ! -f "$TEMPLATES_DIR/user_project.hpp" ]; then
-    error "user_project.hpp template not found at $TEMPLATES_DIR/user_project.hpp"
-fi
-
-cp "$TEMPLATES_DIR/user_project.hpp" "$PROJECT_DIR/src/user_project.hpp"
-echo "✅ user_project.hpp created"
-
-# ============================================================================
-# CREATE data/shaders AND COPY TEMPLATE SHADERS
-# ============================================================================
-
-mkdir -p "$PROJECT_DIR/data/shaders"
-
-if [ -d "$TEMPLATES_DIR/shaders" ] && [ -n "$(ls -A "$TEMPLATES_DIR/shaders" 2>/dev/null)" ]; then
-    cp "$TEMPLATES_DIR/shaders/"* "$PROJECT_DIR/data/shaders/"
-    echo "  ✓ Copied template shaders"
-else
-    echo "  ✓ Created empty data/shaders (no template shaders)"
-fi
-
-# ============================================================================
-# CREATE VS CODE CONFIGURATION (if enabled)
-# ============================================================================
-
-if [ "$WITH_VSCODE" = true ]; then
-    mkdir -p "$PROJECT_DIR/.vscode"
-
-    # Check if VS Code templates exist
-    if [ -d "$TEMPLATES_DIR/vscode" ]; then
-        # Use templates with substitution
-        for vscode_file in settings.json tasks.json launch.json; do
-            if [ -f "$TEMPLATES_DIR/vscode/${vscode_file}" ]; then
-                sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" \
-                    "$TEMPLATES_DIR/vscode/${vscode_file}" \
-                    >"$PROJECT_DIR/.vscode/$vscode_file"
-            fi
-        done
-        echo "✅ VS Code configuration created"
     else
-        echo "⚠️  VS Code templates not found, skipping"
+        LILA_LINK_BLOCK=''
+        LILA_DEBUGGER_PATH=''
+        LILA_DLL_COPY=''
     fi
-fi
 
-cp "$TEMPLATES_DIR/.gitignore" "$PROJECT_DIR/.gitignore"
-echo "✅ .gitignore copied"
+    sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" "$TEMPLATES_DIR/CMakeLists.txt" |
+        sed "s|@LILA_LINK_BLOCK@|$LILA_LINK_BLOCK|g" |
+        sed "s|@LILA_DEBUGGER_PATH@||g" |
+        sed "s|@LILA_DLL_COPY@||g" \
+            >"$PROJECT_DIR/CMakeLists.txt"
+    echo "✅ CMakeLists.txt generated"
 
-# ============================================================================
-# CREATE README
-# ============================================================================
+    # ============================================================================
+    # COPY cmake modules
+    # ============================================================================
 
-cat >"$PROJECT_DIR/README.md" <<EOF
+    cp "$TEMPLATES_DIR/cmake/shaders.cmake" "$PROJECT_DIR/cmake/shaders.cmake"
+    echo "✅ cmake/shaders.cmake copied"
+    cp "$TEMPLATES_DIR/cmake/build_community.cmake" "$PROJECT_DIR/cmake/build_community.cmake"
+    echo "✅ cmake/build_community.cmake copied"
+
+    # ============================================================================
+    # COPY main.cpp
+    # ============================================================================
+
+    if [ ! -f "$TEMPLATES_DIR/main.cpp" ]; then
+        error "main.cpp template not found at $TEMPLATES_DIR/main.cpp"
+    fi
+
+    cp "$TEMPLATES_DIR/main.cpp" "$PROJECT_DIR/src/main.cpp"
+    echo "✅ main.cpp created"
+
+    # ============================================================================
+    # COPY user_project.hpp
+    # ============================================================================
+
+    if [ ! -f "$TEMPLATES_DIR/user_project.hpp" ]; then
+        error "user_project.hpp template not found at $TEMPLATES_DIR/user_project.hpp"
+    fi
+
+    cp "$TEMPLATES_DIR/user_project.hpp" "$PROJECT_DIR/src/user_project.hpp"
+    echo "✅ user_project.hpp created"
+
+    # ============================================================================
+    # CREATE data/shaders AND COPY TEMPLATE SHADERS
+    # ============================================================================
+
+    mkdir -p "$PROJECT_DIR/data/shaders"
+
+    if [ -d "$TEMPLATES_DIR/shaders" ] && [ -n "$(ls -A "$TEMPLATES_DIR/shaders" 2>/dev/null)" ]; then
+        cp "$TEMPLATES_DIR/shaders/"* "$PROJECT_DIR/data/shaders/"
+        echo "  ✓ Copied template shaders"
+    else
+        echo "  ✓ Created empty data/shaders (no template shaders)"
+    fi
+
+    # ============================================================================
+    # CREATE VS CODE CONFIGURATION (if enabled)
+    # ============================================================================
+
+    if [ "$WITH_VSCODE" = true ]; then
+        mkdir -p "$PROJECT_DIR/.vscode"
+
+        # Check if VS Code templates exist
+        if [ -d "$TEMPLATES_DIR/vscode" ]; then
+            # Use templates with substitution
+            for vscode_file in settings.json tasks.json launch.json; do
+                if [ -f "$TEMPLATES_DIR/vscode/${vscode_file}" ]; then
+                    sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" \
+                        "$TEMPLATES_DIR/vscode/${vscode_file}" \
+                        >"$PROJECT_DIR/.vscode/$vscode_file"
+                fi
+            done
+            echo "✅ VS Code configuration created"
+        else
+            echo "⚠️  VS Code templates not found, skipping"
+        fi
+    fi
+
+    cp "$TEMPLATES_DIR/.gitignore" "$PROJECT_DIR/.gitignore"
+    echo "✅ .gitignore copied"
+
+    # ============================================================================
+    # CREATE README
+    # ============================================================================
+
+    cat >"$PROJECT_DIR/README.md" <<EOF
 # $PROJECT_NAME
 
 A MayaFlux multimedia DSP project.
@@ -268,27 +264,41 @@ Edit your code in \`src/user_project.hpp\`:
 See [MayaFlux Documentation](https://github.com/MayaFlux/MayaFlux)
 EOF
 
-echo "✅ README.md created"
+    echo "✅ README.md created"
+
+    # ============================================================================
+    # SUMMARY
+    # ============================================================================
+
+    echo ""
+    echo "=========================================="
+    echo "  Project '$PROJECT_NAME' created!"
+    echo "=========================================="
+    echo ""
+    echo "Location: $PROJECT_DIR"
+    echo ""
+    echo "Next steps:"
+    echo "  cd $PROJECT_DIR"
+    if [ "$WITH_VSCODE" = true ]; then
+        echo "  code .                              # Open in VS Code"
+    fi
+    echo "  mkdir build && cd build"
+    echo "  cmake .. && make"
+    echo "  ./$PROJECT_NAME"
+    echo ""
+}
 
 # ============================================================================
-# SUMMARY
+# ENTRY POINT
 # ============================================================================
 
-echo ""
-echo "=========================================="
-echo "  Project '$PROJECT_NAME' created!"
-echo "=========================================="
-echo ""
-echo "Location: $PROJECT_DIR"
-echo ""
-echo "Next steps:"
-echo "  cd $PROJECT_DIR"
-if [ "$WITH_VSCODE" = true ]; then
-    echo "  code .                              # Open in VS Code"
-fi
-echo "  mkdir build && cd build"
-echo "  cmake .. && make"
-echo "  ./$PROJECT_NAME"
-echo ""
+[ "$#" -eq 0 ] && usage
+[ "$1" = "--help" ] || [ "$1" = "-h" ] && usage
 
-exit 0
+CMD="$1"
+shift
+
+case "$CMD" in
+new) cmd_new "$@" ;;
+*) error "Unknown command: $CMD. Use 'weave --help'" ;;
+esac
