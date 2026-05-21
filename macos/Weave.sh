@@ -44,14 +44,15 @@ usage() {
 Weave - MayaFlux Project Creator
 
 Usage:
-  weave new <project-name> [destination-dir]
+  weave new <project-name> [destination-dir] [options]
+  weave community <module-name> [destination-dir]
   weave --help
 
-Examples:
-  weave new AudioViz ~/Projects/
-  weave new MyApp .
+Commands:
+  new        Create a new MayaFlux project
+  community  Create a new community module template
 
-Options:
+Options (new):
   --with-lila    Enable live coding (links against Lila)
   --no-vscode    Skip VS Code configuration
   --help         Show this help
@@ -289,6 +290,58 @@ EOF
 }
 
 # ============================================================================
+# CMD: community
+# ============================================================================
+
+cmd_community() {
+    local MODULE_NAME="${1:-}"
+    local DEST_DIR="${2:-.}"
+
+    [ -z "$MODULE_NAME" ] && error "Module name required: weave community <module-name> [destination-dir]"
+
+    echo "$MODULE_NAME" | grep -qE '^[a-z][a-z0-9_]*$' ||
+        error "Module name must be snake_case (lowercase letters, digits, underscores, no leading digit)"
+
+    DEST_DIR="${DEST_DIR/#\~/$HOME}"
+    mkdir -p "$DEST_DIR" || error "Cannot create destination directory: $DEST_DIR"
+    DEST_DIR="$(cd "$DEST_DIR" && pwd)"
+
+    local MODULE_DIR="$DEST_DIR/$MODULE_NAME"
+    [ -d "$MODULE_DIR" ] && error "Directory already exists: $MODULE_DIR"
+
+    [ ! -f "$TEMPLATES_DIR/community/module.cmake" ] && error "Required template missing: community/module.cmake"
+    [ ! -f "$TEMPLATES_DIR/community/community.json" ] && error "Required template missing: community/community.json"
+    [ ! -f "$TEMPLATES_DIR/community/test/CMakeLists.txt" ] && error "Required template missing: community/test/CMakeLists.txt"
+
+    mkdir -p "$MODULE_DIR/src"
+    mkdir -p "$MODULE_DIR/test"
+
+    cp "$TEMPLATES_DIR/.gitignore" "$MODULE_DIR/.gitignore"
+
+    sed "s|@MODULE_NAME@|$MODULE_NAME|g" "$TEMPLATES_DIR/community/module.cmake" \
+        >"$MODULE_DIR/${MODULE_NAME}.cmake"
+
+    sed "s|@MODULE_NAME@|$MODULE_NAME|g" "$TEMPLATES_DIR/community/community.json" \
+        >"$MODULE_DIR/community.json"
+
+    sed "s|@MODULE_NAME@|$MODULE_NAME|g" "$TEMPLATES_DIR/community/test/CMakeLists.txt" \
+        >"$MODULE_DIR/test/CMakeLists.txt"
+
+    echo ""
+    echo "[Weave] Community module created: $MODULE_DIR"
+    echo ""
+    echo "  src/           <- put your sources here"
+    echo "  test/CMakeLists.txt"
+    echo "  ${MODULE_NAME}.cmake"
+    echo "  community.json"
+    echo ""
+    echo "Test with:"
+    echo "  test/test_${MODULE_NAME}.cpp  <- create this to build the test"
+    echo "  cd $MODULE_DIR/test && mkdir build && cd build"
+    echo "  cmake .. && cmake --build . --parallel"
+}
+
+# ============================================================================
 # ENTRY POINT
 # ============================================================================
 
@@ -300,5 +353,6 @@ shift
 
 case "$CMD" in
 new) cmd_new "$@" ;;
+community) cmd_community "$@" ;;
 *) error "Unknown command: $CMD. Use 'weave --help'" ;;
 esac
