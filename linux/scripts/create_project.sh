@@ -169,27 +169,8 @@ cmd_new() {
         log "  ✓ Generated VS Code configuration"
     fi
 
-    cat >"$PROJECT_DIR/.gitignore" <<'EOF'
-/build/
-/cmake-build-*/
-.vscode/
-.idea/
-*.swp
-*.swo
-compile_commands.json
-CMakeCache.txt
-CMakeFiles/
-cmake_install.cmake
-*.o
-*.so
-*.a
-*.lib
-*.exe
-.DS_Store
-__pycache__/
-*.pyc
-EOF
-    log "  ✓ Generated .gitignore"
+    cp "$TEMPLATES_DIR/.gitignore" "$PROJECT_DIR/.gitignore"
+    log "  ✓ Copied .gitignore"
 
     cat >"$PROJECT_DIR/README.md" <<EOF
 # $PROJECT_NAME
@@ -326,148 +307,34 @@ cmd_community() {
     local MODULE_DIR="$DEST_DIR/$MODULE_NAME"
     [ -d "$MODULE_DIR" ] && error "Directory already exists: $MODULE_DIR"
 
-    local CLASS_NAME
-    CLASS_NAME="$(echo "$MODULE_NAME" | python3 -c "
-import sys
-parts = sys.stdin.read().strip().split('_')
-print(''.join(p.capitalize() for p in parts))
-")"
+    [ ! -f "$TEMPLATES_DIR/community/module.cmake" ] && error "Required template missing: community/module.cmake"
+    [ ! -f "$TEMPLATES_DIR/community/community.json" ] && error "Required template missing: community/community.json"
+    [ ! -f "$TEMPLATES_DIR/community/test/CMakeLists.txt" ] && error "Required template missing: community/test/CMakeLists.txt"
 
     mkdir -p "$MODULE_DIR/src"
     mkdir -p "$MODULE_DIR/test"
 
-    cat >"$MODULE_DIR/src/${CLASS_NAME}.hpp" <<EOF
-#pragma once
+    cp "$TEMPLATES_DIR/.gitignore" "$MODULE_DIR/.gitignore"
 
-#include "MayaFlux/MayaFlux.hpp"
+    sed "s|@MODULE_NAME@|$MODULE_NAME|g" "$TEMPLATES_DIR/community/module.cmake" \
+        >"$MODULE_DIR/${MODULE_NAME}.cmake"
 
-namespace MayaFlux {
+    sed "s|@MODULE_NAME@|$MODULE_NAME|g" "$TEMPLATES_DIR/community/community.json" \
+        >"$MODULE_DIR/community.json"
 
-class ${CLASS_NAME} {
-public:
-    ${CLASS_NAME}() = default;
-};
-
-} // namespace MayaFlux
-EOF
-
-    cat >"$MODULE_DIR/src/${CLASS_NAME}.cpp" <<EOF
-#include "${CLASS_NAME}.hpp"
-
-namespace MayaFlux {
-
-} // namespace MayaFlux
-EOF
-
-    cat >"$MODULE_DIR/${MODULE_NAME}.cmake" <<EOF
-set(MF_MIN_VERSION "0.3.0")
-set(MF_NEEDS_LILA OFF)
-
-file(GLOB_RECURSE _${MODULE_NAME}_sources CONFIGURE_DEPENDS
-    "\${CMAKE_SOURCE_DIR}/community/${MODULE_NAME}/src/*.cpp"
-)
-
-add_library(${MODULE_NAME} OBJECT
-    \${_${MODULE_NAME}_sources}
-)
-
-target_include_directories(${MODULE_NAME} PUBLIC
-    "\${CMAKE_SOURCE_DIR}/community/${MODULE_NAME}/src"
-)
-
-set_target_properties(${MODULE_NAME} PROPERTIES
-    CXX_STANDARD 23
-    CXX_STANDARD_REQUIRED ON
-)
-
-target_link_libraries(${MODULE_NAME} PUBLIC MayaFlux::MayaFluxLib)
-
-if(MF_NEEDS_LILA)
-    target_link_libraries(${MODULE_NAME} PUBLIC MayaFlux::Lila MayaFlux::MayaFluxHost)
-endif()
-EOF
-
-    cat >"$MODULE_DIR/community.json" <<EOF
-{
-  "name": "${MODULE_NAME}",
-  "min_version": "0.3.0",
-  "needs_lila": false,
-  "licence": "MIT",
-  "description": ""
-}
-EOF
-
-    cat >"$MODULE_DIR/test/CMakeLists.txt" <<EOF
-cmake_minimum_required(VERSION 3.25)
-project(${MODULE_NAME}_test LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-add_compile_definitions(MAYAFLUX_PROJECT)
-
-set(MAYAFLUX_SEARCH_PATHS "")
-if(DEFINED ENV{MAYAFLUX_ROOT})
-    list(APPEND MAYAFLUX_SEARCH_PATHS "\$ENV{MAYAFLUX_ROOT}/lib/cmake/MayaFlux")
-    list(APPEND MAYAFLUX_SEARCH_PATHS "\$ENV{MAYAFLUX_ROOT}/lib64/cmake/MayaFlux")
-endif()
-if(APPLE)
-    list(APPEND MAYAFLUX_SEARCH_PATHS "/Library/MayaFlux/lib/cmake/MayaFlux" "\$ENV{HOME}/MayaFlux/lib/cmake/MayaFlux")
-elseif(UNIX)
-    list(APPEND MAYAFLUX_SEARCH_PATHS "/usr/local/lib/cmake/MayaFlux" "\$ENV{HOME}/MayaFlux/lib/cmake/MayaFlux" "\$ENV{HOME}/.local/lib/cmake/MayaFlux")
-elseif(WIN32)
-    list(APPEND MAYAFLUX_SEARCH_PATHS "C:/MayaFlux/lib/cmake/MayaFlux" "\$ENV{USERPROFILE}/MayaFlux/lib/cmake/MayaFlux")
-endif()
-
-find_package(MayaFlux REQUIRED PATHS \${MAYAFLUX_SEARCH_PATHS} NO_DEFAULT_PATH)
-
-file(GLOB_RECURSE _${MODULE_NAME}_sources CONFIGURE_DEPENDS
-    "\${CMAKE_CURRENT_SOURCE_DIR}/../src/*.cpp"
-)
-
-add_library(${MODULE_NAME} OBJECT \${_${MODULE_NAME}_sources})
-target_include_directories(${MODULE_NAME} PUBLIC "\${CMAKE_CURRENT_SOURCE_DIR}/../src")
-set_target_properties(${MODULE_NAME} PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
-target_link_libraries(${MODULE_NAME} PUBLIC MayaFlux::MayaFluxLib)
-
-add_executable(test_${MODULE_NAME} test_${MODULE_NAME}.cpp)
-target_link_libraries(test_${MODULE_NAME} PRIVATE ${MODULE_NAME})
-
-if(UNIX)
-    execute_process(
-        COMMAND \${CMAKE_COMMAND} -E create_symlink
-        \${CMAKE_BINARY_DIR}/compile_commands.json
-        \${CMAKE_CURRENT_SOURCE_DIR}/../compile_commands.json
-    )
-endif()
-EOF
-
-    cat >"$MODULE_DIR/test/test_${MODULE_NAME}.cpp" <<EOF
-#include "${CLASS_NAME}.hpp"
-
-int main()
-{
-    return 0;
-}
-EOF
-
-    cat >"$MODULE_DIR/.gitignore" <<'EOF'
-build/
-compile_commands.json
-EOF
+    sed "s|@MODULE_NAME@|$MODULE_NAME|g" "$TEMPLATES_DIR/community/test/CMakeLists.txt" \
+        >"$MODULE_DIR/test/CMakeLists.txt"
 
     log ""
     log "Community module created: $MODULE_DIR"
     log ""
-    log "  src/${CLASS_NAME}.hpp"
-    log "  src/${CLASS_NAME}.cpp"
+    log "  src/           <- put your sources here"
     log "  test/CMakeLists.txt"
-    log "  test/test_${MODULE_NAME}.cpp"
     log "  ${MODULE_NAME}.cmake"
     log "  community.json"
     log ""
     log "Test with:"
+    log "  test/test_${MODULE_NAME}.cpp  <- create this to build the test"
     log "  cd $MODULE_DIR/test && mkdir build && cd build"
     log "  cmake .. && cmake --build . --parallel"
 }
