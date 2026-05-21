@@ -153,9 +153,9 @@ else
 fi
 
 sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" "$TEMPLATES_DIR/CMakeLists.txt" |
-    awk -v lila="$LILA_LINK_BLOCK" '{gsub(/@LILA_LINK_BLOCK@/, lila); print}' |
-    awk -v v="$LILA_DEBUGGER_PATH" '{gsub(/@LILA_DEBUGGER_PATH@/, v); print}' |
-    awk -v v="$LILA_DLL_COPY" '{gsub(/@LILA_DLL_COPY@/, v); print}' \
+    sed "s|@LILA_LINK_BLOCK@|$LILA_LINK_BLOCK|g" |
+    sed "s|@LILA_DEBUGGER_PATH@||g" |
+    sed "s|@LILA_DLL_COPY@||g" \
         >"$PROJECT_DIR/CMakeLists.txt"
 echo "✅ CMakeLists.txt generated"
 
