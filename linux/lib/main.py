@@ -32,6 +32,7 @@ from enum import Enum
 
 from lib.modes.installation import InstallationMode
 from lib.modes.project import ProjectCreationMode
+from lib.modes.community import CommunityModuleMode
 from lib.ui.theme import setup_css
 
 
@@ -177,7 +178,8 @@ class WeaveApp(Adw.Application):
         elif projects.selected_action == "update":
             pass  # TODO: UpdateProjectMode
         elif projects.selected_action == "community":
-            pass  # TODO: CommunityModuleMode
+            main_window = CommunityModuleMode(self, cfg.templates_dir, cfg.scripts_dir)
+            main_window.present()
         else:
             self.quit()
         return False
