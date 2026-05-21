@@ -114,8 +114,14 @@ fi
 # CHECK TEMPLATES DIRECTORY
 # ============================================================================
 
-if [ ! -d "$TEMPLATES_DIR" ]; then
-    error "Templates not found at $TEMPLATES_DIR. Is MayaFlux properly installed?"
+if [ ! -f "$TEMPLATES_DIR/CMakeLists.txt" ]; then
+    error "CMakeLists.txt template not found"
+fi
+if [ ! -f "$TEMPLATES_DIR/cmake/shaders.cmake" ]; then
+    error "cmake/shaders.cmake template not found"
+fi
+if [ ! -f "$TEMPLATES_DIR/cmake/build_community.cmake" ]; then
+    error "cmake/build_community.cmake template not found"
 fi
 
 # ============================================================================
@@ -124,46 +130,43 @@ fi
 
 echo "[Weave] Creating project: $PROJECT_NAME"
 mkdir -p "$PROJECT_DIR/src"
+mkdir -p "$PROJECT_DIR/cmake"
 
 # ============================================================================
 # GENERATE CMakeLists.txt
 # ============================================================================
 
-MAYAFLUX_CMAKE_PATH="$MAYAFLUX_ROOT/lib/cmake/MayaFlux"
-
 if [ "$WITH_LILA" = true ]; then
-    LILA_LINK_BLOCK='if(TARGET MayaFlux::Lila)
-    target_link_libraries(${PROJECT_NAME} PRIVATE MayaFlux::Lila)
-    message(STATUS "Lila live coding enabled")
-else()
-    message(WARNING "Lila not found - live coding disabled")
-endif()'
+    LILA_LINK_BLOCK='target_link_libraries(${PROJECT_NAME} PRIVATE MayaFlux::MayaFluxHost)'
+    LILA_DEBUGGER_PATH='$<TARGET_FILE_DIR:MayaFlux::MayaFluxHost>;'
+    LILA_DLL_COPY='if(EXISTS "$ENV{MAYAFLUX_ROOT}/bin/MayaFluxHost.dll")
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$ENV{MAYAFLUX_ROOT}/bin/MayaFluxHost.dll"
+                $<TARGET_FILE_DIR:${PROJECT_NAME}>
+        )
+    endif()'
 else
-    LILA_LINK_BLOCK='# Lila live coding not enabled'
+    LILA_LINK_BLOCK=''
+    LILA_DEBUGGER_PATH=''
+    LILA_DLL_COPY=''
 fi
 
-LILA_DLL_COPY='# Lila DLL copy not needed'
-
 sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" "$TEMPLATES_DIR/CMakeLists.txt" |
-    sed "s|@MAYAFLUX_CMAKE_PATH@|$MAYAFLUX_CMAKE_PATH|g" |
-    sed "s|@LILA_LINK_BLOCK@|${LILA_LINK_BLOCK}|g" |
-    sed "s|@LILA_DLL_COPY@|${LILA_DLL_COPY}|g" \
+    awk -v lila="$LILA_LINK_BLOCK" '{gsub(/@LILA_LINK_BLOCK@/, lila); print}' |
+    awk -v v="$LILA_DEBUGGER_PATH" '{gsub(/@LILA_DEBUGGER_PATH@/, v); print}' |
+    awk -v v="$LILA_DLL_COPY" '{gsub(/@LILA_DLL_COPY@/, v); print}' \
         >"$PROJECT_DIR/CMakeLists.txt"
-
 echo "✅ CMakeLists.txt generated"
 
 # ============================================================================
-# COPY shaders.cmake
+# COPY cmake modules
 # ============================================================================
 
-echo "Copying shaders.cmake"
-
-if [ ! -f "$TEMPLATES_DIR/shaders.cmake" ]; then
-    error "shaders.cmake template not found at $TEMPLATES_DIR/shaders.cmake"
-fi
-
-cp "$TEMPLATES_DIR/shaders.cmake" "$PROJECT_DIR/shaders.cmake"
-echo "✅ shaders.cmake created"
+cp "$TEMPLATES_DIR/cmake/shaders.cmake" "$PROJECT_DIR/cmake/shaders.cmake"
+echo "✅ cmake/shaders.cmake copied"
+cp "$TEMPLATES_DIR/cmake/build_community.cmake" "$PROJECT_DIR/cmake/build_community.cmake"
+echo "✅ cmake/build_community.cmake copied"
 
 # ============================================================================
 # COPY main.cpp
@@ -222,6 +225,9 @@ if [ "$WITH_VSCODE" = true ]; then
         echo "⚠️  VS Code templates not found, skipping"
     fi
 fi
+
+cp "$TEMPLATES_DIR/.gitignore" "$PROJECT_DIR/.gitignore"
+echo "✅ .gitignore copied"
 
 # ============================================================================
 # CREATE README
