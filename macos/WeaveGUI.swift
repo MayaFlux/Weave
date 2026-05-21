@@ -99,7 +99,7 @@ struct LandingView: View {
             CreateProjectView(onBack: { mode = .landing })
 
         case .createCommunity:
-            Text("Create Community Module — coming soon")
+            CreateCommunityView(onBack: { mode = .projects })
         }
     }
 }
@@ -914,6 +914,219 @@ struct CreateProjectView: View {
                 let data = pipe.fileHandleForReading.readDataToEndOfFile()
                 let output = String(data: data, encoding: .utf8) ?? "Unknown error"
                 alertMessage = "Failed to create project:\n\n\(output)"
+            }
+        } catch {
+            alertMessage = "Error: \(error.localizedDescription)"
+        }
+
+        showAlert = true
+        isCreating = false
+    }
+}
+
+// ============================================================================
+// MARK: - Create Community View
+// ============================================================================
+
+struct CreateCommunityView: View {
+    let onBack: () -> Void
+
+    @State private var moduleName: String = ""
+    @State private var moduleNameError: String = ""
+    @State private var description: String = ""
+    @State private var minVersion: String = "0.4.0"
+    @State private var needsLila: Bool = false
+    @State private var destination: String = NSHomeDirectory() + "/Projects"
+    @State private var isCreating: Bool = false
+    @State private var showAlert: Bool = false
+    @State private var alertMessage: String = ""
+
+    private var weavePath: String {
+        let localBin = "\(NSHomeDirectory())/.local/bin/weave"
+        if FileManager.default.fileExists(atPath: localBin) { return localBin }
+        return "\(Bundle.main.resourcePath ?? "")/weave"
+    }
+
+    private var preview: String {
+        "\(destination)/\(moduleName.isEmpty ? "my_module" : moduleName)"
+    }
+
+    private var nameIsValid: Bool {
+        let r = try! NSRegularExpression(pattern: "^[a-z][a-z0-9_]*$")
+        return r.firstMatch(
+            in: moduleName, range: NSRange(moduleName.startIndex..., in: moduleName)) != nil
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button(action: onBack) {
+                    Label("Back", systemImage: "chevron.left")
+                }
+                .buttonStyle(.borderless)
+                .disabled(isCreating)
+                Spacer()
+                Text("Create Community Module").font(.headline)
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Module Name (snake_case)").font(.headline)
+                        TextField("my_module", text: $moduleName)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: moduleName) { _ in validateName() }
+                        if !moduleNameError.isEmpty {
+                            Text(moduleNameError)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Description").font(.headline)
+                        TextField(
+                            "A short description of what this module does", text: $description
+                        )
+                        .textFieldStyle(.roundedBorder)
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Minimum MayaFlux Version").font(.headline)
+                        TextField("0.4.0", text: $minVersion)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    Toggle("Requires Lila (live coding)", isOn: $needsLila)
+                        .toggleStyle(CheckboxToggleStyle())
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Destination").font(.headline)
+                        HStack {
+                            TextField("/path/to/location", text: $destination)
+                                .textFieldStyle(.roundedBorder)
+                            Button("Browse…") { selectFolder() }
+                        }
+                    }
+
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Module will be created at:")
+                            .font(.caption).foregroundColor(.secondary)
+                        Text(preview)
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundColor(.blue)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(NSColor.textBackgroundColor))
+                    .cornerRadius(8)
+                }
+                .padding(24)
+            }
+
+            Divider()
+
+            HStack(spacing: 16) {
+                Button("Cancel") { NSApplication.shared.terminate(nil) }
+                    .keyboardShortcut(.cancelAction)
+                Button(isCreating ? "Creating…" : "Create Module") { createModule() }
+                    .disabled(isCreating || moduleName.isEmpty || !nameIsValid)
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+        }
+        .frame(width: 550, height: 480)
+        .alert("Weave", isPresented: $showAlert) {
+            Button("OK") {
+                if alertMessage.contains("created") {
+                    NSApplication.shared.terminate(nil)
+                }
+            }
+        } message: {
+            Text(alertMessage)
+        }
+    }
+
+    func validateName() {
+        guard !moduleName.isEmpty else {
+            moduleNameError = ""
+            return
+        }
+        moduleNameError =
+            nameIsValid
+            ? ""
+            : "Must be snake_case: lowercase letters, digits, underscores, no leading digit"
+    }
+
+    func selectFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.message = "Select destination"
+        if panel.runModal() == .OK, let url = panel.url {
+            destination = url.path
+        }
+    }
+
+    func createModule() {
+        guard !moduleName.isEmpty, nameIsValid else { return }
+        isCreating = true
+
+        guard FileManager.default.fileExists(atPath: weavePath) else {
+            alertMessage =
+                "Weave CLI not found at:\n\(weavePath)\n\nPlease run Install MayaFlux first."
+            showAlert = true
+            isCreating = false
+            return
+        }
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: weavePath)
+        task.arguments = ["community", moduleName, destination]
+
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = pipe
+
+        do {
+            try task.run()
+            task.waitUntilExit()
+
+            if task.terminationStatus == 0 {
+                // Patch community.json with GUI-supplied values
+                let moduleDir = URL(fileURLWithPath: destination).appendingPathComponent(moduleName)
+                let cjPath = moduleDir.appendingPathComponent("community.json")
+                if var data = try? Data(contentsOf: cjPath),
+                    var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                {
+                    if !description.isEmpty { json["description"] = description }
+                    if !minVersion.isEmpty { json["min_version"] = minVersion }
+                    json["needs_lila"] = needsLila
+                    if let patched = try? JSONSerialization.data(
+                        withJSONObject: json, options: .prettyPrinted)
+                    {
+                        data = patched
+                        try? data.write(to: cjPath)
+                    }
+                }
+                alertMessage =
+                    "Module '\(moduleName)' created successfully!\n\nLocation: \(moduleDir.path)"
+            } else {
+                let output =
+                    String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+                    ?? "Unknown error"
+                alertMessage = "Failed to create module:\n\n\(output)"
             }
         } catch {
             alertMessage = "Error: \(error.localizedDescription)"
