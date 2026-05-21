@@ -37,11 +37,11 @@ from lib.ui.theme import setup_css
 
 class Mode(Enum):
     INSTALLATION = 1
-    PROJECT_CREATION = 2
+    PROJECTS = 2
 
 
 class ModeSelector(Gtk.ApplicationWindow):
-    """Modal to choose Install or Create Project"""
+    """Modal to choose Install or Projects"""
 
     def __init__(self, app):
         super().__init__(application=app)
@@ -68,11 +68,11 @@ class ModeSelector(Gtk.ApplicationWindow):
         install_btn.connect("clicked", self._on_install_clicked)
         box.append(install_btn)
 
-        project_btn = Gtk.Button(label="Create Project")
-        project_btn.set_size_request(-1, 80)
-        project_btn.add_css_class("suggested-action")
-        project_btn.connect("clicked", self._on_project_clicked)
-        box.append(project_btn)
+        projects_btn = Gtk.Button(label="Projects")
+        projects_btn.set_size_request(-1, 80)
+        projects_btn.add_css_class("suggested-action")
+        projects_btn.connect("clicked", self._on_projects_clicked)
+        box.append(projects_btn)
 
         self.set_child(box)
         self.selected_mode = None
@@ -81,8 +81,62 @@ class ModeSelector(Gtk.ApplicationWindow):
         self.selected_mode = Mode.INSTALLATION
         self.close()
 
-    def _on_project_clicked(self, btn):
-        self.selected_mode = Mode.PROJECT_CREATION
+    def _on_projects_clicked(self, btn):
+        self.selected_mode = Mode.PROJECTS
+        self.close()
+
+
+class ProjectsMode(Gtk.ApplicationWindow):
+    """Choose between project actions"""
+
+    def __init__(self, app):
+        super().__init__(application=app)
+        self.set_title("Weave - Projects")
+        self.set_default_size(500, 380)
+        self.set_modal(True)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
+        box.set_margin_top(30)
+        box.set_margin_bottom(30)
+        box.set_margin_start(30)
+        box.set_margin_end(30)
+
+        title = Gtk.Label()
+        title.set_markup("<span size='18000' weight='bold'>Projects</span>")
+        title.set_halign(Gtk.Align.START)
+        box.append(title)
+
+        create_btn = Gtk.Button(label="Create Project")
+        create_btn.set_size_request(-1, 70)
+        create_btn.add_css_class("suggested-action")
+        create_btn.connect("clicked", self._on_create_clicked)
+        box.append(create_btn)
+
+        update_btn = Gtk.Button(label="Update Project (Community Modules)")
+        update_btn.set_size_request(-1, 70)
+        update_btn.add_css_class("suggested-action")
+        update_btn.connect("clicked", self._on_update_clicked)
+        box.append(update_btn)
+
+        community_btn = Gtk.Button(label="Create Community Module")
+        community_btn.set_size_request(-1, 70)
+        community_btn.add_css_class("suggested-action")
+        community_btn.connect("clicked", self._on_community_clicked)
+        box.append(community_btn)
+
+        self.set_child(box)
+        self.selected_action = None
+
+    def _on_create_clicked(self, btn):
+        self.selected_action = "create"
+        self.close()
+
+    def _on_update_clicked(self, btn):
+        self.selected_action = "update"
+        self.close()
+
+    def _on_community_clicked(self, btn):
+        self.selected_action = "community"
         self.close()
 
 
@@ -107,13 +161,25 @@ class WeaveApp(Adw.Application):
     def _on_mode_selected(self, window, selector):
         if selector.selected_mode == Mode.INSTALLATION:
             main_window = InstallationMode(self, cfg.scripts_dir)
-        elif selector.selected_mode == Mode.PROJECT_CREATION:
-            main_window = ProjectCreationMode(self, cfg.templates_dir, cfg.scripts_dir)
+            main_window.present()
+        elif selector.selected_mode == Mode.PROJECTS:
+            projects = ProjectsMode(self)
+            projects.present()
+            projects.connect("close-request", self._on_action_selected, projects)
         else:
             self.quit()
-            return
+        return False
 
-        main_window.present()
+    def _on_action_selected(self, window, projects):
+        if projects.selected_action == "create":
+            main_window = ProjectCreationMode(self, cfg.templates_dir, cfg.scripts_dir)
+            main_window.present()
+        elif projects.selected_action == "update":
+            pass  # TODO: UpdateProjectMode
+        elif projects.selected_action == "community":
+            pass  # TODO: CommunityModuleMode
+        else:
+            self.quit()
         return False
 
 
