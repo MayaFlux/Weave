@@ -27,42 +27,27 @@ add_compile_definitions(MAYAFLUX_PROJECT)
 
 set(MAYAFLUX_SEARCH_PATHS "")
 
-# 1. Environment variable override (highest priority)
 if(DEFINED ENV{MAYAFLUX_ROOT})
     list(APPEND MAYAFLUX_SEARCH_PATHS "$ENV{MAYAFLUX_ROOT}/lib/cmake/MayaFlux")
     list(APPEND MAYAFLUX_SEARCH_PATHS "$ENV{MAYAFLUX_ROOT}/lib64/cmake/MayaFlux")
-    message(STATUS "Using MAYAFLUX_ROOT from environment: $ENV{MAYAFLUX_ROOT}")
-endif()
-
-# 2. Standard installation locations (platform-specific)
-if(PLATFORM_MACOS)
-    list(APPEND MAYAFLUX_SEARCH_PATHS 
-        "/Library/MayaFlux/lib/cmake/MayaFlux"           # System-wide (default)
-        "$ENV{HOME}/MayaFlux/lib/cmake/MayaFlux"         # User home
-    )
+elseif(PLATFORM_MACOS)
+    list(APPEND MAYAFLUX_SEARCH_PATHS "/opt/homebrew/lib/cmake/MayaFlux")
+    list(APPEND MAYAFLUX_SEARCH_PATHS "/usr/local/lib/cmake/MayaFlux")
 elseif(PLATFORM_LINUX)
-    list(APPEND MAYAFLUX_SEARCH_PATHS 
-        "/usr/local/lib/cmake/MayaFlux"
-        "$ENV{HOME}/MayaFlux/lib/cmake/MayaFlux"
-        "$ENV{HOME}/MayaFlux/lib64/cmake/MayaFlux"
-        "$ENV{HOME}/.local/lib/cmake/MayaFlux"
-    )
+    list(APPEND MAYAFLUX_SEARCH_PATHS "/usr/lib/cmake/MayaFlux")
+    list(APPEND MAYAFLUX_SEARCH_PATHS "/usr/lib64/cmake/MayaFlux")
+    list(APPEND MAYAFLUX_SEARCH_PATHS "/usr/local/lib/cmake/MayaFlux")
 elseif(PLATFORM_WINDOWS)
-    list(APPEND MAYAFLUX_SEARCH_PATHS 
-        "C:/MayaFlux/lib/cmake/MayaFlux"
-        "$ENV{USERPROFILE}/MayaFlux/lib/cmake/MayaFlux"
-        "$ENV{ProgramFiles}/MayaFlux/lib/cmake/MayaFlux"
-    )
+    list(APPEND MAYAFLUX_SEARCH_PATHS "C:/MayaFlux/lib/cmake/MayaFlux")
 endif()
 
-# Find MayaFlux package
-find_package(MayaFlux REQUIRED 
+find_package(MayaFlux REQUIRED
     PATHS ${MAYAFLUX_SEARCH_PATHS}
     NO_DEFAULT_PATH
 )
 
 if(NOT MayaFlux_FOUND)
-    message(FATAL_ERROR 
+    message(FATAL_ERROR
         "MayaFlux not found!\n"
         "Searched in:\n  ${MAYAFLUX_SEARCH_PATHS}\n"
         "\nPlease ensure MayaFlux is installed or set MAYAFLUX_ROOT environment variable.\n"
@@ -76,12 +61,12 @@ message(STATUS "Found MayaFlux ${MayaFlux_VERSION}: ${MayaFlux_DIR}")
 # Shaders
 # ============================================================================
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}")
-include(shaders)
+include(cmake/shaders)
 
 # ============================================================================
 # Community Modules
 # ============================================================================
-include(build_community)
+include(cmake/build_community)
 
 # ============================================================================
 # Sources
@@ -104,7 +89,6 @@ if(TARGET compile_project_shaders)
     add_dependencies(${PROJECT_NAME} compile_project_shaders)
 endif()
 
-
 # ============================================================================
 # MayaFlux Linking
 # ============================================================================
@@ -118,7 +102,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE MayaFlux::MayaFluxLib)
 # ============================================================================
 
 if(PLATFORM_MACOS)
-    # MayaFlux libraries use @rpath and are found via these hints
     if(DEFINED MayaFlux_RPATH_HINTS)
         list(JOIN MayaFlux_RPATH_HINTS ";" RPATH_LIST)
         set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -128,7 +111,6 @@ if(PLATFORM_MACOS)
             MACOSX_RPATH ON
         )
     else()
-        # Fallback for older MayaFlux installations
         set_target_properties(${PROJECT_NAME} PROPERTIES
             BUILD_RPATH "@loader_path/../lib;${MayaFlux_LIB_DIR}"
             INSTALL_RPATH "@loader_path/../lib;${MayaFlux_LIB_DIR}"
@@ -136,26 +118,22 @@ if(PLATFORM_MACOS)
             MACOSX_RPATH ON
         )
     endif()
-    
+
 elseif(PLATFORM_LINUX)
-    # Linux: Set rpath for .so discovery
     set_target_properties(${PROJECT_NAME} PROPERTIES
         INSTALL_RPATH "$ORIGIN/../lib:$ORIGIN:${MayaFlux_LIB_DIR}"
         BUILD_WITH_INSTALL_RPATH TRUE
     )
-    
-    # Link against threading library
+
     find_package(Threads REQUIRED)
     target_link_libraries(${PROJECT_NAME} PRIVATE Threads::Threads)
-    
+
 elseif(PLATFORM_WINDOWS)
-    # Windows: Set runtime library
     set_target_properties(${PROJECT_NAME} PROPERTIES
-        # MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
         MSVC_RUNTIME_LIBRARY "MultiThreadedDLL"
+        VS_DEBUGGER_ENVIRONMENT "PATH=$<TARGET_FILE_DIR:MayaFlux::MayaFluxLib>;@LILA_DEBUGGER_PATH@$ENV{PATH}"
     )
-    
-    # Copy MayaFlux DLLs to output directory using package-provided paths
+
     if(DEFINED MayaFlux_RUNTIME_LIBRARIES)
         foreach(_DLL ${MayaFlux_RUNTIME_LIBRARIES})
             if(EXISTS "${_DLL}")
@@ -168,7 +146,6 @@ elseif(PLATFORM_WINDOWS)
             endif()
         endforeach()
     else()
-        # Fallback to environment variable method
         if(DEFINED ENV{MAYAFLUX_ROOT})
             if(EXISTS "$ENV{MAYAFLUX_ROOT}/bin/MayaFluxLib.dll")
                 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
@@ -177,7 +154,7 @@ elseif(PLATFORM_WINDOWS)
                         $<TARGET_FILE_DIR:${PROJECT_NAME}>
                 )
             endif()
-            
+
             @LILA_DLL_COPY@
         endif()
     endif()
@@ -211,14 +188,15 @@ else()
 endif()
 
 # ============================================================================
-# Installation Rules (Optional)
+# Installation Rules
 # ============================================================================
 
 if(UNIX)
     execute_process(
-    COMMAND ${CMAKE_COMMAND} -E create_symlink
-    ${CMAKE_BINARY_DIR}/compile_commands.json
-    ${CMAKE_SOURCE_DIR}/compile_commands.json)
+        COMMAND ${CMAKE_COMMAND} -E create_symlink
+            ${CMAKE_BINARY_DIR}/compile_commands.json
+            ${CMAKE_SOURCE_DIR}/compile_commands.json
+    )
 endif()
 
 install(TARGETS ${PROJECT_NAME}
