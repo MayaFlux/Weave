@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 // ============================================================================
 // MARK: - App Entry
@@ -22,7 +22,9 @@ struct WeaveApp: App {
 enum WeaveMode {
     case landing
     case install
+    case projects
     case createProject
+    case createCommunity
 }
 
 // ============================================================================
@@ -65,9 +67,9 @@ struct LandingView: View {
                     .controlSize(.large)
 
                     Button {
-                        mode = .createProject
+                        mode = .projects
                     } label: {
-                        Label("Create New Project", systemImage: "folder.badge.plus")
+                        Label("Projects", systemImage: "folder")
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 6)
                     }
@@ -87,8 +89,17 @@ struct LandingView: View {
         case .install:
             InstallView(onBack: { mode = .landing })
 
+        case .projects:
+            ProjectsView(
+                onBack: { mode = .landing },
+                onCreateProject: { mode = .createProject },
+                onCreateCommunity: { mode = .createCommunity })
+
         case .createProject:
             CreateProjectView(onBack: { mode = .landing })
+
+        case .createCommunity:
+            Text("Create Community Module — coming soon")
         }
     }
 }
@@ -164,7 +175,9 @@ class InstallerState: ObservableObject {
             do {
                 try task.run()
             } catch {
-                DispatchQueue.main.async { self.logLines.append("ERROR: \(error.localizedDescription)") }
+                DispatchQueue.main.async {
+                    self.logLines.append("ERROR: \(error.localizedDescription)")
+                }
                 continuation.resume(returning: 1)
             }
         }
@@ -204,11 +217,15 @@ class InstallerState: ObservableObject {
                 "NONINTERACTIVE=1 /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
             )
             guard code == 0 else {
-                step = .failed("Homebrew installation failed.\n\nCheck your internet connection and try again.")
+                step = .failed(
+                    "Homebrew installation failed.\n\nCheck your internet connection and try again."
+                )
                 return
             }
             guard let found = brewCmd else {
-                step = .failed("Homebrew installed but executable not found.\nExpected: /opt/homebrew/bin/brew or /usr/local/bin/brew")
+                step = .failed(
+                    "Homebrew installed but executable not found.\nExpected: /opt/homebrew/bin/brew or /usr/local/bin/brew"
+                )
                 return
             }
             brew = found
@@ -272,7 +289,8 @@ class InstallerState: ObservableObject {
         try? prefixTask.run()
         prefixTask.waitUntilExit()
         let prefixData = prefixPipe.fileHandleForReading.readDataToEndOfFile()
-        let prefixOutput = (String(data: prefixData, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefixOutput = (String(data: prefixData, encoding: .utf8) ?? "").trimmingCharacters(
+            in: .whitespacesAndNewlines)
 
         guard !prefixOutput.isEmpty else {
             step = .failed("Could not determine Homebrew prefix for \(formula).")
@@ -288,7 +306,9 @@ class InstallerState: ObservableObject {
         zdotdirTask.standardOutput = zdotdirPipe
         try? zdotdirTask.run()
         zdotdirTask.waitUntilExit()
-        let zdotdirRaw = (String(data: zdotdirPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let zdotdirRaw =
+            (String(data: zdotdirPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+            ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
         let zshenvDir: String
         if zdotdirRaw.isEmpty {
@@ -319,13 +339,12 @@ class InstallerState: ObservableObject {
         // Strip old entries — BSD sed -i '' verbatim
         let escaped = shellEscape(zshenvPath)
         let cleanScript =
-            "[ -f \(escaped) ] && sed -i '' '/# MayaFlux/d' \(escaped);" +
-            "[ -f \(escaped) ] && sed -i '' '/MAYAFLUX_ROOT/d' \(escaped);" +
-            "[ -f \(escaped) ] && sed -i '' '/mayaflux_env\\.sh/d' \(escaped);" +
-            "[ -f \(escaped) ] && sed -i '' '/source.*mayaflux.*\\/env\\.sh/d' \(escaped);" +
-            "[ -f \(escaped) ] && sed -i '' '/\\.local\\/bin.*\\$PATH/d' \(escaped);" +
-            "[ -f \(escaped) ] && sed -i '' '/./,$!d' \(escaped);" +
-            "true"
+            "[ -f \(escaped) ] && sed -i '' '/# MayaFlux/d' \(escaped);"
+            + "[ -f \(escaped) ] && sed -i '' '/MAYAFLUX_ROOT/d' \(escaped);"
+            + "[ -f \(escaped) ] && sed -i '' '/mayaflux_env\\.sh/d' \(escaped);"
+            + "[ -f \(escaped) ] && sed -i '' '/source.*mayaflux.*\\/env\\.sh/d' \(escaped);"
+            + "[ -f \(escaped) ] && sed -i '' '/\\.local\\/bin.*\\$PATH/d' \(escaped);"
+            + "[ -f \(escaped) ] && sed -i '' '/./,$!d' \(escaped);" + "true"
 
         let cleanCode = await run(cleanScript)
         guard cleanCode == 0 else {
@@ -336,9 +355,9 @@ class InstallerState: ObservableObject {
         // If file does not exist, refuse to create it
         guard fileExists else {
             step = .failed(
-                "No .zshenv found at \(zshenvPath)\n\n" +
-                "MayaFlux cannot configure your shell environment without an existing .zshenv.\n\n" +
-                "Create one first:\n  touch \(zshenvPath)"
+                "No .zshenv found at \(zshenvPath)\n\n"
+                    + "MayaFlux cannot configure your shell environment without an existing .zshenv.\n\n"
+                    + "Create one first:\n  touch \(zshenvPath)"
             )
             return
         }
@@ -347,7 +366,8 @@ class InstallerState: ObservableObject {
             step = .failed("Failed to open \(zshenvPath) for writing.")
             return
         }
-        let envBlock = "\n# MayaFlux (installed via Homebrew)\nsource \"\(prefixOutput)/env.sh\"\nexport PATH=\"$HOME/.local/bin:$PATH\"\n"
+        let envBlock =
+            "\n# MayaFlux (installed via Homebrew)\nsource \"\(prefixOutput)/env.sh\"\nexport PATH=\"$HOME/.local/bin:$PATH\"\n"
         handle.seekToEndOfFile()
         handle.write(Data(envBlock.utf8))
         handle.closeFile()
@@ -366,9 +386,9 @@ class InstallerState: ObservableObject {
         let weaveSource = resourcePath + "/weave"
 
         let cliCode = await run(
-            "mkdir -p \(shellEscape(localBin)) && " +
-            "cp \(shellEscape(weaveSource)) \(shellEscape(weaveDest)) && " +
-            "chmod +x \(shellEscape(weaveDest))"
+            "mkdir -p \(shellEscape(localBin)) && "
+                + "cp \(shellEscape(weaveSource)) \(shellEscape(weaveDest)) && "
+                + "chmod +x \(shellEscape(weaveDest))"
         )
         guard cliCode == 0 else {
             step = .failed("Failed to install Weave CLI to \(weaveDest).")
@@ -379,8 +399,8 @@ class InstallerState: ObservableObject {
         let templatesSource = resourcePath + "/templates"
         let templatesDest = NSHomeDirectory() + "/.local/share/weave/templates"
         let templatesCode = await run(
-            "mkdir -p \(shellEscape(templatesDest)) && " +
-            "cp -R \(shellEscape(templatesSource))/ \(shellEscape(templatesDest))/"
+            "mkdir -p \(shellEscape(templatesDest)) && "
+                + "cp -R \(shellEscape(templatesSource))/ \(shellEscape(templatesDest))/"
         )
         guard templatesCode == 0 else {
             step = .failed("Failed to install templates to \(templatesDest).")
@@ -391,6 +411,70 @@ class InstallerState: ObservableObject {
         log("✅ Weave CLI installed to \(weaveDest)")
 
         step = .done
+    }
+}
+
+// ============================================================================
+// MARK: - Projects View
+// ============================================================================
+
+struct ProjectsView: View {
+    let onBack: () -> Void
+    let onCreateProject: () -> Void
+    let onCreateCommunity: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button(action: onBack) {
+                    Label("Back", systemImage: "chevron.left")
+                }
+                .buttonStyle(.borderless)
+                Spacer()
+                Text("Projects").font(.headline)
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+
+            Divider()
+
+            VStack(spacing: 14) {
+                Button {
+                    onCreateProject()
+                } label: {
+                    Label("Create Project", systemImage: "folder.badge.plus")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                Button {
+                } label: {
+                    Label("Update Project (Community Modules)", systemImage: "arrow.down.circle")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(true)
+
+                Button {
+                    onCreateCommunity()
+                } label: {
+                    Label("Create Community Module", systemImage: "puzzlepiece")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+            }
+            .padding(24)
+
+            Spacer()
+        }
+        .frame(width: 400)
     }
 }
 
@@ -412,10 +496,11 @@ struct InstallView: View {
                     Label("Back", systemImage: "chevron.left")
                 }
                 .buttonStyle(.borderless)
-                .disabled({
-                    if case .running = state.step { return true }
-                    return false
-                }())
+                .disabled(
+                    {
+                        if case .running = state.step { return true }
+                        return false
+                    }())
                 Spacer()
                 Text("Install MayaFlux").font(.headline)
                 Spacer()
@@ -426,21 +511,23 @@ struct InstallView: View {
             Divider()
 
             switch state.step {
-            case .channelSelect:  channelSelectBody
+            case .channelSelect: channelSelectBody
             case .passwordPrompt: passwordPromptBody
-            case .running:        runningBody
-            case .done:           doneBody
-            case .failed(let m):  failedBody(m)
+            case .running: runningBody
+            case .done: doneBody
+            case .failed(let m): failedBody(m)
             }
         }
         .frame(width: 580, height: 480)
         .alert("Conflicting Installation", isPresented: $showConflictAlert) {
-            Button("Cancel", role: .cancel) { }
+            Button("Cancel", role: .cancel) {}
             Button("Remove \(conflictingFormula) and continue", role: .destructive) {
                 Task { await state.startInstall() }
             }
         } message: {
-            Text("You have \(conflictingFormula) installed. Both versions cannot coexist.\n\nRemove it and install \(state.formula)?")
+            Text(
+                "You have \(conflictingFormula) installed. Both versions cannot coexist.\n\nRemove it and install \(state.formula)?"
+            )
         }
     }
 
@@ -453,12 +540,16 @@ struct InstallView: View {
                 .font(.title2).fontWeight(.semibold)
 
             VStack(spacing: 12) {
-                channelButton(label: "Stable", description: "Recommended for most users",
-                              icon: "checkmark.seal", selected: state.formula == "mayaflux") {
+                channelButton(
+                    label: "Stable", description: "Recommended for most users",
+                    icon: "checkmark.seal", selected: state.formula == "mayaflux"
+                ) {
                     state.formula = "mayaflux"
                 }
-                channelButton(label: "Development", description: "Latest features, may be unstable",
-                              icon: "bolt", selected: state.formula == "mayaflux-dev") {
+                channelButton(
+                    label: "Development", description: "Latest features, may be unstable",
+                    icon: "bolt", selected: state.formula == "mayaflux-dev"
+                ) {
                     state.formula = "mayaflux-dev"
                 }
             }
@@ -473,7 +564,10 @@ struct InstallView: View {
         }
     }
 
-    func channelButton(label: String, description: String, icon: String, selected: Bool, action: @escaping () -> Void) -> some View {
+    func channelButton(
+        label: String, description: String, icon: String, selected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             HStack(spacing: 16) {
                 Image(systemName: icon)
@@ -494,8 +588,9 @@ struct InstallView: View {
             .padding(14)
             .background(selected ? Color.blue : Color(NSColor.controlBackgroundColor))
             .cornerRadius(10)
-            .overlay(RoundedRectangle(cornerRadius: 10)
-                .stroke(selected ? Color.clear : Color.gray.opacity(0.3), lineWidth: 1))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(selected ? Color.clear : Color.gray.opacity(0.3), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -507,10 +602,12 @@ struct InstallView: View {
             Spacer()
             Image(systemName: "lock.circle").font(.system(size: 52)).foregroundColor(.blue)
             Text("Administrator Password Required").font(.title2).fontWeight(.semibold)
-            Text("Homebrew is not installed. Installing it requires your password once to set up its directory.\n\nYour password is not stored.")
-                .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 40)
+            Text(
+                "Homebrew is not installed. Installing it requires your password once to set up its directory.\n\nYour password is not stored."
+            )
+            .multilineTextAlignment(.center)
+            .foregroundColor(.secondary)
+            .padding(.horizontal, 40)
             SecureField("Password", text: $state.password)
                 .textFieldStyle(.roundedBorder)
                 .padding(.horizontal, 60)
@@ -567,7 +664,8 @@ struct InstallView: View {
     var doneBody: some View {
         VStack(spacing: 20) {
             Spacer()
-            Image(systemName: "checkmark.circle.fill").font(.system(size: 64)).foregroundColor(.green)
+            Image(systemName: "checkmark.circle.fill").font(.system(size: 64)).foregroundColor(
+                .green)
             Text("Installation Complete!").font(.title).fontWeight(.bold)
             Text("Restart your terminal for environment changes to take effect.")
                 .multilineTextAlignment(.center)
@@ -778,7 +876,8 @@ struct CreateProjectView: View {
         isCreating = true
 
         guard FileManager.default.fileExists(atPath: weavePath) else {
-            alertMessage = "Weave CLI not found at:\n\(weavePath)\n\nPlease run Install MayaFlux first."
+            alertMessage =
+                "Weave CLI not found at:\n\(weavePath)\n\nPlease run Install MayaFlux first."
             showAlert = true
             isCreating = false
             return
@@ -801,16 +900,16 @@ struct CreateProjectView: View {
 
             if task.terminationStatus == 0 {
                 alertMessage = """
-                Project '\(projectName)' created successfully!
+                    Project '\(projectName)' created successfully!
 
-                Location: \(projectLocation)/\(projectName)
+                    Location: \(projectLocation)/\(projectName)
 
-                Next steps:
-                1. cd \(projectLocation)/\(projectName)
-                2. mkdir build && cd build
-                3. cmake .. && make
-                4. ./\(projectName)
-                """
+                    Next steps:
+                    1. cd \(projectLocation)/\(projectName)
+                    2. mkdir build && cd build
+                    3. cmake .. && make
+                    4. ./\(projectName)
+                    """
             } else {
                 let data = pipe.fileHandleForReading.readDataToEndOfFile()
                 let output = String(data: data, encoding: .utf8) ?? "Unknown error"
