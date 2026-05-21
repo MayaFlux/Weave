@@ -466,14 +466,9 @@ class CompletionStep:
                 GLib.idle_add(done_cb, True)
                 return
 
-            launcher_alt = weave_root / "usr" / "bin" / "Weave"
-            launcher = weave_root / "Weave"
-            actual_launcher = launcher if launcher.exists() else launcher_alt
-
-            if not actual_launcher.exists():
-                raise FileNotFoundError(
-                    f"Weave launcher not found at {launcher} or {launcher_alt}"
-                )
+            script_src = weave_root / "lib" / "scripts" / "create_project.sh"
+            if not script_src.exists():
+                raise FileNotFoundError(f"create_project.sh not found at {script_src}")
 
             templates_src = weave_root / "lib" / "templates"
             bin_dir = Path.home() / ".local" / "bin"
@@ -482,7 +477,7 @@ class CompletionStep:
             bin_dir.mkdir(parents=True, exist_ok=True)
 
             dest_launcher = bin_dir / "weave"
-            shutil.copy2(actual_launcher, dest_launcher)
+            shutil.copy2(script_src, dest_launcher)
             dest_launcher.chmod(0o755)
 
             if templates_src.exists():

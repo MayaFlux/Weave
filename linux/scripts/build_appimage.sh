@@ -170,6 +170,11 @@ cp -r "$LINUX_DIR/lib/"* "$APPDIR/lib/"
 cp -r "$REPO_ROOT/templates" "$APPDIR/lib/templates"
 cp "$LINUX_DIR/weave-config.json" "$APPDIR/weave-config.json"
 
+echo "Copying scripts..."
+mkdir -p "$APPDIR/lib/scripts"
+cp "$LINUX_DIR/scripts/create_project.sh" "$APPDIR/lib/scripts/"
+chmod +x "$APPDIR/lib/scripts/create_project.sh"
+
 echo "Copying Python runtime..."
 cp -r "$PYROOT/lib/python3.11" "$APPDIR/usr/lib/python3.11"
 find "$PYROOT/lib" -maxdepth 1 -name "*.so*" -exec cp -P {} "$APPDIR/usr/lib/" \;
