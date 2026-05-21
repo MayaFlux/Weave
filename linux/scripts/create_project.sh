@@ -102,51 +102,46 @@ cmd_new() {
 
     [ ! -d "$TEMPLATES_DIR" ] && error "Templates not found at $TEMPLATES_DIR"
 
-    for template in CMakeLists.txt shaders.cmake main.cpp user_project.hpp; do
+    for template in CMakeLists.txt main.cpp user_project.hpp; do
         [ ! -f "$TEMPLATES_DIR/$template" ] && error "Required template missing: $template"
     done
 
+    [ ! -f "$TEMPLATES_DIR/cmake/shaders.cmake" ] && error "Required template missing: cmake/shaders.cmake"
+    [ ! -f "$TEMPLATES_DIR/cmake/build_community.cmake" ] && error "Required template missing: cmake/build_community.cmake"
+
     log "Creating project: $PROJECT_NAME"
     mkdir -p "$PROJECT_DIR/src"
+    mkdir -p "$PROJECT_DIR/cmake"
     [ "$WITH_VSCODE" = true ] && mkdir -p "$PROJECT_DIR/.vscode"
 
-    local MAYAFLUX_CMAKE_PATH="$MAYAFLUX_ROOT/lib/cmake/MayaFlux"
-
     if [ "$WITH_LILA" = true ]; then
-        LILA_LINK_BLOCK='if(TARGET MayaFlux::Lila)
-    target_link_libraries(${PROJECT_NAME} PRIVATE MayaFlux::Lila)
-    message(STATUS "Lila live coding enabled")
-else()
-    message(WARNING "Lila not found - live coding disabled")
-endif()'
-        LILA_DLL_COPY='if(EXISTS "$ENV{MAYAFLUX_ROOT}/bin/Lila.dll")
-            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "$ENV{MAYAFLUX_ROOT}/bin/Lila.dll"
-                    $<TARGET_FILE_DIR:${PROJECT_NAME}>
-            )
-        endif()'
+        LILA_LINK_BLOCK='target_link_libraries(${PROJECT_NAME} PRIVATE MayaFlux::MayaFluxHost)'
+        LILA_DEBUGGER_PATH='$<TARGET_FILE_DIR:MayaFlux::MayaFluxHost>;'
+        LILA_DLL_COPY='if(EXISTS "$ENV{MAYAFLUX_ROOT}/bin/MayaFluxHost.dll")
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$ENV{MAYAFLUX_ROOT}/bin/MayaFluxHost.dll"
+                $<TARGET_FILE_DIR:${PROJECT_NAME}>
+        )
+    endif()'
     else
-        LILA_LINK_BLOCK='# Lila live coding not enabled'
-        LILA_DLL_COPY='# Lila DLL copy not needed'
+        LILA_LINK_BLOCK=''
+        LILA_DEBUGGER_PATH=''
+        LILA_DLL_COPY=''
     fi
 
     {
         sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" "$TEMPLATES_DIR/CMakeLists.txt" |
-            sed "s|@MAYAFLUX_CMAKE_PATH@|$MAYAFLUX_CMAKE_PATH|g" |
             awk -v lila="$LILA_LINK_BLOCK" '{gsub(/@LILA_LINK_BLOCK@/, lila); print}' |
-            awk -v lila_dll="$LILA_DLL_COPY" '{gsub(/@LILA_DLL_COPY@/, lila_dll); print}'
+            awk -v v="$LILA_DEBUGGER_PATH" '{gsub(/@LILA_DEBUGGER_PATH@/, v); print}' |
+            awk -v v="$LILA_DLL_COPY" '{gsub(/@LILA_DLL_COPY@/, v); print}'
     } >"$PROJECT_DIR/CMakeLists.txt"
     log "  ✓ Generated CMakeLists.txt"
 
-    cp "$TEMPLATES_DIR/shaders.cmake" "$PROJECT_DIR/shaders.cmake"
-    log "  ✓ Copied shaders.cmake"
-
-    mkdir -p "$PROJECT_DIR/cmake"
-    if [ -f "$TEMPLATES_DIR/cmake/build_community.cmake" ]; then
-        cp "$TEMPLATES_DIR/cmake/build_community.cmake" "$PROJECT_DIR/cmake/build_community.cmake"
-        log "  ✓ Copied build_community.cmake"
-    fi
+    cp "$TEMPLATES_DIR/cmake/shaders.cmake" "$PROJECT_DIR/cmake/shaders.cmake"
+    log "  ✓ Copied cmake/shaders.cmake"
+    cp "$TEMPLATES_DIR/cmake/build_community.cmake" "$PROJECT_DIR/cmake/build_community.cmake"
+    log "  ✓ Copied cmake/build_community.cmake"
 
     cp "$TEMPLATES_DIR/main.cpp" "$PROJECT_DIR/src/main.cpp"
     log "  ✓ Generated main.cpp"
