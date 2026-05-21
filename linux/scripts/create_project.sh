@@ -223,32 +223,27 @@ cmd_update() {
     for MODULE_NAME in "$@"; do
         log "Acquiring module: $MODULE_NAME"
 
-        local REPO
-        REPO="$(echo "$REGISTRY" | python3 -c "
+        local REPO MIN_VERSION
+        read -r REPO MIN_VERSION < <(python3 -c "
 import json, sys
 reg = json.load(sys.stdin)
-entry = next((e for e in reg if e['name'] == '${MODULE_NAME}'), None)
+entry = next((e for e in reg if e['name'] == '$MODULE_NAME'), None)
 if not entry:
-    sys.stderr.write(\"Module '${MODULE_NAME}' not found in registry\n\")
+    sys.stderr.write('[Weave ERROR] Module \'$MODULE_NAME\' not found in registry\n')
     sys.exit(1)
-print(entry['repo'])
-")" || error "Module '$MODULE_NAME' not found in registry"
+print(entry['repo'], entry['min_version'])
+" <<<"$REGISTRY") || exit 1
 
-        local MIN_VERSION
-        MIN_VERSION="$(echo "$REGISTRY" | python3 -c "
-import json, sys
-reg = json.load(sys.stdin)
-entry = next((e for e in reg if e['name'] == '${MODULE_NAME}'), None)
-print(entry['min_version'])
-")"
+        local MF_VERSION_FILE="$MAYAFLUX_ROOT/lib/cmake/MayaFlux/MayaFluxConfigVersion.cmake"
+        local MF_VERSION=""
+        if [ -f "$MF_VERSION_FILE" ]; then
+            MF_VERSION="$(grep 'set(PACKAGE_VERSION ' "$MF_VERSION_FILE" | sed 's/.*"\(.*\)".*/\1/')"
+        fi
 
-        if [ -f "$MAYAFLUX_ROOT/lib/cmake/MayaFlux/MayaFluxConfigVersion.cmake" ]; then
-            local MF_VERSION
-            MF_VERSION="$(grep 'set(PACKAGE_VERSION ' "$MAYAFLUX_ROOT/lib/cmake/MayaFlux/MayaFluxConfigVersion.cmake" | sed 's/.*"\(.*\)".*/\1/')"
+        if [ -n "$MF_VERSION" ]; then
             python3 -c "
 import sys
-def parse(v):
-    return tuple(int(x) for x in v.split('.'))
+def parse(v): return tuple(int(x) for x in v.split('.'))
 if parse('$MF_VERSION') < parse('$MIN_VERSION'):
     sys.stderr.write('[Weave ERROR] Module $MODULE_NAME requires MayaFlux >= $MIN_VERSION, found $MF_VERSION\n')
     sys.exit(1)
