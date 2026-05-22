@@ -48,7 +48,7 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 # ============================================================================
 
 if(MSVC)
-    target_compile_options(${PROJECT_NAME} PRIVATE /W4 /P4)
+    target_compile_options(${PROJECT_NAME} PRIVATE /W4 /MP)
 else()
     target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wpedantic)
 endif()

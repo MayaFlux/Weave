@@ -196,6 +196,17 @@ public partial class ProjectCreatorView : UserControl
         // -------------------------------------------------------------------------
         Log("Generating CMakeLists.txt");
 
+        var cmakelists = LoadTemplate("CMakeLists.txt")
+            .Replace("@PROJECT_NAME@", projectName);
+
+        File.WriteAllText(Path.Combine(projectDir, "CMakeLists.txt"), cmakelists);
+        Log("  Generated CMakeLists.txt");
+
+        // -------------------------------------------------------------------------
+        // cmake/ modules
+        // -------------------------------------------------------------------------
+        Log("Generating cmake modules");
+
         string lilaLinkBlock;
         string lilaDebuggerPath;
         string lilaDllCopy;
@@ -220,19 +231,13 @@ public partial class ProjectCreatorView : UserControl
             lilaDllCopy = "";
         }
 
-        var cmakelists = LoadTemplate("CMakeLists.txt")
-            .Replace("@PROJECT_NAME@", projectName)
+        var mayafluxCmake = LoadTemplate(Path.Combine("cmake", "mayaflux.cmake"))
             .Replace("@LILA_LINK_BLOCK@", lilaLinkBlock)
             .Replace("@LILA_DEBUGGER_PATH@", lilaDebuggerPath)
             .Replace("@LILA_DLL_COPY@", lilaDllCopy);
 
-        File.WriteAllText(Path.Combine(projectDir, "CMakeLists.txt"), cmakelists);
-        Log("  Generated CMakeLists.txt");
-
-        // -------------------------------------------------------------------------
-        // cmake/ modules
-        // -------------------------------------------------------------------------
-        Log("Copying cmake modules");
+        File.WriteAllText(Path.Combine(cmakeDir, "mayaflux.cmake"), mayafluxCmake);
+        Log("  Generated cmake/mayaflux.cmake");
 
         var shadersCmakeSrc = Path.Combine(templatesDir, "cmake", "shaders.cmake");
         if (File.Exists(shadersCmakeSrc))

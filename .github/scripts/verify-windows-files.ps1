@@ -38,6 +38,7 @@ $templates = @(
     "templates\main.cpp",
     "templates\user_project.hpp",
     "templates\.gitignore",
+    "templates\cmake\mayaflux.cmake",
     "templates\cmake\shaders.cmake",
     "templates\cmake\build_community.cmake",
     "templates\shaders\",

@@ -67,6 +67,7 @@ public class TemplatesInstallStep : IInstallationStep
                     "main.cpp",
                     "user_project.hpp",
                     ".gitignore",
+                    Path.Combine("cmake", "mayaflux.cmake"),
                     Path.Combine("cmake", "shaders.cmake"),
                     Path.Combine("cmake", "build_community.cmake"),
 

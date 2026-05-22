@@ -32,6 +32,9 @@
       <Link>Resources/templates/.gitignore</Link>
     </EmbeddedResource>
 
+    <EmbeddedResource Include="..\..\templates\cmake\mayaflux.cmake">
+      <Link>Resources/templates/cmake/mayaflux.cmake</Link>
+    </EmbeddedResource>
     <EmbeddedResource Include="..\..\templates\cmake\shaders.cmake">
       <Link>Resources/templates/cmake/shaders.cmake</Link>
     </EmbeddedResource>
