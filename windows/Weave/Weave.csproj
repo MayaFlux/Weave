@@ -31,12 +31,24 @@
     <EmbeddedResource Include="..\..\templates\.gitignore">
       <Link>Resources/templates/.gitignore</Link>
     </EmbeddedResource>
+
     <EmbeddedResource Include="..\..\templates\cmake\shaders.cmake">
       <Link>Resources/templates/cmake/shaders.cmake</Link>
     </EmbeddedResource>
     <EmbeddedResource Include="..\..\templates\cmake\build_community.cmake">
       <Link>Resources/templates/cmake/build_community.cmake</Link>
     </EmbeddedResource>
+
+    <EmbeddedResource Include="..\..\templates\community\module.cmake">
+      <Link>Resources/templates/community/module.cmake</Link>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\community\community.json">
+      <Link>Resources/templates/community/community.json</Link>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\community\test\CMakeLists.txt">
+      <Link>Resources/templates/community/test/CMakeLists.txt</Link>
+    </EmbeddedResource>
+
     <EmbeddedResource Include="..\..\templates\vscode\settings.json">
       <Link>Resources/templates/vscode/settings.json</Link>
     </EmbeddedResource>

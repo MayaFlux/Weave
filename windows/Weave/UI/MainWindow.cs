@@ -66,7 +66,7 @@ public partial class MainWindow : Form
                 // no-op this commit — placeholder
                 break;
             case WeaveMode.CreateCommunity:
-                // no-op this commit — placeholder
+                modeHandler = new CommunityCreationMode();
                 break;
             default:
                 throw new InvalidOperationException($"Unknown mode: {currentMode}");

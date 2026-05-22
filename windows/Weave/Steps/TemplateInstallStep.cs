@@ -69,6 +69,11 @@ public class TemplatesInstallStep : IInstallationStep
                     ".gitignore",
                     Path.Combine("cmake", "shaders.cmake"),
                     Path.Combine("cmake", "build_community.cmake"),
+
+                    Path.Combine("community", "module.cmake"),
+                    Path.Combine("community", "community.json"),
+                    Path.Combine("community", "test", "CMakeLists.txt"),
+
                     Path.Combine("vscode", "settings.json"),
                     Path.Combine("vscode", "tasks.json"),
                     Path.Combine("vscode", "launch.json"),
