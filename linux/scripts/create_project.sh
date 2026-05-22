@@ -106,6 +106,7 @@ cmd_new() {
         [ ! -f "$TEMPLATES_DIR/$template" ] && error "Required template missing: $template"
     done
 
+    [ ! -f "$TEMPLATES_DIR/cmake/mayaflux.cmake" ] && error "Required template missing: cmake/mayaflux.cmake"
     [ ! -f "$TEMPLATES_DIR/cmake/shaders.cmake" ] && error "Required template missing: cmake/shaders.cmake"
     [ ! -f "$TEMPLATES_DIR/cmake/build_community.cmake" ] && error "Required template missing: cmake/build_community.cmake"
 
@@ -130,13 +131,15 @@ cmd_new() {
         LILA_DLL_COPY=''
     fi
 
+    sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" "$TEMPLATES_DIR/CMakeLists.txt" >"$PROJECT_DIR/CMakeLists.txt"
+    log "  ✓ Generated CMakeLists.txt"
+
     {
-        sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" "$TEMPLATES_DIR/CMakeLists.txt" |
-            awk -v lila="$LILA_LINK_BLOCK" '{gsub(/@LILA_LINK_BLOCK@/, lila); print}' |
+        awk -v lila="$LILA_LINK_BLOCK" '{gsub(/@LILA_LINK_BLOCK@/, lila); print}' "$TEMPLATES_DIR/cmake/mayaflux.cmake" |
             awk -v v="$LILA_DEBUGGER_PATH" '{gsub(/@LILA_DEBUGGER_PATH@/, v); print}' |
             awk -v v="$LILA_DLL_COPY" '{gsub(/@LILA_DLL_COPY@/, v); print}'
-    } >"$PROJECT_DIR/CMakeLists.txt"
-    log "  ✓ Generated CMakeLists.txt"
+    } >"$PROJECT_DIR/cmake/mayaflux.cmake"
+    log "  ✓ Generated cmake/mayaflux.cmake"
 
     cp "$TEMPLATES_DIR/cmake/shaders.cmake" "$PROJECT_DIR/cmake/shaders.cmake"
     log "  ✓ Copied cmake/shaders.cmake"
