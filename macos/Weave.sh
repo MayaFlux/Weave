@@ -111,15 +111,10 @@ cmd_new() {
     # CHECK TEMPLATES DIRECTORY
     # ============================================================================
 
-    if [ ! -f "$TEMPLATES_DIR/CMakeLists.txt" ]; then
-        error "CMakeLists.txt template not found"
-    fi
-    if [ ! -f "$TEMPLATES_DIR/cmake/shaders.cmake" ]; then
-        error "cmake/shaders.cmake template not found"
-    fi
-    if [ ! -f "$TEMPLATES_DIR/cmake/build_community.cmake" ]; then
-        error "cmake/build_community.cmake template not found"
-    fi
+    [ ! -f "$TEMPLATES_DIR/CMakeLists.txt" ] && error "Required template missing: CMakeLists.txt"
+    [ ! -f "$TEMPLATES_DIR/cmake/mayaflux.cmake" ] && error "Required template missing: cmake/mayaflux.cmake"
+    [ ! -f "$TEMPLATES_DIR/cmake/shaders.cmake" ] && error "Required template missing: cmake/shaders.cmake"
+    [ ! -f "$TEMPLATES_DIR/cmake/build_community.cmake" ] && error "Required template missing: cmake/build_community.cmake"
 
     # ============================================================================
     # CREATE PROJECT STRUCTURE
@@ -149,17 +144,18 @@ cmd_new() {
         LILA_DLL_COPY=''
     fi
 
-    sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" "$TEMPLATES_DIR/CMakeLists.txt" |
-        sed "s|@LILA_LINK_BLOCK@|$LILA_LINK_BLOCK|g" |
-        sed "s|@LILA_DEBUGGER_PATH@||g" |
-        sed "s|@LILA_DLL_COPY@||g" \
-            >"$PROJECT_DIR/CMakeLists.txt"
+    sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" "$TEMPLATES_DIR/CMakeLists.txt" >"$PROJECT_DIR/CMakeLists.txt"
     echo "✅ CMakeLists.txt generated"
 
     # ============================================================================
     # COPY cmake modules
     # ============================================================================
 
+    sed "s|@LILA_LINK_BLOCK@|$LILA_LINK_BLOCK|g" "$TEMPLATES_DIR/cmake/mayaflux.cmake" |
+        sed "s|@LILA_DEBUGGER_PATH@||g" |
+        sed "s|@LILA_DLL_COPY@||g" \
+            >"$PROJECT_DIR/cmake/mayaflux.cmake"
+    echo "✅ cmake/mayaflux.cmake generated"
     cp "$TEMPLATES_DIR/cmake/shaders.cmake" "$PROJECT_DIR/cmake/shaders.cmake"
     echo "✅ cmake/shaders.cmake copied"
     cp "$TEMPLATES_DIR/cmake/build_community.cmake" "$PROJECT_DIR/cmake/build_community.cmake"
