@@ -1,6 +1,5 @@
-using System;
+﻿using System;
 using System.Drawing;
-using System.Security.Principal;
 using System.Windows.Forms;
 using Weave.Shared.Models;
 using Weave.Theme;
@@ -8,20 +7,20 @@ using static Weave.Theme.ThemeExtensions;
 
 namespace Weave;
 
-public class ModeSelector : Form
+public class ProjectsSelector : Form
 {
     public WeaveMode? SelectedMode { get; private set; }
 
-    public ModeSelector()
+    public ProjectsSelector()
     {
         InitializeUI();
     }
 
     private void InitializeUI()
     {
-        Text = "Weave - Select Mode";
+        Text = "Weave - Projects";
         Width = 500;
-        Height = 300;
+        Height = 370;
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -33,7 +32,7 @@ public class ModeSelector : Form
 
         var titleLabel = new Label
         {
-            Text = "What would you like to do?",
+            Text = "Projects",
             Font = new Font("Segoe UI", 14, FontStyle.Bold),
             Location = new Point(20, 20),
             AutoSize = true,
@@ -42,60 +41,56 @@ public class ModeSelector : Form
         };
         Controls.Add(titleLabel);
 
-        var installButton = new Button
+        var createButton = new Button
         {
-            Text = "Install MayaFlux",
+            Text = "Create Project",
             Location = new Point(50, 70),
             Width = 380,
-            Height = 80,
+            Height = 70,
             BackColor = ThemeColors.ButtonPrimary,
             ForeColor = Color.White,
             Font = new Font("Segoe UI", 11, FontStyle.Bold),
             FlatStyle = FlatStyle.Flat,
             TextAlign = ContentAlignment.MiddleCenter
         };
-        installButton.Click += (s, e) => HandleInstallClick();
-        Controls.Add(installButton);
+        createButton.Click += (s, e) => Select(WeaveMode.ProjectCreation);
+        Controls.Add(createButton);
 
-        var projectButton = new Button
+        var updateButton = new Button
         {
-            Text = "Projects",
-            Location = new Point(50, 160),
+            Text = "Update Project (Community Modules)",
+            Location = new Point(50, 155),
             Width = 380,
-            Height = 80,
-            BackColor = ThemeColors.ButtonSuccess,
+            Height = 70,
+            BackColor = ThemeColors.ButtonPrimary,
             ForeColor = Color.White,
             Font = new Font("Segoe UI", 11, FontStyle.Bold),
             FlatStyle = FlatStyle.Flat,
             TextAlign = ContentAlignment.MiddleCenter
         };
-        projectButton.Click += (s, e) =>
+        updateButton.Click += (s, e) => Select(WeaveMode.UpdateProject);
+        Controls.Add(updateButton);
+
+        var communityButton = new Button
         {
-            SelectedMode = WeaveMode.Projects;
-            DialogResult = DialogResult.OK;
-            Close();
+            Text = "Create Community Module",
+            Location = new Point(50, 240),
+            Width = 380,
+            Height = 70,
+            BackColor = ThemeColors.ButtonPrimary,
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 11, FontStyle.Bold),
+            FlatStyle = FlatStyle.Flat,
+            TextAlign = ContentAlignment.MiddleCenter
         };
-        Controls.Add(projectButton);
+        communityButton.Click += (s, e) => Select(WeaveMode.CreateCommunity);
+        Controls.Add(communityButton);
     }
 
-    private void HandleInstallClick()
+    private void Select(WeaveMode mode)
     {
-        SelectedMode = WeaveMode.Installation;
+        SelectedMode = mode;
         DialogResult = DialogResult.OK;
         Close();
-    }
-
-    private bool IsRunningAsAdmin()
-    {
-        try
-        {
-            var identity = WindowsIdentity.GetCurrent();
-            var principal = new WindowsPrincipal(identity);
-            return principal.IsInRole(WindowsBuiltInRole.Administrator);
-        }
-        catch
-        {
-            return false;
-        }
     }
 }

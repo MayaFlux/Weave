@@ -9,7 +9,7 @@ static class Program
 {
     [STAThread]
     static void Main()
-    {        
+    {
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
 
@@ -32,6 +32,16 @@ static class Program
                 return;
             }
             releaseType = releaseSelector.SelectedType.Value;
+        }
+        else if (mode == WeaveMode.Projects)
+        {
+            var projectsSelector = new ProjectsSelector();
+            if (projectsSelector.ShowDialog() != DialogResult.OK || projectsSelector.SelectedMode == null)
+            {
+                Application.Exit();
+                return;
+            }
+            mode = projectsSelector.SelectedMode.Value;
         }
 
         var mainWindow = new MainWindow(mode, releaseType);

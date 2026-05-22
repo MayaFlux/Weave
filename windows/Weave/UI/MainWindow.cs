@@ -25,7 +25,7 @@ public partial class MainWindow : Form
 
     private void InitializeComponent()
     {
-        // WinForms designer - empty for not using designer
+        // WinForms designer empty for not using designer
     }
 
     private void SetupUI()
@@ -61,6 +61,12 @@ public partial class MainWindow : Form
                 break;
             case WeaveMode.ProjectCreation:
                 modeHandler = new ProjectCreationMode();
+                break;
+            case WeaveMode.UpdateProject:
+                // no-op this commit — placeholder
+                break;
+            case WeaveMode.CreateCommunity:
+                // no-op this commit — placeholder
                 break;
             default:
                 throw new InvalidOperationException($"Unknown mode: {currentMode}");
