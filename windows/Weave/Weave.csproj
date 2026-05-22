@@ -18,18 +18,24 @@
     <RootNamespace>Weave</RootNamespace>
   </PropertyGroup>
 
-<ItemGroup>
+  <ItemGroup>
     <EmbeddedResource Include="..\..\templates\CMakeLists.txt">
       <Link>Resources/templates/CMakeLists.txt</Link>
-    </EmbeddedResource>
-    <EmbeddedResource Include="..\..\templates\shaders.cmake">
-      <Link>Resources/templates/shaders.cmake</Link>
     </EmbeddedResource>
     <EmbeddedResource Include="..\..\templates\main.cpp">
       <Link>Resources/templates/main.cpp</Link>
     </EmbeddedResource>
     <EmbeddedResource Include="..\..\templates\user_project.hpp">
       <Link>Resources/templates/user_project.hpp</Link>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\.gitignore">
+      <Link>Resources/templates/.gitignore</Link>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\cmake\shaders.cmake">
+      <Link>Resources/templates/cmake/shaders.cmake</Link>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\cmake\build_community.cmake">
+      <Link>Resources/templates/cmake/build_community.cmake</Link>
     </EmbeddedResource>
     <EmbeddedResource Include="..\..\templates\vscode\settings.json">
       <Link>Resources/templates/vscode/settings.json</Link>
@@ -40,9 +46,9 @@
     <EmbeddedResource Include="..\..\templates\vscode\launch.json">
       <Link>Resources/templates/vscode/launch.json</Link>
     </EmbeddedResource>
-    
+
     <EmbeddedResource Include="..\..\templates\shaders\**\*">
-    <Link>Resources/templates/shaders/%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <Link>Resources/templates/shaders/%(RecursiveDir)%(Filename)%(Extension)</Link>
     </EmbeddedResource>
   </ItemGroup>
 

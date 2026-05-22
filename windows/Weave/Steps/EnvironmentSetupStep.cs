@@ -64,12 +64,6 @@ public class EnvironmentSetupStep : IInstallationStep
             else
                 await LogAsync("  [WARN] Failed to add to PATH");
 
-            await LogAsync("Setting CMAKE_PREFIX_PATH...");
-            if (ProcessRunner.SetEnvironmentVariable(WeaveConstants.ENV_CMAKE_PREFIX_PATH, config.MayaFluxRoot, logger))
-                await LogAsync($"  [OK] CMAKE_PREFIX_PATH={config.MayaFluxRoot}");
-            else
-                await LogAsync("  [WARN] Failed to set CMAKE_PREFIX_PATH");
-
             ProcessRunner.AddIncludeDirectory(Path.Combine(config.MayaFluxRoot, "include"), logger);
             await LogAsync($"  [OK] Added to INCLUDE/CPATH: {Path.Combine(config.MayaFluxRoot, "include")}");
 

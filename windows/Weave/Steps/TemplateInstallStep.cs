@@ -61,13 +61,43 @@ public class TemplatesInstallStep : IInstallationStep
             await LogAsync("Verifying templates installation...");
             if (Directory.Exists(config.TemplatesDirectory))
             {
-                var templateFiles = Directory.GetFiles(config.TemplatesDirectory, "*", SearchOption.AllDirectories);
+                var required = new[]
+                {
+                    "CMakeLists.txt",
+                    "main.cpp",
+                    "user_project.hpp",
+                    ".gitignore",
+                    Path.Combine("cmake", "shaders.cmake"),
+                    Path.Combine("cmake", "build_community.cmake"),
+                    Path.Combine("vscode", "settings.json"),
+                    Path.Combine("vscode", "tasks.json"),
+                    Path.Combine("vscode", "launch.json"),
+                };
+
+                var missing = new System.Collections.Generic.List<string>();
+                foreach (var rel in required)
+                {
+                    var full = Path.Combine(config.TemplatesDirectory, rel);
+                    if (File.Exists(full))
+                        await LogAsync($"[OK] {rel}");
+                    else
+                        missing.Add(rel);
+                }
+
+                if (missing.Count > 0)
+                {
+                    foreach (var m in missing)
+                        await LogAsync($"[ERROR] Missing: {m}");
+                    throw new Exception($"{missing.Count} required template file(s) missing — installation is broken.");
+                }
+
+                var totalFiles = Directory.GetFiles(config.TemplatesDirectory, "*", SearchOption.AllDirectories);
                 await LogAsync($"[OK] Templates directory: {config.TemplatesDirectory}");
-                await LogAsync($"[OK] Found {templateFiles.Length} template files");
+                await LogAsync($"[OK] {totalFiles.Length} total template files");
             }
             else
             {
-                await LogAsync($"[WARN] Templates directory not found: {config.TemplatesDirectory}");
+                throw new Exception($"Templates directory not found: {config.TemplatesDirectory}");
             }
 
             await LogAsync("");
