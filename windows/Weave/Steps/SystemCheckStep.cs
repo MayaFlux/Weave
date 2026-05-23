@@ -262,39 +262,6 @@ public class SystemCheckStep : IInstallationStep
         return candidates.FirstOrDefault(File.Exists);
     }
 
-    private int GetInstalledVsYear(string vswhere)
-    {
-        try
-        {
-            var psi = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = vswhere,
-                Arguments = "-latest -prerelease -property installationVersion",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                CreateNoWindow = true
-            };
-            using var p = System.Diagnostics.Process.Start(psi);
-            if (p == null) return 0;
-            var output = p.StandardOutput.ReadToEnd().Trim();
-            p.WaitForExit();
-
-            if (Version.TryParse(output, out var v))
-            {
-                return v.Major switch
-                {
-                    >= 19 => 2026,
-                    17 => 2022,
-                    16 => 2019,
-                    15 => 2017,
-                    _ => 0
-                };
-            }
-        }
-        catch { }
-        return 0;
-    }
-
     private bool IsWindows11()
     {
         return Environment.OSVersion.Version.Build >= 22000;
