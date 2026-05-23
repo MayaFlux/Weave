@@ -212,11 +212,36 @@ public class SystemCheckStep : IInstallationStep
 
     private bool HasMsvcToolchain()
     {
+        var vswhere = FindVsWhere();
+        if (vswhere != null)
+        {
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = vswhere,
+                    Arguments = "-latest -prerelease -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationVersion",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow = true
+                };
+                using var p = System.Diagnostics.Process.Start(psi);
+                if (p != null)
+                {
+                    var output = p.StandardOutput.ReadToEnd().Trim();
+                    p.WaitForExit();
+                    if (!string.IsNullOrEmpty(output))
+                        return true;
+                }
+            }
+            catch { }
+        }
+
         string[] basePaths = {
-        @"C:\Program Files\Microsoft Visual Studio",
-        @"C:\Program Files (x86)\Microsoft Visual Studio"
-    };
-        string[] years = { "2022", "2019", "2017", "2026" };
+            @"C:\Program Files\Microsoft Visual Studio",
+            @"C:\Program Files (x86)\Microsoft Visual Studio"
+        };
+        string[] years = { "2026", "2022" };
         string[] editions = { "BuildTools", "Community", "Professional", "Enterprise" };
 
         foreach (var b in basePaths)
@@ -227,14 +252,74 @@ public class SystemCheckStep : IInstallationStep
         return false;
     }
 
-    private async Task<int> InstallMsvcAsync()
+    private string? FindVsWhere()
+    {
+        var candidates = new[]
+        {
+            @"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe",
+            @"C:\Program Files\Microsoft Visual Studio\Installer\vswhere.exe"
+        };
+        return candidates.FirstOrDefault(File.Exists);
+    }
+
+    private int GetInstalledVsYear(string vswhere)
     {
         try
         {
             var psi = new System.Diagnostics.ProcessStartInfo
             {
+                FileName = vswhere,
+                Arguments = "-latest -prerelease -property installationVersion",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                CreateNoWindow = true
+            };
+            using var p = System.Diagnostics.Process.Start(psi);
+            if (p == null) return 0;
+            var output = p.StandardOutput.ReadToEnd().Trim();
+            p.WaitForExit();
+
+            if (Version.TryParse(output, out var v))
+            {
+                return v.Major switch
+                {
+                    >= 19 => 2026,
+                    17 => 2022,
+                    16 => 2019,
+                    15 => 2017,
+                    _ => 0
+                };
+            }
+        }
+        catch { }
+        return 0;
+    }
+
+    private bool IsWindows11()
+    {
+        return Environment.OSVersion.Version.Build >= 22000;
+    }
+
+    private async Task<int> InstallMsvcAsync()
+    {
+        try
+        {
+            string wingetId;
+            if (IsWindows11())
+            {
+                await LogAsync("[INSTALLING] Windows 11 detected : installing Visual Studio Build Tools 2026...");
+                wingetId = "Microsoft.VisualStudio.BuildTools";
+            }
+            else
+            {
+                await LogAsync("[INSTALLING] Windows 10 detected : installing Visual Studio Build Tools 2022...");
+                wingetId = "Microsoft.VisualStudio.2022.BuildTools";
+            }
+
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
                 FileName = "winget",
-                Arguments = "install Microsoft.VisualStudio.2022.BuildTools " +
+                Arguments = $"install {wingetId} " +
                             "--override \"--wait --quiet " +
                             "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 " +
                             "--add Microsoft.VisualStudio.Component.Windows11SDK.22621 " +
