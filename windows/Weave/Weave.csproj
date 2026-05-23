@@ -67,11 +67,11 @@
     </EmbeddedResource>
   </ItemGroup>
 
-    <ItemGroup>
-    <Content Include="..\..\windows\resources\weave.ico">
-        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\windows\resources\weave.ico">
+      <Link>Resources/weave.ico</Link>
+    </EmbeddedResource>
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Shared\Shared.csproj" />

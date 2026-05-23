@@ -37,7 +37,10 @@ public partial class MainWindow : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = true;
-        Icon = new Icon(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "weave.ico"));
+        using var stream = System.Reflection.Assembly.GetExecutingAssembly()
+            .GetManifestResourceStream("Weave.Resources.weave.ico");
+        if (stream != null)
+            Icon = new Icon(stream);
 
         this.ApplyDarkTheme();
 

@@ -156,23 +156,6 @@ jobs:
           New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
           Copy-Item "$publishDir/Weave.exe" -Destination "$stagingDir/Weave.exe" -Force
 
-          # Only copy resources if it exists
-          if (Test-Path "windows/resources") {
-            Copy-Item "windows/resources" -Destination "$stagingDir/resources" -Recurse -Force
-            Write-Host "INFO: Copied windows/resources"
-          } else {
-            Write-Host "WARNING: windows/resources not found, skipping"
-          }
-
-          # Only copy templates if they exist
-          if (Test-Path "templates") {
-            Copy-Item "templates" -Destination "$stagingDir/templates" -Recurse -Force
-            Write-Host "INFO: Copied templates"
-          } else {
-            Write-Host "ERROR: templates directory not found!"
-            exit 1
-          }
-
           Write-Host ""
           Write-Host "Distribution package contents:"
           Get-ChildItem -Path $stagingDir -Recurse | Select-Object FullName
