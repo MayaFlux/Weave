@@ -131,3 +131,9 @@ endif()
 # ============================================================================
 include(cmake/build_community)
 
+# ============================================================================
+# Configuration Options
+# ============================================================================
+
+option(MAYAFLUX_CONFIG_OVERRIDE
+       "JSON config file takes precedence over settings()" OFF)
