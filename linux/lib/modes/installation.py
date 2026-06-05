@@ -165,6 +165,8 @@ class DependenciesStep:
         self.release_type = "stable"
         self._password = ""
         self._done_cb = None
+        self._conflict_event = None
+        self._conflict_confirmed = False
 
     def build_ui(self, container):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15)
@@ -248,6 +250,39 @@ class DependenciesStep:
             return False
 
         GLib.idle_add(self._log, f"Detected distribution: {distro}")
+
+        conflict = self._conflicting_pkg(distro)
+        if conflict and self._is_pkg_installed(distro, conflict):
+            target = (
+                "mayaflux-dev-bin"
+                if distro == "arch" and self.release_type == "dev"
+                else (
+                    "mayaflux-dev"
+                    if distro == "fedora" and self.release_type == "dev"
+                    else (
+                        "mayaflux-edge"
+                        if distro == "ubuntu" and self.release_type == "dev"
+                        else "mayaflux"
+                    )
+                )
+            )
+            event = threading.Event()
+            GLib.idle_add(self._show_conflict_dialog, conflict, target, event)
+            await asyncio.get_event_loop().run_in_executor(None, event.wait)
+            if not self._conflict_confirmed:
+                GLib.idle_add(self._install_btn.set_sensitive, True)
+                GLib.idle_add(self._pw_entry.set_sensitive, True)
+                self._zero_password()
+                return False
+            GLib.idle_add(self._log, f"➤ Removing conflicting package {conflict}...")
+            ok = await self._run_pty(self._remove_cmd(distro, conflict))
+            if not ok:
+                GLib.idle_add(self._log, f"ERROR: Failed to remove {conflict}.")
+                GLib.idle_add(self.status.set_text, "ERROR: Installation failed.")
+                self._zero_password()
+                return False
+            GLib.idle_add(self._log, f"✅ {conflict} removed")
+
         cmds = self._build_commands(distro)
 
         try:
@@ -356,6 +391,70 @@ class DependenciesStep:
         if shutil.which("apt-get"):
             return "ubuntu"
         return "unknown"
+
+    def _conflicting_pkg(self, distro):
+        if distro == "arch":
+            return "mayaflux" if self.release_type == "dev" else "mayaflux-dev-bin"
+        if distro == "fedora":
+            return "mayaflux" if self.release_type == "dev" else "mayaflux-dev"
+        if distro == "ubuntu":
+            return "mayaflux" if self.release_type == "dev" else "mayaflux-edge"
+        return None
+
+    def _is_pkg_installed(self, distro, pkg):
+        try:
+            if distro == "arch":
+                return (
+                    subprocess.run(
+                        ["pacman", "-Q", pkg], capture_output=True
+                    ).returncode
+                    == 0
+                )
+            if distro == "fedora":
+                return (
+                    subprocess.run(["rpm", "-q", pkg], capture_output=True).returncode
+                    == 0
+                )
+            if distro == "ubuntu":
+                r = subprocess.run(
+                    ["dpkg-query", "-W", "-f=${Status}", pkg],
+                    capture_output=True,
+                    text=True,
+                )
+                return "install ok installed" in r.stdout
+        except Exception:
+            pass
+        return False
+
+    def _show_conflict_dialog(self, conflict, target, event):
+        dialog = Gtk.AlertDialog(
+            message="Conflicting Installation",
+            detail=(
+                f"You have {conflict} installed. "
+                f"Both versions cannot coexist.\n\n"
+                f"Remove it and install {target}?"
+            ),
+            buttons=["Cancel", f"Remove {conflict} and continue"],
+            default_button=1,
+            cancel_button=0,
+        )
+
+        def _on_response(dialog, result, _):
+            try:
+                self._conflict_confirmed = dialog.choose_finish(result) == 1
+            except Exception:
+                self._conflict_confirmed = False
+            event.set()
+
+        dialog.choose(self._install_btn.get_root(), None, _on_response, None)
+
+    def _remove_cmd(self, distro, pkg):
+        if distro == "arch":
+            return ["sudo", "pacman", "-R", "--noconfirm", pkg]
+        if distro == "fedora":
+            return ["sudo", "dnf", "remove", "-y", pkg]
+        if distro == "ubuntu":
+            return ["sudo", "apt-get", "remove", "-y", pkg]
 
     def _build_commands(self, distro):
         if distro == "arch":
