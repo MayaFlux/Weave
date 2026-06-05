@@ -280,7 +280,10 @@ class DependenciesStep:
             os.dup2(slave_fd, 2)
             os.close(master_fd)
             os.close(slave_fd)
-            os.execvp(cmd[0], cmd)
+            env = os.environ.copy()
+            env.pop("LD_LIBRARY_PATH", None)
+            env.pop("LD_PRELOAD", None)
+            os.execvpe(cmd[0], cmd, env)
             os._exit(1)
 
         os.close(slave_fd)
