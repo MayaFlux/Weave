@@ -46,7 +46,7 @@ function(add_community name)
         )
     endif()
 
-    target_precompile_headers(${name} REUSE_FROM ${PROJECT_NAME})
+    target_precompile_headers(${name} PUBLIC "${MayaFlux_PCH_FILE}")
     target_link_libraries(${PROJECT_NAME} PRIVATE ${name})
     message(STATUS "Community module linked: ${name}")
 endfunction()
