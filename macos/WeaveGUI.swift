@@ -24,6 +24,7 @@ enum WeaveMode {
     case install
     case projects
     case createProject
+    case addCommunity
     case createCommunity
 }
 
@@ -93,10 +94,14 @@ struct LandingView: View {
             ProjectsView(
                 onBack: { mode = .landing },
                 onCreateProject: { mode = .createProject },
+                onAddCommunity: { mode = .addCommunity },
                 onCreateCommunity: { mode = .createCommunity })
 
         case .createProject:
             CreateProjectView(onBack: { mode = .landing })
+
+        case .addCommunity:
+            AddCommunityView(onBack: { mode = .projects })
 
         case .createCommunity:
             CreateCommunityView(onBack: { mode = .projects })
@@ -421,6 +426,7 @@ class InstallerState: ObservableObject {
 struct ProjectsView: View {
     let onBack: () -> Void
     let onCreateProject: () -> Void
+    let onAddCommunity: () -> Void
     let onCreateCommunity: () -> Void
 
     var body: some View {
@@ -451,6 +457,7 @@ struct ProjectsView: View {
                 .controlSize(.large)
 
                 Button {
+                    onAddCommunity()
                 } label: {
                     Label("Update Project (Community Modules)", systemImage: "arrow.down.circle")
                         .frame(maxWidth: .infinity)
@@ -458,7 +465,6 @@ struct ProjectsView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
-                .disabled(true)
 
                 Button {
                     onCreateCommunity()
@@ -1134,6 +1140,168 @@ struct CreateCommunityView: View {
 
         showAlert = true
         isCreating = false
+    }
+}
+
+// ============================================================================
+// MARK: - Add Community View
+// ============================================================================
+
+struct AddCommunityView: View {
+    let onBack: () -> Void
+
+    @State private var projectPath: String = NSHomeDirectory() + "/Projects"
+    @State private var moduleName: String = ""
+    @State private var moduleNameError: String = ""
+    @State private var isAdding: Bool = false
+    @State private var output: String = ""
+    @State private var showAlert: Bool = false
+    @State private var alertMessage: String = ""
+
+    private var weavePath: String {
+        let localBin = "\(NSHomeDirectory())/.local/bin/weave"
+        if FileManager.default.fileExists(atPath: localBin) { return localBin }
+        return "\(Bundle.main.resourcePath ?? "")/weave"
+    }
+
+    private var nameIsValid: Bool {
+        let r = try! NSRegularExpression(pattern: "^[a-z][a-z0-9_]*$")
+        return r.firstMatch(
+            in: moduleName, range: NSRange(moduleName.startIndex..., in: moduleName)) != nil
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button(action: onBack) {
+                    Label("Back", systemImage: "chevron.left")
+                }
+                .buttonStyle(.borderless)
+                .disabled(isAdding)
+                Spacer()
+                Text("Add Community Module").font(.headline)
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Project Directory").font(.headline)
+                        HStack {
+                            TextField("/path/to/project", text: $projectPath)
+                                .textFieldStyle(.roundedBorder)
+                            Button("Browse…") {
+                                let panel = NSOpenPanel()
+                                panel.canChooseFiles = false
+                                panel.canChooseDirectories = true
+                                panel.allowsMultipleSelection = false
+                                if let path = projectPath.isEmpty
+                                    ? nil : URL(fileURLWithPath: projectPath)
+                                {
+                                    panel.directoryURL = path
+                                }
+                                if panel.runModal() == .OK, let url = panel.url {
+                                    projectPath = url.path
+                                }
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Module Name").font(.headline)
+                        TextField("my_module", text: $moduleName)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: moduleName) { _ in
+                                moduleNameError =
+                                    (!moduleName.isEmpty && !nameIsValid)
+                                    ? "Must be snake_case: lowercase letters, digits, underscores"
+                                    : ""
+                            }
+                        if !moduleNameError.isEmpty {
+                            Text(moduleNameError).font(.caption).foregroundColor(.red)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Output").font(.headline)
+                        ScrollView {
+                            Text(output.isEmpty ? " " : output)
+                                .font(.system(.caption, design: .monospaced))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(8)
+                        }
+                        .frame(height: 180)
+                        .background(Color(NSColor.textBackgroundColor))
+                        .cornerRadius(6)
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.gray.opacity(0.3)))
+                    }
+                }
+                .padding(20)
+            }
+
+            Divider()
+
+            HStack {
+                Button("Cancel", action: onBack).disabled(isAdding)
+                Spacer()
+                Button(isAdding ? "Adding…" : "Add Module") {
+                    addModule()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isAdding || moduleName.isEmpty || !nameIsValid)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
+        .frame(width: 520, height: 500)
+        .alert("Done", isPresented: $showAlert) {
+            Button("OK") { onBack() }
+        } message: {
+            Text(alertMessage)
+        }
+    }
+
+    private func addModule() {
+        guard !projectPath.isEmpty, !moduleName.isEmpty, nameIsValid else { return }
+
+        isAdding = true
+        output = ""
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            task.arguments = [weavePath, "update", projectPath, moduleName]
+
+            let pipe = Pipe()
+            task.standardOutput = pipe
+            task.standardError = pipe
+
+            do {
+                try task.launch()
+                task.waitUntilExit()
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let text = String(data: data, encoding: .utf8) ?? ""
+                DispatchQueue.main.async {
+                    output = text
+                    isAdding = false
+                    if task.terminationStatus == 0 {
+                        alertMessage =
+                            "Module '\(moduleName)' added.\n\nRebuild your project to include it."
+                        showAlert = true
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    output = "Error: \(error.localizedDescription)"
+                    isAdding = false
+                }
+            }
+        }
     }
 }
 

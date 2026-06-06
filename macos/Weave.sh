@@ -25,6 +25,8 @@ if [ -z "${MAYAFLUX_ROOT:-}" ]; then
     fi
 fi
 
+REGISTRY_URL="https://raw.githubusercontent.com/MayaFlux/community-sources-registry/main/registry.json"
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -d "$SCRIPT_DIR/templates" ]; then
     TEMPLATES_DIR="$SCRIPT_DIR/templates"
@@ -45,11 +47,13 @@ Weave - MayaFlux Project Creator
 
 Usage:
   weave new <project-name> [destination-dir] [options]
+  weave update <project-dir> <module-name> [module-name ...]
   weave community <module-name> [destination-dir]
   weave --help
 
 Commands:
   new        Create a new MayaFlux project
+  update     Acquire and add community modules to an existing project
   community  Create a new community module template
 
 Options (new):
@@ -67,6 +71,44 @@ EOF
 error() {
     echo "[Weave ERROR] $*" >&2
     exit 1
+}
+
+_version_gte() {
+    local IFS=.
+    local a=($1) b=($2)
+    local i
+    for i in 0 1 2; do
+        local av=${a[$i]:-0} bv=${b[$i]:-0}
+        if [ "$av" -gt "$bv" ]; then return 0; fi
+        if [ "$av" -lt "$bv" ]; then return 1; fi
+    done
+    return 0
+}
+
+_registry_lookup() {
+    local registry="$1" module="$2"
+    if command -v jq >/dev/null 2>&1; then
+        local entry
+        entry="$(echo "$registry" | jq -r --arg n "$module" '.[] | select(.name==$n) | "\(.repo) \(.min_version)"')"
+        if [ -z "$entry" ]; then
+            echo "[Weave ERROR] Module '$module' not found in registry" >&2
+            return 1
+        fi
+        echo "$entry"
+    else
+        local py
+        py="$(command -v python3)"
+        PYTHONHOME="" PYTHONPATH="" "$py" - "$module" <<'PYEOF' <<<"$registry"
+import json, sys
+name = sys.argv[1]
+reg = json.load(sys.stdin)
+entry = next((e for e in reg if e['name'] == name), None)
+if not entry:
+    sys.stderr.write(f"[Weave ERROR] Module '{name}' not found in registry\n")
+    sys.exit(1)
+print(entry['repo'], entry['min_version'])
+PYEOF
+    fi
 }
 
 # ============================================================================
@@ -286,6 +328,78 @@ EOF
 }
 
 # ============================================================================
+# CMD: update
+# ============================================================================
+
+cmd_update() {
+    local PROJECT_DIR="${1:-}"
+    shift || true
+
+    [ -z "$PROJECT_DIR" ] && error "Project directory required: weave update <project-dir> <module-name> ..."
+    [ "$#" -eq 0 ] && error "At least one module name required: weave update <project-dir> <module-name> ..."
+
+    PROJECT_DIR="${PROJECT_DIR/#\~/$HOME}"
+    PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
+
+    [ ! -f "$PROJECT_DIR/CMakeLists.txt" ] && error "Not a MayaFlux project: $PROJECT_DIR"
+
+    command -v curl >/dev/null 2>&1 || error "Required command not found: curl"
+    command -v git >/dev/null 2>&1 || error "Required command not found: git"
+
+    echo "[Weave] Fetching registry..."
+    local REGISTRY
+    REGISTRY="$(curl -fsSL "$REGISTRY_URL")" || error "Failed to fetch registry from $REGISTRY_URL"
+
+    local COMMUNITY_DIR="$PROJECT_DIR/community"
+    mkdir -p "$COMMUNITY_DIR"
+
+    local COMMUNITY_CMAKE="$PROJECT_DIR/community.cmake"
+    touch "$COMMUNITY_CMAKE"
+
+    for MODULE_NAME in "$@"; do
+        echo "[Weave] Looking up module: $MODULE_NAME"
+
+        local REPO MIN_VERSION
+        read -r REPO MIN_VERSION < <(_registry_lookup "$REGISTRY" "$MODULE_NAME") || exit 1
+
+        local MF_VERSION_FILE="$MAYAFLUX_ROOT/lib/cmake/MayaFlux/MayaFluxConfigVersion.cmake"
+        local MF_VERSION=""
+        if [ -f "$MF_VERSION_FILE" ]; then
+            MF_VERSION="$(grep 'set(PACKAGE_VERSION ' "$MF_VERSION_FILE" | sed 's/.*"\(.*\)".*/\1/')"
+        fi
+
+        if [ -n "$MF_VERSION" ] && [ -n "$MIN_VERSION" ]; then
+            if ! _version_gte "$MF_VERSION" "$MIN_VERSION"; then
+                error "Module $MODULE_NAME requires MayaFlux >= $MIN_VERSION, found $MF_VERSION"
+            fi
+        fi
+
+        local MODULE_DIR="$COMMUNITY_DIR/$MODULE_NAME"
+
+        if [ -d "$MODULE_DIR" ]; then
+            echo "[Weave]   $MODULE_NAME already present, skipping clone"
+        else
+            echo "[Weave]   Cloning $REPO..."
+            git clone --depth=1 "$REPO" "$MODULE_DIR" >/dev/null 2>&1 || error "Failed to clone $REPO"
+            echo "[Weave]   ✓ Cloned into community/$MODULE_NAME"
+        fi
+
+        [ ! -f "$MODULE_DIR/${MODULE_NAME}.cmake" ] && error "Module '$MODULE_NAME' is missing ${MODULE_NAME}.cmake"
+        [ ! -d "$MODULE_DIR/src" ] && error "Module '$MODULE_NAME' is missing src/"
+
+        if ! grep -qxF "$MODULE_NAME" "$COMMUNITY_CMAKE"; then
+            echo "$MODULE_NAME" >>"$COMMUNITY_CMAKE"
+            echo "[Weave]   ✓ Added $MODULE_NAME to community.cmake"
+        else
+            echo "[Weave]   ✓ $MODULE_NAME already in community.cmake"
+        fi
+    done
+
+    echo ""
+    echo "[Weave] Done. Rebuild your project to include the new modules."
+}
+
+# ============================================================================
 # CMD: community
 # ============================================================================
 
@@ -353,6 +467,7 @@ shift
 
 case "$CMD" in
 new) cmd_new "$@" ;;
+update) cmd_update "$@" ;;
 community) cmd_community "$@" ;;
 *) error "Unknown command: $CMD. Use 'weave --help'" ;;
 esac
