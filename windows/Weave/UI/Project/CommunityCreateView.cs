@@ -265,16 +265,39 @@ public partial class CommunityCreatorView : UserControl
         File.WriteAllText(Path.Combine(testDir, "CMakeLists.txt"), testCmake);
         Log("  Generated test/CMakeLists.txt");
 
+        var testFilePath = Path.Combine(testDir, $"test_{moduleName}.cpp");
+        File.WriteAllText(testFilePath, "");
+        Log($"  Created test/test_{moduleName}.cpp");
+
+        RunGit(moduleDir, "init", "-b", "main");
+        RunGit(moduleDir, "add", "-A");
+        Log("  Initialized git repository");
+
         Log("");
         Log("  src/              <- put your sources here");
         Log("  test/CMakeLists.txt");
+        Log($"  test/test_{moduleName}.cpp");
         Log($"  {moduleName}.cmake");
         Log("  community.json");
         Log("");
-        Log("Test with:");
-        Log($"  Create test/test_{moduleName}.cpp");
-        Log($"  cd test && mkdir build && cd build");
-        Log("  cmake .. && cmake --build . --parallel");
+        Log("Build test:");
+        Log($"  cmake -G Ninja -B test/build -S test/");
+        Log($"  cmake --build test/build --parallel");
+    }
+
+    private void RunGit(string workingDir, params string[] args)
+    {
+        var psi = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = workingDir,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var a in args) psi.ArgumentList.Add(a);
+        using var p = Process.Start(psi)!;
+        p.WaitForExit();
     }
 
     private void SetFormEnabled(bool enabled)

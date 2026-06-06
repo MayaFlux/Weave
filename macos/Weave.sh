@@ -323,18 +323,22 @@ cmd_community() {
     sed "s|@MODULE_NAME@|$MODULE_NAME|g" "$TEMPLATES_DIR/community/test/CMakeLists.txt" \
         >"$MODULE_DIR/test/CMakeLists.txt"
 
+    touch "$MODULE_DIR/test/test_${MODULE_NAME}.cpp"
+    git -C "$MODULE_DIR" init -q -b main
+    git -C "$MODULE_DIR" add -A
+
     echo ""
     echo "[Weave] Community module created: $MODULE_DIR"
     echo ""
     echo "  src/           <- put your sources here"
     echo "  test/CMakeLists.txt"
+    echo "  test/test_${MODULE_NAME}.cpp"
     echo "  ${MODULE_NAME}.cmake"
     echo "  community.json"
     echo ""
-    echo "Test with:"
-    echo "  test/test_${MODULE_NAME}.cpp  <- create this to build the test"
-    echo "  cd $MODULE_DIR/test && mkdir build && cd build"
-    echo "  cmake .. && cmake --build . --parallel"
+    echo "Build test:"
+    echo "  cmake -G Ninja -B test/build -S test/"
+    echo "  cmake --build test/build --parallel"
 }
 
 # ============================================================================
