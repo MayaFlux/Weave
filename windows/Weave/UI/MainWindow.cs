@@ -66,7 +66,7 @@ public partial class MainWindow : Form
                 modeHandler = new ProjectCreationMode();
                 break;
             case WeaveMode.UpdateProject:
-                // no-op this commit — placeholder
+                modeHandler = new UpdateProjectMode();
                 break;
             case WeaveMode.CreateCommunity:
                 modeHandler = new CommunityCreationMode();
