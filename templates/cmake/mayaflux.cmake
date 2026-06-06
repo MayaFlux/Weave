@@ -32,6 +32,15 @@ if(NOT MayaFlux_FOUND)
     )
 endif()
 
+if(NOT EXISTS "${MayaFlux_PCH_FILE}")
+    message(FATAL_ERROR
+        "MayaFlux runtime PCH not found at ${MayaFlux_PCH_FILE}\n"
+        "Ensure MayaFlux is correctly installed."
+    )
+endif()
+
+target_precompile_headers(${PROJECT_NAME} PUBLIC "${MayaFlux_PCH_FILE}")
+
 message(STATUS "Found MayaFlux ${MayaFlux_VERSION}: ${MayaFlux_DIR}")
 
 # ============================================================================
