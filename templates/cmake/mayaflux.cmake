@@ -78,6 +78,7 @@ elseif(PLATFORM_LINUX)
         INSTALL_RPATH "$ORIGIN/../lib:$ORIGIN:${MayaFlux_LIB_DIR}"
         BUILD_WITH_INSTALL_RPATH TRUE
     )
+    target_link_options(${PROJECT_NAME} PRIVATE -rdynamic)
 
     find_package(Threads REQUIRED)
     target_link_libraries(${PROJECT_NAME} PRIVATE Threads::Threads)
