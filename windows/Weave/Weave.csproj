@@ -62,6 +62,13 @@
       <Link>Resources/templates/vscode/launch.json</Link>
     </EmbeddedResource>
 
+    <EmbeddedResource Include="..\..\templates\CMakePresets.json">
+      <Link>Resources/templates/CMakePresets.json</Link>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\community\CMakePresets.json">
+      <Link>Resources/templates/community/CMakePresets.json</Link>
+    </EmbeddedResource>
+
     <EmbeddedResource Include="..\..\templates\shaders\**\*">
       <Link>Resources/templates/shaders/%(RecursiveDir)%(Filename)%(Extension)</Link>
     </EmbeddedResource>

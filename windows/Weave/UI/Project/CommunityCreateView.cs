@@ -237,6 +237,12 @@ public partial class CommunityCreatorView : UserControl
         File.Copy(gitignoreSrc, Path.Combine(moduleDir, ".gitignore"));
         Log("  Copied .gitignore");
 
+        var communityPresetsSrc = Path.Combine(templatesDir, "community", "CMakePresets.json");
+        if (!File.Exists(communityPresetsSrc))
+            throw new FileNotFoundException("Required template missing: community/CMakePresets.json");
+        File.Copy(communityPresetsSrc, Path.Combine(moduleDir, "CMakePresets.json"));
+        Log("  Copied CMakePresets.json");
+
         var moduleCmakeSrc = Path.Combine(templatesDir, "community", "module.cmake");
         if (!File.Exists(moduleCmakeSrc))
             throw new FileNotFoundException("Required template missing: community/module.cmake");

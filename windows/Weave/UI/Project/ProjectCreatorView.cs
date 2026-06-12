@@ -312,6 +312,13 @@ public partial class ProjectCreatorView : UserControl
         // -------------------------------------------------------------------------
         // VS Code configuration
         // -------------------------------------------------------------------------
+
+        var cmakePresetsSrc = Path.Combine(templatesDir, "CMakePresets.json");
+        if (!File.Exists(cmakePresetsSrc))
+            throw new FileNotFoundException("Required template missing: CMakePresets.json");
+        File.Copy(cmakePresetsSrc, Path.Combine(projectDir, "CMakePresets.json"));
+        Log("  Copied CMakePresets.json");
+
         if (withVscodeCheckbox.Checked)
         {
             Log("Generating VS Code configuration");

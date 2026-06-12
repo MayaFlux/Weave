@@ -64,6 +64,7 @@ public class TemplatesInstallStep : IInstallationStep
                 var required = new[]
                 {
                     "CMakeLists.txt",
+                    "CMakePresets.json",
                     "main.cpp",
                     "user_project.hpp",
                     ".gitignore",
@@ -73,6 +74,7 @@ public class TemplatesInstallStep : IInstallationStep
 
                     Path.Combine("community", "module.cmake"),
                     Path.Combine("community", "community.json"),
+                    Path.Combine("community", "CMakePresets.json"),
                     Path.Combine("community", "test", "CMakeLists.txt"),
 
                     Path.Combine("vscode", "settings.json"),

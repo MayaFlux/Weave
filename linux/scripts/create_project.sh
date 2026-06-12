@@ -184,6 +184,9 @@ cmd_new() {
     cp "$TEMPLATES_DIR/cmake/build_community.cmake" "$PROJECT_DIR/cmake/build_community.cmake"
     log "  ✓ Copied cmake/build_community.cmake"
 
+    cp "$TEMPLATES_DIR/CMakePresets.json" "$PROJECT_DIR/CMakePresets.json"
+    log "  ✓ Copied CMakePresets.json"
+
     cp "$TEMPLATES_DIR/main.cpp" "$PROJECT_DIR/src/main.cpp"
     log "  ✓ Generated main.cpp"
 
@@ -335,6 +338,7 @@ cmd_community() {
     mkdir -p "$MODULE_DIR/test"
 
     cp "$TEMPLATES_DIR/.gitignore" "$MODULE_DIR/.gitignore"
+    cp "$TEMPLATES_DIR/community/CMakePresets.json" "$MODULE_DIR/CMakePresets.json"
 
     sed "s|@MODULE_NAME@|$MODULE_NAME|g" "$TEMPLATES_DIR/community/module.cmake" \
         >"$MODULE_DIR/${MODULE_NAME}.cmake"
