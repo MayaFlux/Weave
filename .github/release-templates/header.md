@@ -1,10 +1,7 @@
-# Weave - MayaFlux One-Stop Installer
+# Weave v{{VERSION}}
 
-**Version:** {{VERSION}}
+Installer and project tool for [MayaFlux](https://github.com/MayaFlux/MayaFlux).
 
-Weave is the complete installation and project creation system for MayaFlux. It handles everything:
-- Downloads and installs the latest MayaFlux framework
-- Installs all required dependencies
-- Provides both GUI and CLI tools for creating new projects
-
-Choose your platform below:
+Weave installs MayaFlux, creates projects with CMake presets
+and optional live coding support, and manages community modules.
+Download the file for your platform below.
