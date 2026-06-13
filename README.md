@@ -1,172 +1,135 @@
 # Weave
 
-**One-click installer and project creator for MayaFlux.**
+**Installer and project tool for MayaFlux.**
 
-Downloads the framework, installs dependencies, and gets you building in minutes.
-
----
-
-## macOS
-
-### Install
-
-1. Download `Weave-macos.dmg` from [Releases](https://github.com/MayaFlux/Weave/releases)
-2. Open the DMG and double-click **Weave.app**
-3. **If "unverified developer" warning appears:**
-   - Close the warning
-   - Go to **System Settings → Privacy & Security**
-   - Scroll down to find **Weave**
-   - Click **"Open Anyway"**
-   - Double-click Weave.app again
-4. Choose **"Install MayaFlux"**
-5. Select a release channel and follow the prompts
-6. When done, restart your terminal
-
-**What gets installed:**
-
-- MayaFlux framework (via Homebrew)
-- `weave` CLI tool (`~/.local/bin/weave`)
-- Environment variables in `~/.zshenv`
-
-### Create & Build
-
-```bash
-# Using CLI
-weave new MyProject ~/Projects/
-
-# Or open Weave.app and choose "Create New Project"
-
-# Build
-cd MyProject && mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build . --parallel
-./MyProject
-```
-
-**[Full macOS Guide](docs/MACOS.md)** - Troubleshooting, uninstall, etc.
+Weave installs MayaFlux, creates projects, and manages community modules. Download it from [Releases](https://github.com/MayaFlux/Weave/releases).
 
 ---
 
-## Linux
+## Installing MayaFlux
 
-### Install
-
-Download `Weave-X.X.X-linux.tar.gz` from [Releases](https://github.com/MayaFlux/Weave/releases) and extract:
-
-```bash
-tar -xzf Weave-X.X.X-linux.tar.gz -C ~/.local/
-```
-
-Run the installer:
-
-```bash
-~/.local/Weave-X.X.X/Weave
-```
-
-**Mode selection dialog:**
-
-- Choose **"Install MayaFlux"** for fresh installation
-- Choose **"Create Project"** if already installed
-
-**Installation details:**
-
-- **Arch Linux** - Automatically installs `mayaflux-dev-bin` from AUR
-- **Fedora 43+** - Automatically installs `mayaflux-dev` from COPR
-- **Ubuntu 25+, openSUSE Tumbleweed, other distros** - Automatically downloads and extracts MayaFlux to `~/MayaFlux`
-
-**Note:** Requires GCC 15+, LLVM 21+, GLFW 3.4+. Check [Full Linux Guide](docs/LINUX.md) for distro compatibility.
-
-### Create & Build
-
-**Using GUI:**
-
-```bash
-~/.local/Weave-X.X.X/Weave
-# Select "Create Project" mode
-```
-
-**Using CLI:**
-
-```bash
-weave new MyProject ~/Projects/
-```
-
-**Build:**
-
-```bash
-cd MyProject && mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build . --parallel
-./MyProject
-```
-
-**[Full Linux Guide](docs/LINUX.md)** - Troubleshooting, uninstall, etc.
+Launch Weave and choose **Install MayaFlux**. Weave downloads the framework, installs all dependencies, and configures your environment. Restart your terminal when it finishes.
 
 ---
 
-## Windows
+## Creating a Project
 
-### Install
+Launch Weave and choose **Create Project**. Enter a name and pick a destination. Weave generates a ready-to-build project with the following structure:
 
-1. Download `Weave-X.X.X.exe` from [Releases](https://github.com/MayaFlux/Weave/releases)
-2. Right-click → "Run as administrator"
-3. **UAC prompt appears** - click "Yes"
-4. **Mode selection dialog:**
-   - Choose **"Install MayaFlux"** for fresh installation
-   - Choose **"Create Project"** if already installed
-5. **Follow step-by-step installer:**
-   - System checks (verifies 64-bit Windows)
-   - Downloads MayaFlux (~1.5 MB)
-   - **Vulkan SDK installer launches** - click through installation
-     - Select all components **except** ARM (optional: skip SDL2 if not needed)
-     - All other components are required
-   - Installs other dependencies (~90 MB total, includes bundled DLLs)
-   - Sets environment variables
-6. **Restart your terminal** when installation completes
-7. Run `Weave.exe` again and select "Create Project"
-
-**Installation takes longer on Windows** due to:
-
-- Bundled DLLs (90 MB vs 1-2 MB on Mac/Linux)
-- LLVM tarball extraction
-- Manual Vulkan SDK installer intervention
-
-### Create & Build
-
-```powershell
-# Using GUI
-Weave.exe → "Create Project"
-
-# Build
-cd MyProject
-mkdir build
-cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build . --config Release
-.\Release\MyProject.exe
+```
+MyProject/
+├── CMakeLists.txt
+├── CMakePresets.json
+├── community.cmake
+├── cmake/
+│   ├── mayaflux.cmake
+│   ├── shaders.cmake
+│   └── build_community.cmake
+├── src/
+│   ├── main.cpp
+│   └── user_project.hpp
+├── data/
+│   └── shaders/
+├── .vscode/             # if VS Code configuration was enabled
+│   ├── settings.json
+│   ├── tasks.json
+│   └── launch.json
+├── .gitignore
+└── README.md
 ```
 
-**[Full Windows Guide](docs/WINDOWS.md)** - Troubleshooting, uninstall, etc.
+`src/user_project.hpp` is where you write your code. It defines two functions:
+
+- `settings()` runs before the engine starts. Configure sample rate, buffer size, graphics API, logging, and so on.
+- `compose()` is where you build your audio/visual processing graph.
+
+`CMakeLists.txt` is yours to edit. Add source files, link libraries, and set compiler flags as needed. The MayaFlux integration lives in `cmake/mayaflux.cmake` and is included automatically at the end of `CMakeLists.txt`.
+
+### Building
+
+`CMakePresets.json` ships with every project, giving IDEs and editors a zero-config starting point. It defines `debug` and `release` presets, both using Ninja into `build/`.
+
+```bash
+# using presets
+cmake --preset release
+cmake --build --preset release
+./build/MyProject
+
+# or without presets
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+./build/MyProject
+```
+
+On Windows, the binary lands in `build\MyProject.exe`. CLion, VS Code with the CMake extension, and Visual Studio all pick up the presets automatically when you open the project folder.
+
+### Live Coding (Lila)
+
+To enable live coding, check **Enable Live Coding (Lila)** in the project creation dialog. This links your project against `MayaFlux::MayaFluxHost`, embedding the Lila JIT compiler in your process. You can then connect [LilaCode](https://github.com/MayaFlux/LilaCode) (VS Code) or [lila.nvim](https://github.com/MayaFlux/lila.nvim) (Neovim) to evaluate C++ code against your running application in real time.
 
 ---
 
-## Documentation
+## Community Modules
 
-- **[macOS Guide](docs/MACOS.md)** - Detailed installation, troubleshooting, uninstall
-- **[Linux Guide](docs/LINUX.md)** - Distribution compatibility, troubleshooting, uninstall
-- **[Windows Guide](docs/WINDOWS.md)** - Step-by-step walkthrough, troubleshooting, uninstall
-- **[Comprehensive overview](docs/PACKAGE.md)** - Common questions
-- **[Development Guide](docs/DEVELOP.md)** - Building Weave from source, contributing
+Community modules are C++ source libraries that compile directly into your project. There is no plugin boundary or ABI to worry about; modules are just code.
+
+### Adding Modules
+
+In Weave, open your project and choose **Add Community Module**. Enter the module name and Weave will:
+
+1. Fetch the registry from [community-sources-registry](https://github.com/MayaFlux/community-sources-registry)
+2. Check that your MayaFlux version meets the module's minimum requirement
+3. Clone the module into `community/<name>/`
+4. Register it in `community.cmake`
+
+Rebuild your project after adding modules.
+
+Modules that already exist in `community/` are skipped. You can add multiple modules at once.
+
+### How Modules Integrate
+
+`community.cmake` lists module names, one per line. At configure time, `cmake/build_community.cmake` reads this file and calls `add_community()` for each entry, which includes the module's own `<name>.cmake`, builds it as an OBJECT library, and links it into your project. No manual CMake edits needed.
+
+### Creating a Module
+
+Choose **Create Community Module** in Weave. Enter a name (snake_case), a description, a minimum MayaFlux version, and whether the module requires Lila. Weave scaffolds:
+
+```
+my_module/
+├── src/                        <- your C++ sources go here
+├── test/
+│   ├── CMakeLists.txt
+│   └── test_my_module.cpp
+├── my_module.cmake
+├── CMakePresets.json
+├── community.json
+└── .gitignore
+```
+
+`my_module.cmake` defines the module as an OBJECT library linking `MayaFlux::MayaFluxLib`. If Lila is required, it also links `MayaFlux::MayaFluxHost`. Users call your constructors directly from their `compose()`.
+
+`community.json` carries registry metadata: name, description, minimum MayaFlux version, and whether Lila is required.
+
+The `test/` directory contains a standalone CMake project for building and testing your module independently. `CMakePresets.json` at the module root points both presets at `test/build`, so any IDE opened on the module folder just works:
+
+```bash
+cmake --preset release
+cmake --build --preset release
+```
+
+The module is initialized as a git repository. Push it to GitHub and submit a PR to [community-sources-registry](https://github.com/MayaFlux/community-sources-registry) to list it publicly.
 
 ---
 
-## Support
+## Links
 
-- **Issues:** [GitHub Issues](https://github.com/MayaFlux/Weave/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/MayaFlux/Weave/discussions)
+- [MayaFlux](https://github.com/MayaFlux/MayaFlux)
+- [LilaCode (VS Code)](https://github.com/MayaFlux/LilaCode)
+- [lila.nvim (Neovim)](https://github.com/MayaFlux/lila.nvim)
+- [Community Registry](https://github.com/MayaFlux/community-sources-registry)
 
 ---
 
 ## License
 
-GNU General Public License v3.0 - See [LICENSE](LICENSE)
+GNU General Public License v3.0. See [LICENSE](LICENSE) for full terms.

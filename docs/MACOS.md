@@ -1,120 +1,79 @@
 # Weave for macOS
 
-Complete guide for installing, using, and troubleshooting Weave on macOS.
+**Platform:** macOS 15.0 (Sequoia) or later, Universal Binary (arm64 + x86_64)
 
-## Installation
+---
 
-### Prerequisites
+## Installing MayaFlux
 
-- macOS 15.0 (Sequoia) or later
-- ~2GB free disk space
-- Internet connection
-- Administrator access (for Homebrew)
-
-### Install from DMG
-
-1. **Download** `Weave-macos.dmg` from [Releases](https://github.com/MayaFlux/Weave/releases)
-2. **Open** the DMG and double-click **Weave.app**
-3. **If "unverified developer" warning appears:**
-   - Close the warning
-   - Go to **System Settings → Privacy & Security**
-   - Scroll down to find **Weave**
-   - Click **"Open Anyway"**
-   - Double-click Weave.app again
-4. Choose **"Install MayaFlux"**
-5. Select a release channel (Stable recommended)
-6. If Homebrew is not installed, enter your password when prompted
-7. Wait for installation to complete — progress is shown in the app
+1. Download `Weave-macos.dmg` from [Releases](https://github.com/MayaFlux/Weave/releases)
+2. Open the DMG and double-click **Weave.app**
+3. If an "unverified developer" warning appears, close it, go to **System Settings > Privacy & Security**, scroll down to find Weave, click **Open Anyway**, then double-click Weave.app again
+4. Choose **Install MayaFlux**
+5. Select a release channel : Stable is recommended for most users, Development gives you the latest features
+6. If Homebrew is not installed, Weave will ask for your password once to set it up. Your password is not stored
+7. Wait for installation to complete. Progress is shown in the app
 8. Restart your terminal when done
 
-### What Gets Installed
+### What gets installed
 
-- **Homebrew** - manages the MayaFlux framework installation
-- **MayaFlux framework** - installed via `brew install mayaflux/mayaflux/mayaflux`
-- **`~/.local/bin/weave`** - CLI project creator tool
-- **`$ZDOTDIR/.zshenv`** - updated to source MayaFlux environment and extend `PATH`
+- Homebrew (if not already present)
+- MayaFlux framework via `brew install mayaflux/mayaflux/mayaflux` (or `mayaflux-dev` for the development channel)
+- `weave` CLI tool at `~/.local/bin/weave`
+- Environment configuration added to `$ZDOTDIR/.zshenv`
 
-### Post-Installation
+### Environment
 
-**Reload environment variables:**
-
-```bash
-source $ZDOTDIR/.zshenv
-```
-
-Or simply restart your terminal.
-
-**Verify installation:**
-
-```bash
-weave --version
-```
-
----
-
-## Creating Projects
-
-### Using Weave.app (GUI)
-
-1. Open **Weave.app** (from the DMG, or move it to `/Applications` first)
-2. Choose **"Create New Project"**
-3. Enter a **Project Name** (e.g., "MyFirstProject")
-4. Click **"Browse..."** to select a location
-5. Optional: Enable **"Live Coding (Lila)"**
-6. Click **"Create Project"**
-
-### Using CLI Tool
-
-```bash
-# Basic project
-weave new MyProject ~/Projects/
-
-# With live coding enabled
-weave new MyProject ~/Projects/ --with-lila
-
-# Without VS Code setup
-weave new MyProject ~/Projects/ --no-vscode
-```
-
----
-
-## Building & Running
-
-### Quick Start
-
-```bash
-cd MyProject
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build . --parallel
-./MyProject
-```
-
-### With VS Code
-
-1. Open project folder: `code .`
-2. VS Code should auto-detect the build configuration
-3. Terminal → Run Task → "Build Project"
-4. Press F5 to run with debugger (lldb)
-
----
-
-## Environment Variables
-
-After installation, these are added to `$ZDOTDIR/.zshenv`:
+Weave adds the following to `$ZDOTDIR/.zshenv`:
 
 ```zsh
 source "<homebrew-prefix>/env.sh"
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-The `env.sh` sourced from the Homebrew prefix sets any variables the framework requires (e.g. `MAYAFLUX_ROOT`, `CMAKE_PREFIX_PATH`, `VULKAN_SDK`).
-
-**To apply immediately without restarting:**
+The sourced `env.sh` sets `MAYAFLUX_ROOT`, `CMAKE_PREFIX_PATH`, `VULKAN_SDK`, and any other variables the framework requires. To apply without restarting your terminal:
 
 ```bash
 source $ZDOTDIR/.zshenv
 ```
+
+---
+
+## Creating a Project
+
+Open Weave.app and choose **Create Project**. Enter a name, pick a destination, optionally enable **Live Coding (Lila)** and **VS Code configuration**, then click **Create Project**.
+
+The generated project includes a `CMakePresets.json` with `debug` and `release` presets. Any CMake-aware IDE (VS Code, CLion, Visual Studio) will pick these up automatically when you open the project folder.
+
+### Building
+
+```bash
+cd MyProject
+
+# with presets
+cmake --preset release
+cmake --build --preset release
+./build/MyProject
+
+# without presets
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+./build/MyProject
+```
+
+---
+
+## Community Modules
+
+### Adding a module
+
+Open Weave.app, choose **Add Community Module**, select your project directory, and enter the module name. Weave fetches the registry, checks version compatibility, clones the module into `community/<name>/`, and registers it in `community.cmake`. Rebuild your project after adding modules.
+
+### Creating a module
+
+Choose **Create Community Module** in Weave.app. Enter a name (snake_case), description, minimum MayaFlux version, and whether the module requires Lila. Weave scaffolds the module with `src/`, `test/`, a `CMakePresets.json`, and a git repository ready to push.
+
+See the [Weave README](../README.md) for details on the module structure and how to submit to the community registry.
 
 ---
 
@@ -122,9 +81,7 @@ source $ZDOTDIR/.zshenv
 
 ### "weave: command not found"
 
-**Cause:** Environment variables not loaded yet.
-
-**Fix:**
+Your shell environment has not been loaded yet. Run:
 
 ```bash
 source $ZDOTDIR/.zshenv
@@ -132,9 +89,9 @@ source $ZDOTDIR/.zshenv
 
 Or restart your terminal.
 
-### "Weave.app won't open" or "damaged application"
+### Weave.app won't open
 
-**Fix:**
+If macOS says the app is damaged or from an unidentified developer:
 
 ```bash
 xattr -rd com.apple.quarantine /path/to/Weave.app
@@ -144,71 +101,39 @@ Then try opening again.
 
 ### CMake can't find MayaFlux
 
-**Verify environment is set:**
+Check that the environment is loaded:
 
 ```bash
 echo $MAYAFLUX_ROOT
 ```
 
-**If empty, reload:**
+If empty, run `source $ZDOTDIR/.zshenv` and try again.
 
-```bash
-source $ZDOTDIR/.zshenv
-```
+### Switching channels
 
-### Build errors with C++23 features
-
-**Ensure you have a modern compiler:**
-
-```bash
-clang++ --version  # Should be 15+
-```
-
-**If too old, update via Homebrew:**
-
-```bash
-brew install llvm
-```
-
-### Homebrew password prompt during install
-
-**This is normal.** Homebrew needs admin privileges to set up its directory structure on a fresh install. Your password is not stored.
+If you want to switch between Stable and Development, Weave will detect the conflicting formula and ask you to confirm removal before installing the other. Only one channel can be installed at a time.
 
 ---
 
 ## Uninstalling
 
 ```bash
-# Remove MayaFlux framework
-brew uninstall mayaflux
+# Remove the MayaFlux framework
+brew uninstall mayaflux        # or mayaflux-dev
 brew autoremove
 
-# Remove CLI tool
+# Remove the CLI tool
 rm ~/.local/bin/weave
 
-# Remove environment config (optional)
+# Remove environment config
 # Edit $ZDOTDIR/.zshenv and delete the MayaFlux lines
 ```
 
 ---
 
-## FAQ
-
-**Q: Why does installation take a while?**
-
-A: Homebrew is downloading and building the MayaFlux framework and its dependencies (LLVM, FFmpeg, Vulkan SDK, etc.). If these are already cached on your machine, it's much faster.
-
-**Q: Can I use Weave.app and the CLI together?**
-
-A: Yes. Both create the same project structure - use whichever suits your workflow.
-
-**Q: Do I need to keep Weave.app after installing?**
-
-A: Only if you want to create new projects via the GUI. The CLI (`weave`) works independently once installed.
-
----
-
 ## Links
 
-- **[MayaFlux Framework](https://github.com/MayaFlux/MayaFlux)** - Learn the API
-- **[Back to README](../README.md)** - Overview and quick start
+- [Weave README](../README.md)
+- [MayaFlux](https://github.com/MayaFlux/MayaFlux)
+- [LilaCode (VS Code)](https://github.com/MayaFlux/LilaCode)
+- [lila.nvim (Neovim)](https://github.com/MayaFlux/lila.nvim)
