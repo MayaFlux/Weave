@@ -155,25 +155,6 @@ jobs:
 
           New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
           Copy-Item "$publishDir/Weave.exe" -Destination "$stagingDir/Weave.exe" -Force
-          Copy-Item "windows/scripts/install_package.ps1" -Destination "$stagingDir/install_package.ps1" -Force
-          Copy-Item "windows/scripts/packages.psd1" -Destination "$stagingDir/packages.psd1" -Force
-
-          # Only copy resources if it exists
-          if (Test-Path "windows/resources") {
-            Copy-Item "windows/resources" -Destination "$stagingDir/resources" -Recurse -Force
-            Write-Host "INFO: Copied windows/resources"
-          } else {
-            Write-Host "WARNING: windows/resources not found, skipping"
-          }
-
-          # Only copy templates if they exist
-          if (Test-Path "templates") {
-            Copy-Item "templates" -Destination "$stagingDir/templates" -Recurse -Force
-            Write-Host "INFO: Copied templates"
-          } else {
-            Write-Host "ERROR: templates directory not found!"
-            exit 1
-          }
 
           Write-Host ""
           Write-Host "Distribution package contents:"
@@ -238,60 +219,40 @@ jobs:
           fetch-depth: 0
           clean: true
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.10"
-
-      - name: Install GTK4 and dependencies
+      - name: Install Podman
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgtk-4-dev \
-            libadwaita-1-dev \
-            libgirepository1.0-dev \
-            gir1.2-gtk-4.0 \
-            gir1.2-adw-1 \
-            python3-gi
+          sudo apt-get update -qq
+          sudo apt-get install -y podman
 
       - name: Verify source files
-        run: |
-          bash .github/scripts/verify-linux-files.sh
+        run: bash .github/scripts/verify-linux-files.sh
 
-      - name: Make scripts executable
-        run: |
-          chmod +x linux/scripts/build_distribution.sh
-          chmod +x linux/scripts/create_project.sh
-          chmod +x linux/scripts/install_deps.sh
-          chmod +x linux/Weave
+      - name: Make build script executable
+        run: chmod +x linux/scripts/build_appimage.sh
 
-      - name: Build distribution package
-        run: |
-          mkdir -p build/linux
-          bash linux/scripts/build_distribution.sh
+      - name: Build AppImage
+        run: bash linux/scripts/build_appimage.sh
 
       - name: Verify build output
-        run: |
-          bash .github/scripts/verify-linux-build.sh
+        run: bash .github/scripts/verify-linux-build.sh
 
       - name: Generate SHA256 hash
         id: hash
         run: |
-          TARBALL=$(find build/linux -name "Weave.tar.gz" -type f | head -1)
-          if [ -z "$TARBALL" ]; then
-            echo "Error: Tarball not found in build/linux"
+          APPIMAGE=$(find build/linux -name "Weave-*.AppImage" -type f | head -1)
+          if [ -z "$APPIMAGE" ]; then
+            echo "Error: AppImage not found in build/linux"
             ls -la build/linux/
             exit 1
           fi
-          SHA256=$(sha256sum "$TARBALL" | cut -d ' ' -f 1)
+          SHA256=$(sha256sum "$APPIMAGE" | cut -d ' ' -f 1)
           echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
-          echo "TARBALL_PATH=$TARBALL" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: weave-linux
-          path: build/linux/Weave.tar.gz
+          path: build/linux/Weave-*.AppImage
           retention-days: 30
 
       - name: Upload debug artifacts (on failure)
@@ -396,12 +357,13 @@ jobs:
           cp "./packages/macos/Weave.dmg" "./release/Weave-macos.dmg"
 
           # Linux
-          LINUX_TARBALL=$(find ./packages/linux -name "Weave.tar.gz" | head -1)
-          if [ -z "$LINUX_TARBALL" ]; then
-            echo "Error: Linux tarball not found"
+          LINUX_APPIMAGE=$(find ./packages/linux -name "Weave-*.AppImage" | head -1)
+          if [ -z "$LINUX_APPIMAGE" ]; then
+            echo "Error: Linux AppImage not found"
             exit 1
           fi
-          cp "$LINUX_TARBALL" "./release/Weave-linux.tar.gz"
+          cp "$LINUX_APPIMAGE" "./release/Weave-linux.AppImage"
+          chmod +x "./release/Weave-linux.AppImage"
 
           # Windows
           WINDOWS_ZIP=$(find ./packages/windows -name "Weave.zip" | head -1)
@@ -430,7 +392,7 @@ jobs:
             steps.version.outputs.VERSION) }}
           files: |
             release/Weave-macos.dmg
-            release/Weave-linux.tar.gz
+            release/Weave-linux.AppImage
             release/Weave-windows.zip
           body_path: release-body.md
           draft: false

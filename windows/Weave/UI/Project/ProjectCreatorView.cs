@@ -166,6 +166,7 @@ public partial class ProjectCreatorView : UserControl
     {
         var projectDir = Path.Combine(projectPath, projectName);
         var srcDir = Path.Combine(projectDir, "src");
+        var cmakeDir = Path.Combine(projectDir, "cmake");
         var vsCodeDir = Path.Combine(projectDir, ".vscode");
 
         Log($"Creating project structure at: {projectDir}");
@@ -176,47 +177,107 @@ public partial class ProjectCreatorView : UserControl
         }
 
         Directory.CreateDirectory(srcDir);
-        Log($"  Created src directory");
+        Log("  Created src/");
+
+        Directory.CreateDirectory(cmakeDir);
+        Log("  Created cmake/");
 
         if (withVscodeCheckbox.Checked)
         {
             Directory.CreateDirectory(vsCodeDir);
-            Log($"  Created .vscode directory");
+            Log("  Created .vscode/");
         }
 
         var mayaFluxRoot = Environment.GetEnvironmentVariable("MAYAFLUX_ROOT") ?? "C:\\MayaFlux";
-        var mayaFluxCmakePath = Path.Combine(mayaFluxRoot, "lib", "cmake", "MayaFlux");
         Log($"  Using MAYAFLUX_ROOT: {mayaFluxRoot}");
 
+        // -------------------------------------------------------------------------
+        // CMakeLists.txt
+        // -------------------------------------------------------------------------
         Log("Generating CMakeLists.txt");
-        var lilaBlock = withLilaCheckbox.Checked
-            ? @"if(TARGET MayaFlux::Lila)
-    target_link_libraries(${PROJECT_NAME} PRIVATE MayaFlux::Lila)
-    message(STATUS ""Lila live coding enabled"")
-else()
-    message(WARNING ""Lila not found - live coding disabled"")
-endif()"
-            : @"# Lila live coding not enabled";
 
-        var cmakelists = GenerateCMakeLists(projectName, mayaFluxCmakePath, lilaBlock);
+        var cmakelists = LoadTemplate("CMakeLists.txt")
+            .Replace("@PROJECT_NAME@", projectName);
+
         File.WriteAllText(Path.Combine(projectDir, "CMakeLists.txt"), cmakelists);
         Log("  Generated CMakeLists.txt");
 
-        Log("Copying shaders.cmake");
-        var shadersCmakeSrc = Path.Combine(templatesDir, "shaders.cmake");
-        if (File.Exists(shadersCmakeSrc))
+        // -------------------------------------------------------------------------
+        // cmake/ modules
+        // -------------------------------------------------------------------------
+        Log("Generating cmake modules");
+
+        string lilaLinkBlock;
+        string lilaDebuggerPath;
+        string lilaDllCopy;
+
+        if (withLilaCheckbox.Checked)
         {
-            File.Copy(shadersCmakeSrc, Path.Combine(projectDir, "shaders.cmake"));
-            Log("  Copied shaders.cmake");
+            lilaLinkBlock = "target_link_libraries(${PROJECT_NAME} PRIVATE MayaFlux::MayaFluxHost)";
+            lilaDebuggerPath = "$<TARGET_FILE_DIR:MayaFlux::MayaFluxHost>;";
+            lilaDllCopy =
+                "if(EXISTS \"$ENV{MAYAFLUX_ROOT}/bin/MayaFluxHost.dll\")\r\n" +
+                "        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD\r\n" +
+                "            COMMAND ${CMAKE_COMMAND} -E copy_if_different\r\n" +
+                "                \"$ENV{MAYAFLUX_ROOT}/bin/MayaFluxHost.dll\"\r\n" +
+                "                $<TARGET_FILE_DIR:${PROJECT_NAME}>\r\n" +
+                "        )\r\n" +
+                "    endif()";
         }
         else
         {
-            Log("  WARNING: shaders.cmake template not found, skipping");
+            lilaLinkBlock = "";
+            lilaDebuggerPath = "";
+            lilaDllCopy = "";
         }
 
+        var mayafluxCmake = LoadTemplate(Path.Combine("cmake", "mayaflux.cmake"))
+            .Replace("@LILA_LINK_BLOCK@", lilaLinkBlock)
+            .Replace("@LILA_DEBUGGER_PATH@", lilaDebuggerPath)
+            .Replace("@LILA_DLL_COPY@", lilaDllCopy);
+
+        File.WriteAllText(Path.Combine(cmakeDir, "mayaflux.cmake"), mayafluxCmake);
+        Log("  Generated cmake/mayaflux.cmake");
+
+        var shadersCmakeSrc = Path.Combine(templatesDir, "cmake", "shaders.cmake");
+        if (File.Exists(shadersCmakeSrc))
+        {
+            File.Copy(shadersCmakeSrc, Path.Combine(cmakeDir, "shaders.cmake"));
+            Log("  Copied cmake/shaders.cmake");
+        }
+        else
+        {
+            throw new FileNotFoundException("Required template missing: cmake/shaders.cmake");
+        }
+
+        var buildCommunitySrc = Path.Combine(templatesDir, "cmake", "build_community.cmake");
+        if (File.Exists(buildCommunitySrc))
+        {
+            File.Copy(buildCommunitySrc, Path.Combine(cmakeDir, "build_community.cmake"));
+            Log("  Copied cmake/build_community.cmake");
+        }
+        else
+        {
+            throw new FileNotFoundException("Required template missing: cmake/build_community.cmake");
+        }
+
+        // -------------------------------------------------------------------------
+        // Source files
+        // -------------------------------------------------------------------------
+        Log("Generating source files");
+
+        File.WriteAllText(Path.Combine(srcDir, "main.cpp"), LoadTemplate("main.cpp"));
+        Log("  Generated main.cpp");
+
+        File.WriteAllText(Path.Combine(srcDir, "user_project.hpp"), LoadTemplate("user_project.hpp"));
+        Log("  Generated user_project.hpp");
+
+        // -------------------------------------------------------------------------
+        // data/shaders
+        // -------------------------------------------------------------------------
         var dataShadersDir = Path.Combine(projectDir, "data", "shaders");
         Directory.CreateDirectory(dataShadersDir);
-        Log("  Created data/shaders");
+        Log("  Created data/shaders/");
 
         var templateShadersDir = Path.Combine(templatesDir, "shaders");
         if (Directory.Exists(templateShadersDir))
@@ -228,66 +289,81 @@ endif()"
             }
         }
 
-        Log("Generating source files");
-        var mainCpp = LoadTemplate("main.cpp");
-        File.WriteAllText(Path.Combine(srcDir, "main.cpp"), mainCpp);
-        Log("  Generated main.cpp");
+        // -------------------------------------------------------------------------
+        // community.cmake (empty sentinel)
+        // -------------------------------------------------------------------------
+        File.WriteAllText(Path.Combine(projectDir, "community.cmake"), "");
+        Log("  Created community.cmake");
 
-        var userProject = LoadTemplate("user_project.hpp");
-        File.WriteAllText(Path.Combine(srcDir, "user_project.hpp"), userProject);
-        Log("  Generated user_project.hpp");
+        // -------------------------------------------------------------------------
+        // .gitignore
+        // -------------------------------------------------------------------------
+        var gitignoreSrc = Path.Combine(templatesDir, ".gitignore");
+        if (File.Exists(gitignoreSrc))
+        {
+            File.Copy(gitignoreSrc, Path.Combine(projectDir, ".gitignore"));
+            Log("  Copied .gitignore");
+        }
+        else
+        {
+            throw new FileNotFoundException("Required template missing: .gitignore");
+        }
+
+        // -------------------------------------------------------------------------
+        // VS Code configuration
+        // -------------------------------------------------------------------------
+
+        var cmakePresetsSrc = Path.Combine(templatesDir, "CMakePresets.json");
+        if (!File.Exists(cmakePresetsSrc))
+            throw new FileNotFoundException("Required template missing: CMakePresets.json");
+        File.Copy(cmakePresetsSrc, Path.Combine(projectDir, "CMakePresets.json"));
+        Log("  Copied CMakePresets.json");
 
         if (withVscodeCheckbox.Checked)
         {
             Log("Generating VS Code configuration");
-
-            var settings = LoadTemplate("vscode/settings.json");
-            File.WriteAllText(Path.Combine(vsCodeDir, "settings.json"), settings);
-            Log("  Generated settings.json");
-
-            var tasks = LoadTemplate("vscode/tasks.json").Replace("@PROJECT_NAME@", projectName);
-            File.WriteAllText(Path.Combine(vsCodeDir, "tasks.json"), tasks);
-            Log("  Generated tasks.json");
-
-            var launch = LoadTemplate("vscode/launch.json").Replace("@PROJECT_NAME@", projectName);
-            File.WriteAllText(Path.Combine(vsCodeDir, "launch.json"), launch);
-            Log("  Generated launch.json");
+            var vscodeTemplatesDir = Path.Combine(templatesDir, "vscode");
+            if (Directory.Exists(vscodeTemplatesDir))
+            {
+                foreach (var vscodeFile in new[] { "settings.json", "tasks.json", "launch.json" })
+                {
+                    var src = Path.Combine(vscodeTemplatesDir, vscodeFile);
+                    if (File.Exists(src))
+                    {
+                        var content = File.ReadAllText(src).Replace("@PROJECT_NAME@", projectName);
+                        File.WriteAllText(Path.Combine(vsCodeDir, vscodeFile), content);
+                        Log($"  Generated .vscode/{vscodeFile}");
+                    }
+                }
+            }
+            else
+            {
+                Log("  WARNING: vscode templates not found, skipping");
+            }
         }
 
+        // -------------------------------------------------------------------------
+        // README.md
+        // -------------------------------------------------------------------------
         Log("Generating README.md");
-        var readme = $@"# {projectName}
-
-A MayaFlux multimedia DSP project.
-
-## Building
-
-```bash
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build . --config Release --parallel
-```
-
-## Running
-
-```bash
-.\build\Release\{projectName}.exe
-```
-
-## Editing
-
-Open in VS Code:
-```bash
-code .
-```
-
-Edit your code in `src/user_project.hpp`:
-- `settings()`: Configure sample rate, buffer size, graphics
-- `compose()`: Create your nodes, buffers, and processing chains
-
-## Documentation
-
-See [MayaFlux Documentation](https://github.com/MayaFlux/MayaFlux)
-";
+        var readme =
+            $"# {projectName}\r\n\r\n" +
+            "A MayaFlux multimedia DSP project.\r\n\r\n" +
+            "## Building\r\n\r\n" +
+            "```bash\r\n" +
+            "mkdir build && cd build\r\n" +
+            "cmake .. -DCMAKE_BUILD_TYPE=Release\r\n" +
+            "cmake --build . --config Release --parallel\r\n" +
+            "```\r\n\r\n" +
+            "## Running\r\n\r\n" +
+            $"```bash\r\n.\\build\\Release\\{projectName}.exe\r\n```\r\n\r\n" +
+            "## Editing\r\n\r\n" +
+            "Open in VS Code:\r\n```bash\r\ncode .\r\n```\r\n\r\n" +
+            "Edit your code in `src/user_project.hpp`:\r\n" +
+            "- `settings()`: Configure sample rate, buffer size, graphics\r\n" +
+            "- `compose()`: Create your nodes, buffers, and processing chains\r\n\r\n" +
+            "## Documentation\r\n\r\n" +
+            "See [MayaFlux Documentation](https://github.com/MayaFlux/MayaFlux)\r\n";
 
         File.WriteAllText(Path.Combine(projectDir, "README.md"), readme);
         Log("  Generated README.md");

@@ -81,14 +81,18 @@ public static class ResourceExtractor
     private static string ExtractResourceFilename(string fullResourceName, string prefix)
     {
         var withoutPrefix = fullResourceName.Substring(prefix.Length).TrimStart('.');
+
         var lastDot = withoutPrefix.LastIndexOf('.');
-        if (lastDot > 0 && lastDot < withoutPrefix.Length - 1)
+
+        if (lastDot <= 0)
         {
-            var nameWithoutExt = withoutPrefix.Substring(0, lastDot);
-            var ext = withoutPrefix.Substring(lastDot);
-            nameWithoutExt = nameWithoutExt.Replace('.', Path.DirectorySeparatorChar);
-            return nameWithoutExt + ext;
+            return "." + withoutPrefix;
         }
-        return withoutPrefix.Replace('.', Path.DirectorySeparatorChar);
+
+        var nameWithoutExt = withoutPrefix.Substring(0, lastDot);
+        var ext = withoutPrefix.Substring(lastDot);
+
+        nameWithoutExt = nameWithoutExt.Replace('.', Path.DirectorySeparatorChar);
+        return nameWithoutExt + ext;
     }
 }

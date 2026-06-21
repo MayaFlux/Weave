@@ -18,6 +18,7 @@ public class SystemCheckStep : IInstallationStep
 {
     private Logger logger = new();
     private bool checksPass = false;
+    private bool needsReboot = false; 
     private TextBox? logBox;
     private Label? statusLabel;
     private Button? nextButton;
@@ -94,6 +95,34 @@ public class SystemCheckStep : IInstallationStep
         else
         {
             await LogAsync("[OK] 7-Zip found");
+        }
+
+        await LogAsync("");
+        await LogAsync("Checking for MSVC build tools...");
+
+        if (!HasMsvcToolchain())
+        {
+            await LogAsync("[INSTALLING] Visual Studio Build Tools not found");
+            await LogAsync("[INSTALLING] Installing MSVC build tools via winget (this may take 10-20 minutes)...");
+            int exitCode = await InstallMsvcAsync();
+            if (exitCode == 0 || exitCode == 3010)
+            {
+                await LogAsync("[OK] MSVC build tools installed");
+                if (exitCode == 3010)
+                {
+                    await LogAsync("[WARN] A system restart is required before building");
+                    needsReboot = true;
+                }
+            }
+            else
+            {
+                await LogAsync($"[ERROR] MSVC install failed (exit code {exitCode})");
+                checksPass = false;
+            }
+        }
+        else
+        {
+            await LogAsync("[OK] MSVC build tools found");
         }
 
         await LogAsync("");
@@ -179,6 +208,106 @@ public class SystemCheckStep : IInstallationStep
         };
 
         return possiblePaths.FirstOrDefault(path => File.Exists(path));
+    }
+
+    private bool HasMsvcToolchain()
+    {
+        var vswhere = FindVsWhere();
+        if (vswhere != null)
+        {
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = vswhere,
+                    Arguments = "-latest -prerelease -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationVersion",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow = true
+                };
+                using var p = System.Diagnostics.Process.Start(psi);
+                if (p != null)
+                {
+                    var output = p.StandardOutput.ReadToEnd().Trim();
+                    p.WaitForExit();
+                    if (!string.IsNullOrEmpty(output))
+                        return true;
+                }
+            }
+            catch { }
+        }
+
+        string[] basePaths = {
+            @"C:\Program Files\Microsoft Visual Studio",
+            @"C:\Program Files (x86)\Microsoft Visual Studio"
+        };
+        string[] years = { "2026", "2022" };
+        string[] editions = { "BuildTools", "Community", "Professional", "Enterprise" };
+
+        foreach (var b in basePaths)
+            foreach (var y in years)
+                foreach (var e in editions)
+                    if (Directory.Exists(Path.Combine(b, y, e, "VC", "Tools", "MSVC")))
+                        return true;
+        return false;
+    }
+
+    private string? FindVsWhere()
+    {
+        var candidates = new[]
+        {
+            @"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe",
+            @"C:\Program Files\Microsoft Visual Studio\Installer\vswhere.exe"
+        };
+        return candidates.FirstOrDefault(File.Exists);
+    }
+
+    private bool IsWindows11()
+    {
+        return Environment.OSVersion.Version.Build >= 22000;
+    }
+
+    private async Task<int> InstallMsvcAsync()
+    {
+        try
+        {
+            string wingetId;
+            if (IsWindows11())
+            {
+                await LogAsync("[INSTALLING] Windows 11 detected : installing Visual Studio Build Tools 2026...");
+                wingetId = "Microsoft.VisualStudio.BuildTools";
+            }
+            else
+            {
+                await LogAsync("[INSTALLING] Windows 10 detected : installing Visual Studio Build Tools 2022...");
+                wingetId = "Microsoft.VisualStudio.2022.BuildTools";
+            }
+
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "winget",
+                Arguments = $"install {wingetId} " +
+                            "--override \"--wait --quiet " +
+                            "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 " +
+                            "--add Microsoft.VisualStudio.Component.Windows11SDK.22621 " +
+                            "--add Microsoft.VisualStudio.Component.VC.Redist.14.Latest\"",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            using var process = System.Diagnostics.Process.Start(psi);
+            if (process == null) return -1;
+
+            process.WaitForExit();
+            return process.ExitCode;
+        }
+        catch (Exception ex)
+        {
+            await LogAsync($"[ERROR] {ex.Message}");
+            return -1;
+        }
     }
 
     private async Task LogAsync(string message)

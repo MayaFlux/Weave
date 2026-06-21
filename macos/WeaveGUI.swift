@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 // ============================================================================
 // MARK: - App Entry
@@ -22,7 +22,10 @@ struct WeaveApp: App {
 enum WeaveMode {
     case landing
     case install
+    case projects
     case createProject
+    case addCommunity
+    case createCommunity
 }
 
 // ============================================================================
@@ -65,9 +68,9 @@ struct LandingView: View {
                     .controlSize(.large)
 
                     Button {
-                        mode = .createProject
+                        mode = .projects
                     } label: {
-                        Label("Create New Project", systemImage: "folder.badge.plus")
+                        Label("Projects", systemImage: "folder")
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 6)
                     }
@@ -87,8 +90,21 @@ struct LandingView: View {
         case .install:
             InstallView(onBack: { mode = .landing })
 
+        case .projects:
+            ProjectsView(
+                onBack: { mode = .landing },
+                onCreateProject: { mode = .createProject },
+                onAddCommunity: { mode = .addCommunity },
+                onCreateCommunity: { mode = .createCommunity })
+
         case .createProject:
             CreateProjectView(onBack: { mode = .landing })
+
+        case .addCommunity:
+            AddCommunityView(onBack: { mode = .projects })
+
+        case .createCommunity:
+            CreateCommunityView(onBack: { mode = .projects })
         }
     }
 }
@@ -164,7 +180,9 @@ class InstallerState: ObservableObject {
             do {
                 try task.run()
             } catch {
-                DispatchQueue.main.async { self.logLines.append("ERROR: \(error.localizedDescription)") }
+                DispatchQueue.main.async {
+                    self.logLines.append("ERROR: \(error.localizedDescription)")
+                }
                 continuation.resume(returning: 1)
             }
         }
@@ -204,11 +222,15 @@ class InstallerState: ObservableObject {
                 "NONINTERACTIVE=1 /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
             )
             guard code == 0 else {
-                step = .failed("Homebrew installation failed.\n\nCheck your internet connection and try again.")
+                step = .failed(
+                    "Homebrew installation failed.\n\nCheck your internet connection and try again."
+                )
                 return
             }
             guard let found = brewCmd else {
-                step = .failed("Homebrew installed but executable not found.\nExpected: /opt/homebrew/bin/brew or /usr/local/bin/brew")
+                step = .failed(
+                    "Homebrew installed but executable not found.\nExpected: /opt/homebrew/bin/brew or /usr/local/bin/brew"
+                )
                 return
             }
             brew = found
@@ -272,7 +294,8 @@ class InstallerState: ObservableObject {
         try? prefixTask.run()
         prefixTask.waitUntilExit()
         let prefixData = prefixPipe.fileHandleForReading.readDataToEndOfFile()
-        let prefixOutput = (String(data: prefixData, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefixOutput = (String(data: prefixData, encoding: .utf8) ?? "").trimmingCharacters(
+            in: .whitespacesAndNewlines)
 
         guard !prefixOutput.isEmpty else {
             step = .failed("Could not determine Homebrew prefix for \(formula).")
@@ -288,7 +311,9 @@ class InstallerState: ObservableObject {
         zdotdirTask.standardOutput = zdotdirPipe
         try? zdotdirTask.run()
         zdotdirTask.waitUntilExit()
-        let zdotdirRaw = (String(data: zdotdirPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let zdotdirRaw =
+            (String(data: zdotdirPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+            ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
         let zshenvDir: String
         if zdotdirRaw.isEmpty {
@@ -319,13 +344,12 @@ class InstallerState: ObservableObject {
         // Strip old entries — BSD sed -i '' verbatim
         let escaped = shellEscape(zshenvPath)
         let cleanScript =
-            "[ -f \(escaped) ] && sed -i '' '/# MayaFlux/d' \(escaped);" +
-            "[ -f \(escaped) ] && sed -i '' '/MAYAFLUX_ROOT/d' \(escaped);" +
-            "[ -f \(escaped) ] && sed -i '' '/mayaflux_env\\.sh/d' \(escaped);" +
-            "[ -f \(escaped) ] && sed -i '' '/source.*mayaflux.*\\/env\\.sh/d' \(escaped);" +
-            "[ -f \(escaped) ] && sed -i '' '/\\.local\\/bin.*\\$PATH/d' \(escaped);" +
-            "[ -f \(escaped) ] && sed -i '' '/./,$!d' \(escaped);" +
-            "true"
+            "[ -f \(escaped) ] && sed -i '' '/# MayaFlux/d' \(escaped);"
+            + "[ -f \(escaped) ] && sed -i '' '/MAYAFLUX_ROOT/d' \(escaped);"
+            + "[ -f \(escaped) ] && sed -i '' '/mayaflux_env\\.sh/d' \(escaped);"
+            + "[ -f \(escaped) ] && sed -i '' '/source.*mayaflux.*\\/env\\.sh/d' \(escaped);"
+            + "[ -f \(escaped) ] && sed -i '' '/\\.local\\/bin.*\\$PATH/d' \(escaped);"
+            + "[ -f \(escaped) ] && sed -i '' '/./,$!d' \(escaped);" + "true"
 
         let cleanCode = await run(cleanScript)
         guard cleanCode == 0 else {
@@ -336,9 +360,9 @@ class InstallerState: ObservableObject {
         // If file does not exist, refuse to create it
         guard fileExists else {
             step = .failed(
-                "No .zshenv found at \(zshenvPath)\n\n" +
-                "MayaFlux cannot configure your shell environment without an existing .zshenv.\n\n" +
-                "Create one first:\n  touch \(zshenvPath)"
+                "No .zshenv found at \(zshenvPath)\n\n"
+                    + "MayaFlux cannot configure your shell environment without an existing .zshenv.\n\n"
+                    + "Create one first:\n  touch \(zshenvPath)"
             )
             return
         }
@@ -347,7 +371,8 @@ class InstallerState: ObservableObject {
             step = .failed("Failed to open \(zshenvPath) for writing.")
             return
         }
-        let envBlock = "\n# MayaFlux (installed via Homebrew)\nsource \"\(prefixOutput)/env.sh\"\nexport PATH=\"$HOME/.local/bin:$PATH\"\n"
+        let envBlock =
+            "\n# MayaFlux (installed via Homebrew)\nsource \"\(prefixOutput)/env.sh\"\nexport PATH=\"$HOME/.local/bin:$PATH\"\n"
         handle.seekToEndOfFile()
         handle.write(Data(envBlock.utf8))
         handle.closeFile()
@@ -366,9 +391,9 @@ class InstallerState: ObservableObject {
         let weaveSource = resourcePath + "/weave"
 
         let cliCode = await run(
-            "mkdir -p \(shellEscape(localBin)) && " +
-            "cp \(shellEscape(weaveSource)) \(shellEscape(weaveDest)) && " +
-            "chmod +x \(shellEscape(weaveDest))"
+            "mkdir -p \(shellEscape(localBin)) && "
+                + "cp \(shellEscape(weaveSource)) \(shellEscape(weaveDest)) && "
+                + "chmod +x \(shellEscape(weaveDest))"
         )
         guard cliCode == 0 else {
             step = .failed("Failed to install Weave CLI to \(weaveDest).")
@@ -379,8 +404,8 @@ class InstallerState: ObservableObject {
         let templatesSource = resourcePath + "/templates"
         let templatesDest = NSHomeDirectory() + "/.local/share/weave/templates"
         let templatesCode = await run(
-            "mkdir -p \(shellEscape(templatesDest)) && " +
-            "cp -R \(shellEscape(templatesSource))/ \(shellEscape(templatesDest))/"
+            "mkdir -p \(shellEscape(templatesDest)) && "
+                + "cp -R \(shellEscape(templatesSource))/ \(shellEscape(templatesDest))/"
         )
         guard templatesCode == 0 else {
             step = .failed("Failed to install templates to \(templatesDest).")
@@ -391,6 +416,71 @@ class InstallerState: ObservableObject {
         log("✅ Weave CLI installed to \(weaveDest)")
 
         step = .done
+    }
+}
+
+// ============================================================================
+// MARK: - Projects View
+// ============================================================================
+
+struct ProjectsView: View {
+    let onBack: () -> Void
+    let onCreateProject: () -> Void
+    let onAddCommunity: () -> Void
+    let onCreateCommunity: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button(action: onBack) {
+                    Label("Back", systemImage: "chevron.left")
+                }
+                .buttonStyle(.borderless)
+                Spacer()
+                Text("Projects").font(.headline)
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+
+            Divider()
+
+            VStack(spacing: 14) {
+                Button {
+                    onCreateProject()
+                } label: {
+                    Label("Create Project", systemImage: "folder.badge.plus")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                Button {
+                    onAddCommunity()
+                } label: {
+                    Label("Update Project (Community Modules)", systemImage: "arrow.down.circle")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+
+                Button {
+                    onCreateCommunity()
+                } label: {
+                    Label("Create Community Module", systemImage: "puzzlepiece")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+            }
+            .padding(24)
+
+            Spacer()
+        }
+        .frame(width: 400)
     }
 }
 
@@ -412,10 +502,11 @@ struct InstallView: View {
                     Label("Back", systemImage: "chevron.left")
                 }
                 .buttonStyle(.borderless)
-                .disabled({
-                    if case .running = state.step { return true }
-                    return false
-                }())
+                .disabled(
+                    {
+                        if case .running = state.step { return true }
+                        return false
+                    }())
                 Spacer()
                 Text("Install MayaFlux").font(.headline)
                 Spacer()
@@ -426,21 +517,23 @@ struct InstallView: View {
             Divider()
 
             switch state.step {
-            case .channelSelect:  channelSelectBody
+            case .channelSelect: channelSelectBody
             case .passwordPrompt: passwordPromptBody
-            case .running:        runningBody
-            case .done:           doneBody
-            case .failed(let m):  failedBody(m)
+            case .running: runningBody
+            case .done: doneBody
+            case .failed(let m): failedBody(m)
             }
         }
         .frame(width: 580, height: 480)
         .alert("Conflicting Installation", isPresented: $showConflictAlert) {
-            Button("Cancel", role: .cancel) { }
+            Button("Cancel", role: .cancel) {}
             Button("Remove \(conflictingFormula) and continue", role: .destructive) {
                 Task { await state.startInstall() }
             }
         } message: {
-            Text("You have \(conflictingFormula) installed. Both versions cannot coexist.\n\nRemove it and install \(state.formula)?")
+            Text(
+                "You have \(conflictingFormula) installed. Both versions cannot coexist.\n\nRemove it and install \(state.formula)?"
+            )
         }
     }
 
@@ -453,12 +546,16 @@ struct InstallView: View {
                 .font(.title2).fontWeight(.semibold)
 
             VStack(spacing: 12) {
-                channelButton(label: "Stable", description: "Recommended for most users",
-                              icon: "checkmark.seal", selected: state.formula == "mayaflux") {
+                channelButton(
+                    label: "Stable", description: "Recommended for most users",
+                    icon: "checkmark.seal", selected: state.formula == "mayaflux"
+                ) {
                     state.formula = "mayaflux"
                 }
-                channelButton(label: "Development", description: "Latest features, may be unstable",
-                              icon: "bolt", selected: state.formula == "mayaflux-dev") {
+                channelButton(
+                    label: "Development", description: "Latest features, may be unstable",
+                    icon: "bolt", selected: state.formula == "mayaflux-dev"
+                ) {
                     state.formula = "mayaflux-dev"
                 }
             }
@@ -473,7 +570,10 @@ struct InstallView: View {
         }
     }
 
-    func channelButton(label: String, description: String, icon: String, selected: Bool, action: @escaping () -> Void) -> some View {
+    func channelButton(
+        label: String, description: String, icon: String, selected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             HStack(spacing: 16) {
                 Image(systemName: icon)
@@ -494,8 +594,9 @@ struct InstallView: View {
             .padding(14)
             .background(selected ? Color.blue : Color(NSColor.controlBackgroundColor))
             .cornerRadius(10)
-            .overlay(RoundedRectangle(cornerRadius: 10)
-                .stroke(selected ? Color.clear : Color.gray.opacity(0.3), lineWidth: 1))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(selected ? Color.clear : Color.gray.opacity(0.3), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -507,10 +608,12 @@ struct InstallView: View {
             Spacer()
             Image(systemName: "lock.circle").font(.system(size: 52)).foregroundColor(.blue)
             Text("Administrator Password Required").font(.title2).fontWeight(.semibold)
-            Text("Homebrew is not installed. Installing it requires your password once to set up its directory.\n\nYour password is not stored.")
-                .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 40)
+            Text(
+                "Homebrew is not installed. Installing it requires your password once to set up its directory.\n\nYour password is not stored."
+            )
+            .multilineTextAlignment(.center)
+            .foregroundColor(.secondary)
+            .padding(.horizontal, 40)
             SecureField("Password", text: $state.password)
                 .textFieldStyle(.roundedBorder)
                 .padding(.horizontal, 60)
@@ -567,7 +670,8 @@ struct InstallView: View {
     var doneBody: some View {
         VStack(spacing: 20) {
             Spacer()
-            Image(systemName: "checkmark.circle.fill").font(.system(size: 64)).foregroundColor(.green)
+            Image(systemName: "checkmark.circle.fill").font(.system(size: 64)).foregroundColor(
+                .green)
             Text("Installation Complete!").font(.title).fontWeight(.bold)
             Text("Restart your terminal for environment changes to take effect.")
                 .multilineTextAlignment(.center)
@@ -778,7 +882,8 @@ struct CreateProjectView: View {
         isCreating = true
 
         guard FileManager.default.fileExists(atPath: weavePath) else {
-            alertMessage = "Weave CLI not found at:\n\(weavePath)\n\nPlease run Install MayaFlux first."
+            alertMessage =
+                "Weave CLI not found at:\n\(weavePath)\n\nPlease run Install MayaFlux first."
             showAlert = true
             isCreating = false
             return
@@ -801,16 +906,16 @@ struct CreateProjectView: View {
 
             if task.terminationStatus == 0 {
                 alertMessage = """
-                Project '\(projectName)' created successfully!
+                    Project '\(projectName)' created successfully!
 
-                Location: \(projectLocation)/\(projectName)
+                    Location: \(projectLocation)/\(projectName)
 
-                Next steps:
-                1. cd \(projectLocation)/\(projectName)
-                2. mkdir build && cd build
-                3. cmake .. && make
-                4. ./\(projectName)
-                """
+                    Next steps:
+                    1. cd \(projectLocation)/\(projectName)
+                    2. mkdir build && cd build
+                    3. cmake .. && make
+                    4. ./\(projectName)
+                    """
             } else {
                 let data = pipe.fileHandleForReading.readDataToEndOfFile()
                 let output = String(data: data, encoding: .utf8) ?? "Unknown error"
@@ -822,6 +927,381 @@ struct CreateProjectView: View {
 
         showAlert = true
         isCreating = false
+    }
+}
+
+// ============================================================================
+// MARK: - Create Community View
+// ============================================================================
+
+struct CreateCommunityView: View {
+    let onBack: () -> Void
+
+    @State private var moduleName: String = ""
+    @State private var moduleNameError: String = ""
+    @State private var description: String = ""
+    @State private var minVersion: String = "0.4.0"
+    @State private var needsLila: Bool = false
+    @State private var destination: String = NSHomeDirectory() + "/Projects"
+    @State private var isCreating: Bool = false
+    @State private var showAlert: Bool = false
+    @State private var alertMessage: String = ""
+
+    private var weavePath: String {
+        let localBin = "\(NSHomeDirectory())/.local/bin/weave"
+        if FileManager.default.fileExists(atPath: localBin) { return localBin }
+        return "\(Bundle.main.resourcePath ?? "")/weave"
+    }
+
+    private var preview: String {
+        "\(destination)/\(moduleName.isEmpty ? "my_module" : moduleName)"
+    }
+
+    private var nameIsValid: Bool {
+        let r = try! NSRegularExpression(pattern: "^[a-z][a-z0-9_]*$")
+        return r.firstMatch(
+            in: moduleName, range: NSRange(moduleName.startIndex..., in: moduleName)) != nil
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button(action: onBack) {
+                    Label("Back", systemImage: "chevron.left")
+                }
+                .buttonStyle(.borderless)
+                .disabled(isCreating)
+                Spacer()
+                Text("Create Community Module").font(.headline)
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Module Name (snake_case)").font(.headline)
+                        TextField("my_module", text: $moduleName)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: moduleName) { _ in validateName() }
+                        if !moduleNameError.isEmpty {
+                            Text(moduleNameError)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Description").font(.headline)
+                        TextField(
+                            "A short description of what this module does", text: $description
+                        )
+                        .textFieldStyle(.roundedBorder)
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Minimum MayaFlux Version").font(.headline)
+                        TextField("0.4.0", text: $minVersion)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    Toggle("Requires Lila (live coding)", isOn: $needsLila)
+                        .toggleStyle(CheckboxToggleStyle())
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Destination").font(.headline)
+                        HStack {
+                            TextField("/path/to/location", text: $destination)
+                                .textFieldStyle(.roundedBorder)
+                            Button("Browse…") { selectFolder() }
+                        }
+                    }
+
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Module will be created at:")
+                            .font(.caption).foregroundColor(.secondary)
+                        Text(preview)
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundColor(.blue)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(NSColor.textBackgroundColor))
+                    .cornerRadius(8)
+                }
+                .padding(24)
+            }
+
+            Divider()
+
+            HStack(spacing: 16) {
+                Button("Cancel") { NSApplication.shared.terminate(nil) }
+                    .keyboardShortcut(.cancelAction)
+                Button(isCreating ? "Creating…" : "Create Module") { createModule() }
+                    .disabled(isCreating || moduleName.isEmpty || !nameIsValid)
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+        }
+        .frame(width: 550, height: 480)
+        .alert("Weave", isPresented: $showAlert) {
+            Button("OK") {
+                if alertMessage.contains("created") {
+                    NSApplication.shared.terminate(nil)
+                }
+            }
+        } message: {
+            Text(alertMessage)
+        }
+    }
+
+    func validateName() {
+        guard !moduleName.isEmpty else {
+            moduleNameError = ""
+            return
+        }
+        moduleNameError =
+            nameIsValid
+            ? ""
+            : "Must be snake_case: lowercase letters, digits, underscores, no leading digit"
+    }
+
+    func selectFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.message = "Select destination"
+        if panel.runModal() == .OK, let url = panel.url {
+            destination = url.path
+        }
+    }
+
+    func createModule() {
+        guard !moduleName.isEmpty, nameIsValid else { return }
+        isCreating = true
+
+        guard FileManager.default.fileExists(atPath: weavePath) else {
+            alertMessage =
+                "Weave CLI not found at:\n\(weavePath)\n\nPlease run Install MayaFlux first."
+            showAlert = true
+            isCreating = false
+            return
+        }
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: weavePath)
+        task.arguments = ["community", moduleName, destination]
+
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = pipe
+
+        do {
+            try task.run()
+            task.waitUntilExit()
+
+            if task.terminationStatus == 0 {
+                // Patch community.json with GUI-supplied values
+                let moduleDir = URL(fileURLWithPath: destination).appendingPathComponent(moduleName)
+                let cjPath = moduleDir.appendingPathComponent("community.json")
+                if var data = try? Data(contentsOf: cjPath),
+                    var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                {
+                    if !description.isEmpty { json["description"] = description }
+                    if !minVersion.isEmpty { json["min_version"] = minVersion }
+                    json["needs_lila"] = needsLila
+                    if let patched = try? JSONSerialization.data(
+                        withJSONObject: json, options: .prettyPrinted)
+                    {
+                        data = patched
+                        try? data.write(to: cjPath)
+                    }
+                }
+                alertMessage =
+                    "Module '\(moduleName)' created successfully!\n\nLocation: \(moduleDir.path)"
+            } else {
+                let output =
+                    String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+                    ?? "Unknown error"
+                alertMessage = "Failed to create module:\n\n\(output)"
+            }
+        } catch {
+            alertMessage = "Error: \(error.localizedDescription)"
+        }
+
+        showAlert = true
+        isCreating = false
+    }
+}
+
+// ============================================================================
+// MARK: - Add Community View
+// ============================================================================
+
+struct AddCommunityView: View {
+    let onBack: () -> Void
+
+    @State private var projectPath: String = NSHomeDirectory() + "/Projects"
+    @State private var moduleName: String = ""
+    @State private var moduleNameError: String = ""
+    @State private var isAdding: Bool = false
+    @State private var output: String = ""
+    @State private var showAlert: Bool = false
+    @State private var alertMessage: String = ""
+
+    private var weavePath: String {
+        let localBin = "\(NSHomeDirectory())/.local/bin/weave"
+        if FileManager.default.fileExists(atPath: localBin) { return localBin }
+        return "\(Bundle.main.resourcePath ?? "")/weave"
+    }
+
+    private var nameIsValid: Bool {
+        let r = try! NSRegularExpression(pattern: "^[a-z][a-z0-9_]*$")
+        return r.firstMatch(
+            in: moduleName, range: NSRange(moduleName.startIndex..., in: moduleName)) != nil
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button(action: onBack) {
+                    Label("Back", systemImage: "chevron.left")
+                }
+                .buttonStyle(.borderless)
+                .disabled(isAdding)
+                Spacer()
+                Text("Add Community Module").font(.headline)
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Project Directory").font(.headline)
+                        HStack {
+                            TextField("/path/to/project", text: $projectPath)
+                                .textFieldStyle(.roundedBorder)
+                            Button("Browse…") {
+                                let panel = NSOpenPanel()
+                                panel.canChooseFiles = false
+                                panel.canChooseDirectories = true
+                                panel.allowsMultipleSelection = false
+                                if let path = projectPath.isEmpty
+                                    ? nil : URL(fileURLWithPath: projectPath)
+                                {
+                                    panel.directoryURL = path
+                                }
+                                if panel.runModal() == .OK, let url = panel.url {
+                                    projectPath = url.path
+                                }
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Module Name").font(.headline)
+                        TextField("my_module", text: $moduleName)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: moduleName) { _ in
+                                moduleNameError =
+                                    (!moduleName.isEmpty && !nameIsValid)
+                                    ? "Must be snake_case: lowercase letters, digits, underscores"
+                                    : ""
+                            }
+                        if !moduleNameError.isEmpty {
+                            Text(moduleNameError).font(.caption).foregroundColor(.red)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Output").font(.headline)
+                        ScrollView {
+                            Text(output.isEmpty ? " " : output)
+                                .font(.system(.caption, design: .monospaced))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(8)
+                        }
+                        .frame(height: 180)
+                        .background(Color(NSColor.textBackgroundColor))
+                        .cornerRadius(6)
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.gray.opacity(0.3)))
+                    }
+                }
+                .padding(20)
+            }
+
+            Divider()
+
+            HStack {
+                Button("Cancel", action: onBack).disabled(isAdding)
+                Spacer()
+                Button(isAdding ? "Adding…" : "Add Module") {
+                    addModule()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isAdding || moduleName.isEmpty || !nameIsValid)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
+        .frame(width: 520, height: 500)
+        .alert("Done", isPresented: $showAlert) {
+            Button("OK") { onBack() }
+        } message: {
+            Text(alertMessage)
+        }
+    }
+
+    private func addModule() {
+        guard !projectPath.isEmpty, !moduleName.isEmpty, nameIsValid else { return }
+
+        isAdding = true
+        output = ""
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            task.arguments = [weavePath, "update", projectPath, moduleName]
+
+            let pipe = Pipe()
+            task.standardOutput = pipe
+            task.standardError = pipe
+
+            do {
+                try task.launch()
+                task.waitUntilExit()
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let text = String(data: data, encoding: .utf8) ?? ""
+                DispatchQueue.main.async {
+                    output = text
+                    isAdding = false
+                    if task.terminationStatus == 0 {
+                        alertMessage =
+                            "Module '\(moduleName)' added.\n\nRebuild your project to include it."
+                        showAlert = true
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    output = "Error: \(error.localizedDescription)"
+                    isAdding = false
+                }
+            }
+        }
     }
 }
 

@@ -4,14 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "weave"
-version = "0.3.2"
+version = "0.4.0"
 description = "MayaFlux installer and project creator for Linux"
 requires-python = ">=3.8"
 dependencies = ["PyGObject"]
 
 [project.scripts]
 weave-installer = "lib.main:main"
-weave = "lib.cli:main"
 
 [tool.setuptools]
 packages = ["lib", "lib.modes", "lib.ui"]

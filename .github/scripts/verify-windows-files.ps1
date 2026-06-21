@@ -35,10 +35,13 @@ Write-Host ""
 Write-Host "Checking templates..."
 $templates = @(
     "templates\CMakeLists.txt",
-    "templates\shaders.cmake",
-    "templates\shaders\"
     "templates\main.cpp",
     "templates\user_project.hpp",
+    "templates\.gitignore",
+    "templates\cmake\mayaflux.cmake",
+    "templates\cmake\shaders.cmake",
+    "templates\cmake\build_community.cmake",
+    "templates\shaders\",
     "templates\vscode\settings.json",
     "templates\vscode\tasks.json",
     "templates\vscode\launch.json"
@@ -48,21 +51,6 @@ foreach ($t in $templates) {
         Write-Host "[OK] $t"
     } else {
         Write-Host "[ERROR] $t missing"
-        $allPresent = $false
-    }
-}
-
-Write-Host ""
-Write-Host "Checking scripts..."
-$scripts = @(
-    "windows\scripts\install_package.ps1",
-    "windows\scripts\packages.psd1"
-)
-foreach ($s in $scripts) {
-    if (Test-Path $s) {
-        Write-Host "[OK] $s"
-    } else {
-        Write-Host "[ERROR] $s missing"
         $allPresent = $false
     }
 }

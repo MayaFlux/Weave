@@ -39,78 +39,49 @@ public class EnvironmentSetupStep : IInstallationStep
         nextButton.Click += (s, e) => nextCallback();
         cancelButton.Click += (s, e) => Application.Exit();
 
-        Task.Run(() => SetupEnvironmentAsync(config, statusLabel, logCallback));
+        Task.Run(() => SetupEnvironmentAsync(config, statusLabel));
     }
 
-    private async Task SetupEnvironmentAsync(InstallationConfig config, Label statusLabel, Action<string> logCallback)
+    private async Task SetupEnvironmentAsync(InstallationConfig config, Label statusLabel)
     {
         try
         {
             await LogAsync("=== Environment Setup ===");
             await LogAsync("");
 
-            // ========================================
-            // MayaFlux Environment Variables
-            // ========================================
             await LogAsync("=== MayaFlux Configuration ===");
             await LogAsync("");
 
-            await LogAsync("Setting MAYAFLUX_ROOT environment variable...");
+            await LogAsync("Setting MAYAFLUX_ROOT...");
             if (ProcessRunner.SetEnvironmentVariable(WeaveConstants.ENV_MAYAFLUX_ROOT, config.MayaFluxRoot, logger))
-            {
                 await LogAsync($"  [OK] MAYAFLUX_ROOT={config.MayaFluxRoot}");
-            }
             else
-            {
-                await LogAsync($"  [WARN] Failed to set MAYAFLUX_ROOT");
-            }
+                await LogAsync("  [WARN] Failed to set MAYAFLUX_ROOT");
 
             await LogAsync("Adding MayaFlux to PATH...");
             if (ProcessRunner.AddToPath(config.BinDirectory, logger))
-            {
                 await LogAsync($"  [OK] Added to PATH: {config.BinDirectory}");
-            }
             else
-            {
-                await LogAsync($"  [WARN] Failed to add to PATH");
-            }
+                await LogAsync("  [WARN] Failed to add to PATH");
 
-            await LogAsync("Setting CMAKE_PREFIX_PATH...");
-            if (ProcessRunner.SetEnvironmentVariable(WeaveConstants.ENV_CMAKE_PREFIX_PATH, config.MayaFluxRoot, logger))
-            {
-                await LogAsync($"  [OK] CMAKE_PREFIX_PATH={config.MayaFluxRoot}");
-            }
-            else
-            {
-                await LogAsync($"  [WARN] Failed to set CMAKE_PREFIX_PATH");
-            }
+            ProcessRunner.AddIncludeDirectory(Path.Combine(config.MayaFluxRoot, "include"), logger);
+            await LogAsync($"  [OK] Added to INCLUDE/CPATH: {Path.Combine(config.MayaFluxRoot, "include")}");
 
-            var mayaFluxInclude = Path.Combine(config.MayaFluxRoot, "include");
-            ProcessRunner.AddIncludeDirectory(mayaFluxInclude, logger);
-            await LogAsync($"  [OK] Added to INCLUDE/CPATH: {mayaFluxInclude}");
-
-            var mayaFluxLib = Path.Combine(config.MayaFluxRoot, "lib");
-            ProcessRunner.AddLibraryDirectory(mayaFluxLib, logger);
-            await LogAsync($"  [OK] Added to LIB/LIBRARY_PATH: {mayaFluxLib}");
+            ProcessRunner.AddLibraryDirectory(Path.Combine(config.MayaFluxRoot, "lib"), logger);
+            await LogAsync($"  [OK] Added to LIB/LIBRARY_PATH: {Path.Combine(config.MayaFluxRoot, "lib")}");
 
             await LogAsync("");
-
-            // ========================================
-            // Dependency Environment Variables
-            // ========================================
             await LogAsync("=== Dependency Configuration ===");
             await LogAsync("");
 
-            await SetupDiaSDK();
-            await SetupLLVM();
             await SetupVulkan();
-            await SetupVcpkg();
+            await SetupLLVM();
+            await SetupFFmpeg();
 
             await LogAsync("");
             await LogAsync("=== Environment Setup Complete ===");
             await LogAsync("");
-            await LogAsync("[WARN] You must restart your terminal/PowerShell for environment changes to take effect");
-            await LogAsync("[INFO] Run: $env:MAYAFLUX_ROOT to verify after restart");
+            await LogAsync("[WARN] Restart your terminal for environment changes to take effect");
             await LogAsync("");
 
             setupSuccess = true;
@@ -127,141 +98,65 @@ public class EnvironmentSetupStep : IInstallationStep
         }
     }
 
-    private async Task SetupDiaSDK()
-    {
-        await LogAsync("Configuring DIA SDK...");
-
-        string[] vsBasePaths = new[]
-        {
-            @"C:\Program Files (x86)\Microsoft Visual Studio",
-            @"C:\Program Files\Microsoft Visual Studio"
-        };
-
-        string? diaPath = null;
-
-        foreach (var basePath in vsBasePaths)
-        {
-            if (!Directory.Exists(basePath)) continue;
-
-            foreach (var year in new[] { "2022", "2019", "2017" })
-            {
-                foreach (var edition in new[] { "Community", "Professional", "Enterprise" })
-                {
-                    var candidatePath = Path.Combine(basePath, year, edition, "DIA SDK");
-                    var libPath = Path.Combine(candidatePath, "lib", "amd64", "diaguids.lib");
-
-                    if (File.Exists(libPath))
-                    {
-                        diaPath = candidatePath;
-                        break;
-                    }
-                }
-                if (diaPath != null) break;
-            }
-            if (diaPath != null) break;
-        }
-
-        if (diaPath != null)
-        {
-            if (ProcessRunner.SetEnvironmentVariable("DIA_SDK_PATH", diaPath, logger))
-            {
-                await LogAsync($"  [OK] DIA SDK: {diaPath}");
-            }
-            else
-            {
-                await LogAsync($"  [WARN] Failed to set DIA_SDK_PATH");
-            }
-        }
-        else
-        {
-            await LogAsync("  [WARN] DIA SDK not found - LLVM may have linking issues");
-        }
-    }
-
-    private async Task SetupLLVM()
-    {
-        await LogAsync("Configuring LLVM/Clang...");
-
-        var llvmVersion = "21.1.8";
-        var llvmRoot = $@"C:\Program Files\LLVM_Libs\{llvmVersion}";
-
-        if (Directory.Exists(llvmRoot))
-        {
-            ProcessRunner.SetEnvironmentVariable("LLVM_ROOT", llvmRoot, logger);
-            ProcessRunner.SetEnvironmentVariable("LLVM_DIR", Path.Combine(llvmRoot, "lib", "cmake", "llvm"), logger);
-            ProcessRunner.SetEnvironmentVariable("Clang_DIR", Path.Combine(llvmRoot, "lib", "cmake", "clang"), logger);
-            await LogAsync($"  [OK] LLVM v{llvmVersion}: {llvmRoot}");
-        }
-        else
-        {
-            await LogAsync($"  [WARN] LLVM v{llvmVersion} not found at {llvmRoot}");
-        }
-    }
-
     private async Task SetupVulkan()
     {
         await LogAsync("Configuring Vulkan SDK...");
 
         var vulkanBase = @"C:\VulkanSDK";
-
-        if (Directory.Exists(vulkanBase))
-        {
-            var versionDirs = Directory.GetDirectories(vulkanBase).OrderByDescending(d => d).ToArray();
-
-            if (versionDirs.Length > 0)
-            {
-                var vulkanPath = versionDirs[0];
-                var includePath = Path.Combine(vulkanPath, "Include");
-
-                ProcessRunner.SetEnvironmentVariable("VULKAN_SDK", vulkanPath, logger);
-                ProcessRunner.SetEnvironmentVariable("VK_SDK_PATH", vulkanPath, logger);
-
-                ProcessRunner.AppendToEnvironmentVariable("CPATH", includePath, logger);
-
-                await LogAsync($"  [OK] Vulkan SDK: {vulkanPath}");
-                await LogAsync($"  [OK] Added to CPATH: {includePath}");
-            }
-            else
-            {
-                await LogAsync($"  [WARN] No Vulkan SDK version found in {vulkanBase}");
-            }
-        }
-        else
+        if (!Directory.Exists(vulkanBase))
         {
             await LogAsync($"  [WARN] Vulkan SDK not found at {vulkanBase}");
+            return;
         }
+
+        var vulkanPath = Directory.GetDirectories(vulkanBase).OrderByDescending(d => d).FirstOrDefault();
+        if (vulkanPath == null)
+        {
+            await LogAsync("  [WARN] No Vulkan SDK version found");
+            return;
+        }
+
+        ProcessRunner.SetEnvironmentVariable("VULKAN_SDK", vulkanPath, logger);
+        ProcessRunner.SetEnvironmentVariable("VK_SDK_PATH", vulkanPath, logger);
+        ProcessRunner.AppendToEnvironmentVariable("CPATH", Path.Combine(vulkanPath, "Include"), logger);
+        ProcessRunner.AddToPath(Path.Combine(vulkanPath, "Bin"), logger);
+
+        await LogAsync($"  [OK] VULKAN_SDK={vulkanPath}");
     }
 
-    private async Task SetupVcpkg()
+    private async Task SetupLLVM()
     {
-        await LogAsync("Configuring vcpkg...");
+        await LogAsync("Configuring LLVM...");
 
-        var vcpkgRoot = Environment.GetEnvironmentVariable("VCPKG_ROOT", EnvironmentVariableTarget.Machine);
-        if (string.IsNullOrEmpty(vcpkgRoot))
+        var llvmRoot = @"C:\Program Files\LLVM";
+        if (!Directory.Exists(llvmRoot))
         {
-            vcpkgRoot = @"C:\vcpkg";
+            await LogAsync($"  [WARN] LLVM not found at {llvmRoot}");
+            return;
         }
 
-        if (Directory.Exists(vcpkgRoot))
+        ProcessRunner.SetEnvironmentVariable("LLVM_ROOT", llvmRoot, logger);
+        ProcessRunner.SetEnvironmentVariable("LLVM_DIR", Path.Combine(llvmRoot, "lib", "cmake", "llvm"), logger);
+        ProcessRunner.SetEnvironmentVariable("Clang_DIR", Path.Combine(llvmRoot, "lib", "cmake", "clang"), logger);
+        ProcessRunner.AddToPath(Path.Combine(llvmRoot, "bin"), logger);
+
+        await LogAsync($"  [OK] LLVM_ROOT={llvmRoot}");
+    }
+
+    private async Task SetupFFmpeg()
+    {
+        await LogAsync("Configuring FFmpeg...");
+
+        var ffmpegRoot = DependenciesStep.FindFFmpegRoot();
+        if (ffmpegRoot == null)
         {
-            await LogAsync($"  [OK] vcpkg root: {vcpkgRoot}");
-            
-            var installedDir = Path.Combine(vcpkgRoot, "installed", "x64-windows");
-            if (Directory.Exists(installedDir))
-            {
-                await LogAsync($"  [OK] vcpkg packages installed to: {installedDir}");
-                await LogAsync("      MayaFluxConfig.cmake handles dependency resolution automatically");
-            }
-            else
-            {
-                await LogAsync($"  [WARN] vcpkg packages not found at: {installedDir}");
-            }
+            await LogAsync("  [WARN] FFmpeg not found in WinGet packages");
+            return;
         }
-        else
-        {
-            await LogAsync($"  [WARN] vcpkg not found at {vcpkgRoot}");
-            await LogAsync("         Dependencies may not build correctly");
-        }
+
+        ProcessRunner.SetEnvironmentVariable("FFMPEG_ROOT", ffmpegRoot, logger);
+        ProcessRunner.AddToPath(Path.Combine(ffmpegRoot, "bin"), logger);
+        await LogAsync($"  [OK] FFMPEG_ROOT={ffmpegRoot}");
     }
 
     private async Task LogAsync(string message)
@@ -291,11 +186,6 @@ public class EnvironmentSetupStep : IInstallationStep
     private void EnableButton()
     {
         if (nextButton?.Parent != null)
-        {
-            nextButton.Invoke(new Action(() =>
-            {
-                nextButton.Enabled = true;
-            }));
-        }
+            nextButton.Invoke(new Action(() => nextButton.Enabled = true));
     }
 }

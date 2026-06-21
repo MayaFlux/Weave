@@ -18,12 +18,9 @@
     <RootNamespace>Weave</RootNamespace>
   </PropertyGroup>
 
-<ItemGroup>
+  <ItemGroup>
     <EmbeddedResource Include="..\..\templates\CMakeLists.txt">
       <Link>Resources/templates/CMakeLists.txt</Link>
-    </EmbeddedResource>
-    <EmbeddedResource Include="..\..\templates\shaders.cmake">
-      <Link>Resources/templates/shaders.cmake</Link>
     </EmbeddedResource>
     <EmbeddedResource Include="..\..\templates\main.cpp">
       <Link>Resources/templates/main.cpp</Link>
@@ -31,6 +28,30 @@
     <EmbeddedResource Include="..\..\templates\user_project.hpp">
       <Link>Resources/templates/user_project.hpp</Link>
     </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\.gitignore">
+      <Link>Resources/templates/.gitignore</Link>
+    </EmbeddedResource>
+
+    <EmbeddedResource Include="..\..\templates\cmake\mayaflux.cmake">
+      <Link>Resources/templates/cmake/mayaflux.cmake</Link>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\cmake\shaders.cmake">
+      <Link>Resources/templates/cmake/shaders.cmake</Link>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\cmake\build_community.cmake">
+      <Link>Resources/templates/cmake/build_community.cmake</Link>
+    </EmbeddedResource>
+
+    <EmbeddedResource Include="..\..\templates\community\module.cmake">
+      <Link>Resources/templates/community/module.cmake</Link>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\community\community.json">
+      <Link>Resources/templates/community/community.json</Link>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\templates\community\test\CMakeLists.txt">
+      <Link>Resources/templates/community/test/CMakeLists.txt</Link>
+    </EmbeddedResource>
+
     <EmbeddedResource Include="..\..\templates\vscode\settings.json">
       <Link>Resources/templates/vscode/settings.json</Link>
     </EmbeddedResource>
@@ -40,24 +61,24 @@
     <EmbeddedResource Include="..\..\templates\vscode\launch.json">
       <Link>Resources/templates/vscode/launch.json</Link>
     </EmbeddedResource>
-    
-    <EmbeddedResource Include="..\..\windows\scripts\install_package.ps1">
-      <Link>Resources/scripts/install_package.ps1</Link>
+
+    <EmbeddedResource Include="..\..\templates\CMakePresets.json">
+      <Link>Resources/templates/CMakePresets.json</Link>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\..\windows\scripts\packages.psd1">
-      <Link>Resources/scripts/packages.psd1</Link>
+    <EmbeddedResource Include="..\..\templates\community\CMakePresets.json">
+      <Link>Resources/templates/community/CMakePresets.json</Link>
     </EmbeddedResource>
 
     <EmbeddedResource Include="..\..\templates\shaders\**\*">
-    <Link>Resources/templates/shaders/%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <Link>Resources/templates/shaders/%(RecursiveDir)%(Filename)%(Extension)</Link>
     </EmbeddedResource>
   </ItemGroup>
 
-    <ItemGroup>
-    <Content Include="..\..\windows\resources\weave.ico">
-        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\windows\resources\weave.ico">
+      <Link>Resources/weave.ico</Link>
+    </EmbeddedResource>
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Shared\Shared.csproj" />

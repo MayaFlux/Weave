@@ -1,6 +1,5 @@
 #!/bin/bash
 # Weave - MayaFlux Project Creator for Linux
-# Creates new MayaFlux projects from embedded templates
 
 set -euo pipefail
 
@@ -9,9 +8,12 @@ set -euo pipefail
 # ============================================================================
 
 MAYAFLUX_ROOT="${MAYAFLUX_ROOT:-/usr/local}"
+REGISTRY_URL="https://raw.githubusercontent.com/MayaFlux/community-sources-registry/main/registry.json"
 
 if [ -n "${WEAVE_TEMPLATE_DIR:-}" ] && [ -d "$WEAVE_TEMPLATE_DIR" ]; then
     TEMPLATES_DIR="$WEAVE_TEMPLATE_DIR"
+elif [ -d "$HOME/.local/share/weave/templates" ]; then
+    TEMPLATES_DIR="$HOME/.local/share/weave/templates"
 else
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     TEMPLATES_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")/templates"
@@ -23,24 +25,25 @@ fi
 
 usage() {
     cat <<EOF
-Weave - MayaFlux Project Creator
+Weave - MayaFlux Project and Community Tool
 
 Usage:
-  weave new <project-name> [destination-dir]
+  weave new <project-name> [destination-dir] [options]
+  weave update <project-dir> <module-name> [module-name ...]
+  weave community <module-name> [destination-dir]
   weave --help
 
-Examples:
-  weave new AudioViz ~/Projects/
-  weave new MyApp .
+Commands:
+  new        Create a new MayaFlux project
+  update     Acquire and add community modules to an existing project
+  community  Create a new community module template
 
-Options:
+Options (new):
   --with-lila    Enable live coding (links against Lila)
   --no-vscode    Skip VS Code configuration
-  --help         Show this help
 
 Environment Variables:
-  MAYAFLUX_ROOT  Override MayaFlux installation location
-                 (default: /usr/local)
+  MAYAFLUX_ROOT  Override MayaFlux installation location (default: /usr/local)
 EOF
     exit 0
 }
@@ -54,206 +57,152 @@ log() {
     echo "[Weave] $*"
 }
 
-# ============================================================================
-# ARGUMENT PARSING
-# ============================================================================
+require_cmd() {
+    command -v "$1" >/dev/null 2>&1 || error "Required command not found: $1"
+}
 
-[ "$#" -eq 0 ] && usage
+_version_gte() {
+    local IFS=.
+    local a=($1) b=($2)
+    local i
+    for i in 0 1 2; do
+        local av=${a[$i]:-0} bv=${b[$i]:-0}
+        if [ "$av" -gt "$bv" ]; then return 0; fi
+        if [ "$av" -lt "$bv" ]; then return 1; fi
+    done
+    return 0
+}
 
-if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
-    usage
-fi
-
-if [ "$1" != "new" ]; then
-    error "Unknown command: $1. Use 'weave new <name>'"
-fi
-
-shift
-PROJECT_NAME="${1:-}"
-DEST_DIR="${2:-.}"
-WITH_LILA=false
-WITH_VSCODE=true
-
-shift 2 2>/dev/null || true
-
-while [ "$#" -gt 0 ]; do
-    case "$1" in
-    --with-lila)
-        WITH_LILA=true
-        ;;
-    --no-vscode)
-        WITH_VSCODE=false
-        ;;
-    *)
-        error "Unknown option: $1"
-        ;;
-    esac
-    shift
-done
-
-# ============================================================================
-# VALIDATION
-# ============================================================================
-
-[ -z "$PROJECT_NAME" ] && error "Project name required"
-
-DEST_DIR="${DEST_DIR/#\~/$HOME}"
-
-mkdir -p "$DEST_DIR" || error "Cannot create destination directory: $DEST_DIR"
-DEST_DIR="$(cd "$DEST_DIR" && pwd)"
-
-PROJECT_DIR="$DEST_DIR/$PROJECT_NAME"
-
-if [ -d "$PROJECT_DIR" ]; then
-    if [ -f "$PROJECT_DIR/CMakeLists.txt" ] && grep -q "MayaFlux" "$PROJECT_DIR/CMakeLists.txt" 2>/dev/null; then
-        log "Project '$PROJECT_NAME' already exists and is a MayaFlux project."
-        log "Nothing to do."
-        exit 0
+_registry_lookup() {
+    local registry="$1" module="$2"
+    if command -v jq >/dev/null 2>&1; then
+        local entry
+        entry="$(echo "$registry" | jq -r --arg n "$module" '.[] | select(.name==$n) | "\(.repo) \(.min_version)"')"
+        if [ -z "$entry" ]; then
+            echo "[Weave ERROR] Module '$module' not found in registry" >&2
+            return 1
+        fi
+        echo "$entry"
     else
-        error "Directory already exists and is not a MayaFlux project: $PROJECT_DIR"
+        local py
+        py="$(command -v python3)"
+        PYTHONHOME="" PYTHONPATH="" "$py" - "$module" <<<"$registry" <<'PYEOF'
+import json, sys
+name = sys.argv[1]
+reg = json.load(sys.stdin)
+entry = next((e for e in reg if e['name'] == name), None)
+if not entry:
+    sys.stderr.write(f"[Weave ERROR] Module '{name}' not found in registry\n")
+    sys.exit(1)
+print(entry['repo'], entry['min_version'])
+PYEOF
     fi
-fi
+}
 
 # ============================================================================
-# CHECK TEMPLATES
+# CMD: new
 # ============================================================================
 
-if [ ! -d "$TEMPLATES_DIR" ]; then
-    error "Templates not found at $TEMPLATES_DIR"
-fi
+cmd_new() {
+    local PROJECT_NAME="${1:-}"
+    local DEST_DIR="${2:-.}"
+    local WITH_LILA=false
+    local WITH_VSCODE=true
 
-REQUIRED_TEMPLATES=(
-    "CMakeLists.txt"
-    "shaders.cmake"
-    "main.cpp"
-    "user_project.hpp"
-)
+    shift 2 2>/dev/null || true
 
-for template in "${REQUIRED_TEMPLATES[@]}"; do
-    if [ ! -f "$TEMPLATES_DIR/$template" ]; then
-        error "Required template missing: $template at $TEMPLATES_DIR/$template"
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+        --with-lila) WITH_LILA=true ;;
+        --no-vscode) WITH_VSCODE=false ;;
+        *) error "Unknown option: $1" ;;
+        esac
+        shift
+    done
+
+    [ -z "$PROJECT_NAME" ] && error "Project name required"
+
+    DEST_DIR="${DEST_DIR/#\~/$HOME}"
+    mkdir -p "$DEST_DIR" || error "Cannot create destination directory: $DEST_DIR"
+    DEST_DIR="$(cd "$DEST_DIR" && pwd)"
+
+    local PROJECT_DIR="$DEST_DIR/$PROJECT_NAME"
+
+    if [ -d "$PROJECT_DIR" ]; then
+        if [ -f "$PROJECT_DIR/CMakeLists.txt" ] && grep -q "MayaFlux" "$PROJECT_DIR/CMakeLists.txt" 2>/dev/null; then
+            log "Project '$PROJECT_NAME' already exists and is a MayaFlux project."
+            log "Nothing to do."
+            exit 0
+        else
+            error "Directory already exists and is not a MayaFlux project: $PROJECT_DIR"
+        fi
     fi
-done
 
-# ============================================================================
-# CREATE PROJECT STRUCTURE
-# ============================================================================
+    [ ! -d "$TEMPLATES_DIR" ] && error "Templates not found at $TEMPLATES_DIR"
 
-log "Creating project: $PROJECT_NAME"
-mkdir -p "$PROJECT_DIR/src"
+    for template in CMakeLists.txt main.cpp user_project.hpp; do
+        [ ! -f "$TEMPLATES_DIR/$template" ] && error "Required template missing: $template"
+    done
 
-if [ "$WITH_VSCODE" = true ]; then
-    mkdir -p "$PROJECT_DIR/.vscode"
-    log "  ✓ Created .vscode directory"
-fi
+    [ ! -f "$TEMPLATES_DIR/cmake/mayaflux.cmake" ] && error "Required template missing: cmake/mayaflux.cmake"
+    [ ! -f "$TEMPLATES_DIR/cmake/shaders.cmake" ] && error "Required template missing: cmake/shaders.cmake"
+    [ ! -f "$TEMPLATES_DIR/cmake/build_community.cmake" ] && error "Required template missing: cmake/build_community.cmake"
 
-log "  ✓ Created project structure"
+    log "Creating project: $PROJECT_NAME"
+    mkdir -p "$PROJECT_DIR/src"
+    mkdir -p "$PROJECT_DIR/cmake"
+    [ "$WITH_VSCODE" = true ] && mkdir -p "$PROJECT_DIR/.vscode"
 
-# ============================================================================
-# DETERMINE MAYAFLUX CMAKE PATH
-# ============================================================================
+    if [ "$WITH_LILA" = true ]; then
+        LILA_LINK_BLOCK='target_link_libraries(${PROJECT_NAME} PRIVATE MayaFlux::MayaFluxHost)'
+        LILA_DEBUGGER_PATH='$<TARGET_FILE_DIR:MayaFlux::MayaFluxHost>;'
+        LILA_DLL_COPY='if(EXISTS "$ENV{MAYAFLUX_ROOT}/bin/MayaFluxHost.dll")
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$ENV{MAYAFLUX_ROOT}/bin/MayaFluxHost.dll"
+                $<TARGET_FILE_DIR:${PROJECT_NAME}>
+        )
+    endif()'
+    else
+        LILA_LINK_BLOCK=''
+        LILA_DEBUGGER_PATH=''
+        LILA_DLL_COPY=''
+    fi
 
-MAYAFLUX_CMAKE_PATH="$MAYAFLUX_ROOT/lib/cmake/MayaFlux"
+    sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" "$TEMPLATES_DIR/CMakeLists.txt" >"$PROJECT_DIR/CMakeLists.txt"
+    log "  ✓ Generated CMakeLists.txt"
 
-if [ ! -d "$MAYAFLUX_CMAKE_PATH" ]; then
-    log "  ⚠ Warning: CMake config not found at $MAYAFLUX_CMAKE_PATH"
-    log "  ⚠ You may need to set MAYAFLUX_ROOT or install MayaFlux"
-fi
+    {
+        awk -v lila="$LILA_LINK_BLOCK" '{gsub(/@LILA_LINK_BLOCK@/, lila); print}' "$TEMPLATES_DIR/cmake/mayaflux.cmake" |
+            awk -v v="$LILA_DEBUGGER_PATH" '{gsub(/@LILA_DEBUGGER_PATH@/, v); print}' |
+            awk -v v="$LILA_DLL_COPY" '{gsub(/@LILA_DLL_COPY@/, v); print}'
+    } >"$PROJECT_DIR/cmake/mayaflux.cmake"
+    log "  ✓ Generated cmake/mayaflux.cmake"
 
-# ============================================================================
-# GENERATE CMakeLists.txt
-# ============================================================================
+    cp "$TEMPLATES_DIR/cmake/shaders.cmake" "$PROJECT_DIR/cmake/shaders.cmake"
+    log "  ✓ Copied cmake/shaders.cmake"
+    cp "$TEMPLATES_DIR/cmake/build_community.cmake" "$PROJECT_DIR/cmake/build_community.cmake"
+    log "  ✓ Copied cmake/build_community.cmake"
 
-log "Generating CMakeLists.txt"
+    cp "$TEMPLATES_DIR/CMakePresets.json" "$PROJECT_DIR/CMakePresets.json"
+    log "  ✓ Copied CMakePresets.json"
 
-if [ "$WITH_LILA" = true ]; then
-    LILA_LINK_BLOCK='if(TARGET MayaFlux::Lila)
-    target_link_libraries(${PROJECT_NAME} PRIVATE MayaFlux::Lila)
-    message(STATUS "Lila live coding enabled")
-else()
-    message(WARNING "Lila not found - live coding disabled")
-endif()'
+    cp "$TEMPLATES_DIR/main.cpp" "$PROJECT_DIR/src/main.cpp"
+    log "  ✓ Generated main.cpp"
 
-    LILA_DLL_COPY='if(EXISTS "$ENV{MAYAFLUX_ROOT}/bin/Lila.dll")
-            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "$ENV{MAYAFLUX_ROOT}/bin/Lila.dll"
-                    $<TARGET_FILE_DIR:${PROJECT_NAME}>
-            )
-        endif()'
-else
-    LILA_LINK_BLOCK='# Lila live coding not enabled'
-    LILA_DLL_COPY='# Lila DLL copy not needed'
-fi
+    cp "$TEMPLATES_DIR/user_project.hpp" "$PROJECT_DIR/src/user_project.hpp"
+    log "  ✓ Generated user_project.hpp"
 
-{
-    sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" "$TEMPLATES_DIR/CMakeLists.txt" |
-        sed "s|@MAYAFLUX_CMAKE_PATH@|$MAYAFLUX_CMAKE_PATH|g" |
-        awk -v lila="$LILA_LINK_BLOCK" '{gsub(/@LILA_LINK_BLOCK@/, lila); print}' |
-        awk -v lila_dll="$LILA_DLL_COPY" '{gsub(/@LILA_DLL_COPY@/, lila_dll); print}'
-} >"$PROJECT_DIR/CMakeLists.txt"
+    mkdir -p "$PROJECT_DIR/data/shaders"
+    if [ -d "$TEMPLATES_DIR/shaders" ] && [ -n "$(ls -A "$TEMPLATES_DIR/shaders" 2>/dev/null)" ]; then
+        cp "$TEMPLATES_DIR/shaders/"* "$PROJECT_DIR/data/shaders/"
+        log "  ✓ Copied template shaders"
+    fi
 
-log "  ✓ Generated CMakeLists.txt"
+    touch "$PROJECT_DIR/community.cmake"
+    log "  ✓ Created community.cmake"
 
-# ============================================================================
-# COPY shaders.cmake
-# ============================================================================
-
-log "Copying shaders.cmake"
-
-if [ -f "$TEMPLATES_DIR/shaders.cmake" ]; then
-    cp "$TEMPLATES_DIR/shaders.cmake" "$PROJECT_DIR/shaders.cmake"
-    log "  ✓ Copied shaders.cmake"
-else
-    log "  ⚠ shaders.cmake template not found, skipping"
-fi
-
-# ============================================================================
-# COPY MAIN.CPP
-# ============================================================================
-
-log "Generating source files"
-
-if [ ! -f "$TEMPLATES_DIR/main.cpp" ]; then
-    error "main.cpp template not found"
-fi
-
-cp "$TEMPLATES_DIR/main.cpp" "$PROJECT_DIR/src/main.cpp"
-log "  ✓ Generated main.cpp"
-
-# ============================================================================
-# COPY USER_PROJECT.HPP
-# ============================================================================
-
-if [ ! -f "$TEMPLATES_DIR/user_project.hpp" ]; then
-    error "user_project.hpp template not found"
-fi
-
-cp "$TEMPLATES_DIR/user_project.hpp" "$PROJECT_DIR/src/user_project.hpp"
-log "  ✓ Generated user_project.hpp"
-
-# ============================================================================
-# CREATE data/shaders AND COPY TEMPLATE SHADERS
-# ============================================================================
-
-log "Creating data/shaders"
-mkdir -p "$PROJECT_DIR/data/shaders"
-
-if [ -d "$TEMPLATES_DIR/shaders" ] && [ -n "$(ls -A "$TEMPLATES_DIR/shaders" 2>/dev/null)" ]; then
-    cp "$TEMPLATES_DIR/shaders/"* "$PROJECT_DIR/data/shaders/"
-    log "  ✓ Copied template shaders"
-else
-    log "  ✓ Created empty data/shaders (no template shaders)"
-fi
-
-# ============================================================================
-# CREATE VS CODE CONFIGURATION (if enabled)
-# ============================================================================
-
-if [ "$WITH_VSCODE" = true ]; then
-    if [ -d "$TEMPLATES_DIR/vscode" ]; then
-        log "Generating VS Code configuration"
-
+    if [ "$WITH_VSCODE" = true ] && [ -d "$TEMPLATES_DIR/vscode" ]; then
         for vscode_file in settings.json tasks.json launch.json; do
             if [ -f "$TEMPLATES_DIR/vscode/$vscode_file" ]; then
                 sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" \
@@ -261,223 +210,176 @@ if [ "$WITH_VSCODE" = true ]; then
                     >"$PROJECT_DIR/.vscode/$vscode_file"
             fi
         done
-
         log "  ✓ Generated VS Code configuration"
-    else
-        log "  ⚠ VS Code templates not found, skipping"
     fi
-fi
 
-# ============================================================================
-# CREATE .GITIGNORE
-# ============================================================================
+    cp "$TEMPLATES_DIR/.gitignore" "$PROJECT_DIR/.gitignore"
+    log "  ✓ Copied .gitignore"
 
-log "Generating .gitignore"
-
-cat >"$PROJECT_DIR/.gitignore" <<'EOF'
-# Build directories
-/build/
-/cmake-build-*/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Generated
-compile_commands.json
-CMakeCache.txt
-CMakeFiles/
-cmake_install.cmake
-
-# Binaries
-*.o
-*.so
-*.a
-*.lib
-*.exe
-
-# macOS
-.DS_Store
-.AppleDouble/
-.LSOverride/
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-
-# Misc
-.env
-local_settings.py
-EOF
-
-log "  ✓ Generated .gitignore"
-
-# ============================================================================
-# CREATE README
-# ============================================================================
-
-log "Generating README.md"
-
-cat >"$PROJECT_DIR/README.md" <<EOF
+    cat >"$PROJECT_DIR/README.md" <<EOF
 # $PROJECT_NAME
 
 A MayaFlux multimedia DSP project.
 
-## Quick Start
-
-### Build
+## Building
 
 \`\`\`bash
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 cmake --build . --parallel
 \`\`\`
-
-### Run
-
-\`\`\`bash
-./build/$PROJECT_NAME
-\`\`\`
-
-## Project Structure
-
-\`\`\`
-$PROJECT_NAME/
-├── src/
-│   ├── main.cpp           # Entry point
-│   └── user_project.hpp   # Your code goes here
-├── CMakeLists.txt         # Build configuration
-└── README.md
-\`\`\`
-
-## Editing Code
-
-### Using VS Code
-
-\`\`\`bash
-code .
-\`\`\`
-
-Then edit \`src/user_project.hpp\`:
-- **\`settings()\`** - Configure sample rate, buffer size, graphics, etc.
-- **\`compose()\`** - Create your nodes, buffers, and processing chains
-
-### From Command Line
-
-\`\`\`bash
-nano src/user_project.hpp
-\`\`\`
-
-## Environment
-
-Make sure \`MAYAFLUX_ROOT\` is set:
-
-\`\`\`bash
-echo \$MAYAFLUX_ROOT
-# Should output: $HOME/MayaFlux (or your installation location)
-\`\`\`
-
-If not set, add to \`~/.bashrc\` or \`~/.zshrc\`:
-
-\`\`\`bash
-export MAYAFLUX_ROOT=$HOME/MayaFlux
-export PATH=\$MAYAFLUX_ROOT/bin:\$PATH
-export CMAKE_PREFIX_PATH=\$MAYAFLUX_ROOT:\$CMAKE_PREFIX_PATH
-\`\`\`
-
-Then reload:
-
-\`\`\`bash
-source ~/.bashrc   # or ~/.zshrc
-\`\`\`
-
-## Building with Different Configurations
-
-### Release (Optimized)
-
-\`\`\`bash
-cmake .. -DCMAKE_BUILD_TYPE=Release
-\`\`\`
-
-### Debug (With debugging symbols)
-
-\`\`\`bash
-cmake .. -DCMAKE_BUILD_TYPE=Debug
-\`\`\`
-
-### Custom Compiler
-
-\`\`\`bash
-cmake .. -DCMAKE_CXX_COMPILER=clang++
-\`\`\`
-
-## Troubleshooting
-
-### CMake can't find MayaFlux
-
-Set the \`MAYAFLUX_ROOT\` environment variable:
-
-\`\`\`bash
-export MAYAFLUX_ROOT=/path/to/MayaFlux
-cmake .. -DCMAKE_BUILD_TYPE=Release
-\`\`\`
-
-### Build errors with C++20 features
-
-Ensure your compiler supports C++23:
-
-\`\`\`bash
-g++ --version    # Ensure >= 12.0
-clang++ --version  # Ensure >= 15.0
-\`\`\`
-
-## Documentation
-
-- [MayaFlux Documentation](https://github.com/MayaFlux/MayaFlux)
-- [CMake Documentation](https://cmake.org/cmake/help/latest/)
-
-## Next Steps
-
-1. Edit \`src/user_project.hpp\` to start coding
-2. Run \`cmake --build . --parallel\` to rebuild
-3. Run \`./build/$PROJECT_NAME\` to test
-
-Happy coding! 🎉
 EOF
+    log "  ✓ Generated README.md"
 
-log "  ✓ Generated README.md"
+    log ""
+    log "Project created: $PROJECT_DIR"
+    log "Build with:"
+    log "  cd $PROJECT_DIR && mkdir build && cd build"
+    log "  cmake .. -DCMAKE_BUILD_TYPE=Release && cmake --build . --parallel"
+}
 
 # ============================================================================
-# SUMMARY
+# CMD: update
 # ============================================================================
 
-echo ""
-echo "=========================================="
-echo "  ✓ Project '$PROJECT_NAME' created!"
-echo "=========================================="
-echo ""
-echo "Location: $PROJECT_DIR"
-echo ""
-echo "Next steps:"
-echo "  1. cd $PROJECT_DIR"
+cmd_update() {
+    local PROJECT_DIR="${1:-}"
+    shift || true
 
-if [ "$WITH_VSCODE" = true ]; then
-    echo "  2. code .                    # Open in VS Code"
-    echo "  3. Edit src/user_project.hpp"
-    echo "  4. mkdir build && cd build"
-else
-    echo "  2. Edit src/user_project.hpp"
-    echo "  3. mkdir build && cd build"
-fi
+    [ -z "$PROJECT_DIR" ] && error "Project directory required: weave update <project-dir> <module-name> ..."
+    [ "$#" -eq 0 ] && error "At least one module name required: weave update <project-dir> <module-name> ..."
 
-echo "  5. cmake .. && make"
-echo "  6. ./$(basename "$PROJECT_DIR")"
-echo ""
-echo "Documentation: https://github.com/MayaFlux/MayaFlux"
-echo ""
+    PROJECT_DIR="${PROJECT_DIR/#\~/$HOME}"
+    PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
 
-exit 0
+    [ ! -f "$PROJECT_DIR/CMakeLists.txt" ] && error "Not a MayaFlux project: $PROJECT_DIR"
+
+    require_cmd curl
+    require_cmd git
+
+    log "Fetching registry..."
+    local REGISTRY
+    REGISTRY="$(curl -fsSL "$REGISTRY_URL")" || error "Failed to fetch registry from $REGISTRY_URL"
+
+    local COMMUNITY_DIR="$PROJECT_DIR/community"
+    mkdir -p "$COMMUNITY_DIR"
+
+    local COMMUNITY_CMAKE="$PROJECT_DIR/community.cmake"
+    touch "$COMMUNITY_CMAKE"
+
+    for MODULE_NAME in "$@"; do
+        log "Looking up module: $MODULE_NAME"
+
+        local REPO MIN_VERSION
+        read -r REPO MIN_VERSION < <(_registry_lookup "$REGISTRY" "$MODULE_NAME") || exit 1
+
+        local MF_VERSION_FILE="$MAYAFLUX_ROOT/lib/cmake/MayaFlux/MayaFluxConfigVersion.cmake"
+        local MF_VERSION=""
+        if [ -f "$MF_VERSION_FILE" ]; then
+            MF_VERSION="$(grep 'set(PACKAGE_VERSION ' "$MF_VERSION_FILE" | sed 's/.*"\(.*\)".*/\1/')"
+        fi
+
+        if [ -n "$MF_VERSION" ] && [ -n "$MIN_VERSION" ]; then
+            if ! _version_gte "$MF_VERSION" "$MIN_VERSION"; then
+                error "Module $MODULE_NAME requires MayaFlux >= $MIN_VERSION, found $MF_VERSION"
+            fi
+        fi
+
+        local MODULE_DIR="$COMMUNITY_DIR/$MODULE_NAME"
+
+        if [ -d "$MODULE_DIR" ]; then
+            log "  $MODULE_NAME already present, skipping clone"
+        else
+            log "  Cloning $REPO..."
+            git clone --depth=1 "$REPO" "$MODULE_DIR" >/dev/null 2>&1 || error "Failed to clone $REPO"
+            log "  ✓ Cloned into community/$MODULE_NAME"
+        fi
+
+        [ ! -f "$MODULE_DIR/${MODULE_NAME}.cmake" ] && error "Module '$MODULE_NAME' is missing ${MODULE_NAME}.cmake"
+        [ ! -d "$MODULE_DIR/src" ] && error "Module '$MODULE_NAME' is missing src/"
+
+        if ! grep -qxF "$MODULE_NAME" "$COMMUNITY_CMAKE"; then
+            echo "$MODULE_NAME" >>"$COMMUNITY_CMAKE"
+            log "  ✓ Added $MODULE_NAME to community.cmake"
+        else
+            log "  ✓ $MODULE_NAME already in community.cmake"
+        fi
+    done
+
+    log ""
+    log "Done. Rebuild your project to include the new modules."
+}
+
+# ============================================================================
+# CMD: community
+# ============================================================================
+
+cmd_community() {
+    local MODULE_NAME="${1:-}"
+    local DEST_DIR="${2:-.}"
+
+    [ -z "$MODULE_NAME" ] && error "Module name required: weave community <module-name> [destination-dir]"
+
+    echo "$MODULE_NAME" | grep -qE '^[a-z][a-z0-9_]*$' ||
+        error "Module name must be snake_case (lowercase letters, digits, underscores, no leading digit)"
+
+    DEST_DIR="${DEST_DIR/#\~/$HOME}"
+    mkdir -p "$DEST_DIR" || error "Cannot create destination directory: $DEST_DIR"
+    DEST_DIR="$(cd "$DEST_DIR" && pwd)"
+
+    local MODULE_DIR="$DEST_DIR/$MODULE_NAME"
+    [ -d "$MODULE_DIR" ] && error "Directory already exists: $MODULE_DIR"
+
+    [ ! -f "$TEMPLATES_DIR/community/module.cmake" ] && error "Required template missing: community/module.cmake"
+    [ ! -f "$TEMPLATES_DIR/community/community.json" ] && error "Required template missing: community/community.json"
+    [ ! -f "$TEMPLATES_DIR/community/test/CMakeLists.txt" ] && error "Required template missing: community/test/CMakeLists.txt"
+
+    mkdir -p "$MODULE_DIR/src"
+    mkdir -p "$MODULE_DIR/test"
+
+    cp "$TEMPLATES_DIR/.gitignore" "$MODULE_DIR/.gitignore"
+    cp "$TEMPLATES_DIR/community/CMakePresets.json" "$MODULE_DIR/CMakePresets.json"
+
+    sed "s|@MODULE_NAME@|$MODULE_NAME|g" "$TEMPLATES_DIR/community/module.cmake" \
+        >"$MODULE_DIR/${MODULE_NAME}.cmake"
+
+    sed "s|@MODULE_NAME@|$MODULE_NAME|g" "$TEMPLATES_DIR/community/community.json" \
+        >"$MODULE_DIR/community.json"
+
+    sed "s|@MODULE_NAME@|$MODULE_NAME|g" "$TEMPLATES_DIR/community/test/CMakeLists.txt" \
+        >"$MODULE_DIR/test/CMakeLists.txt"
+
+    touch "$MODULE_DIR/test/test_${MODULE_NAME}.cpp"
+    git -C "$MODULE_DIR" init -q -b main
+    git -C "$MODULE_DIR" add -A
+
+    log ""
+    log "[Weave] Community module created: $MODULE_DIR"
+    log ""
+    log "  src/           <- put your sources here"
+    log "  test/CMakeLists.txt"
+    log "  test/test_${MODULE_NAME}.cpp"
+    log "  ${MODULE_NAME}.cmake"
+    log "  community.json"
+    log ""
+    log "Build test:"
+    log "  cmake -G Ninja -B test/build -S test/"
+    log "  cmake --build test/build --parallel"
+}
+
+# ============================================================================
+# ENTRY POINT
+# ============================================================================
+
+[ "$#" -eq 0 ] && usage
+[ "$1" = "--help" ] || [ "$1" = "-h" ] && usage
+
+CMD="$1"
+shift
+
+case "$CMD" in
+new) cmd_new "$@" ;;
+update) cmd_update "$@" ;;
+community) cmd_community "$@" ;;
+*) error "Unknown command: $CMD. Use 'weave --help'" ;;
+esac

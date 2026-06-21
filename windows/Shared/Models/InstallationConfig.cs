@@ -11,4 +11,5 @@ public class InstallationConfig
     public string ScriptsDirectory => Path.Combine(MayaFluxRoot, WeaveConstants.WEAVE_SCRIPTS_SUBDIR);
     public string LibDirectory => Path.Combine(MayaFluxRoot, "lib");
     public string BinDirectory => Path.Combine(MayaFluxRoot, "bin");
+    public bool NeedsReboot { get; set; } = false;
 }

@@ -1,368 +1,153 @@
 # Weave for Linux
 
-Complete guide for installing, using, and troubleshooting Weave on Linux.
+**Platform:** Linux x86_64
 
-## Installation
+---
 
-### Prerequisites
+## Supported Distributions
 
-- Linux x86_64 (kernel 5.0+)
-- Python 3.8+
-- GTK4
-- ~2GB free disk space
-- Internet connection
+Weave detects your distribution automatically and installs MayaFlux via the native package manager. Three distributions are supported:
 
-**Distribution Requirements:**
+| Distribution | Minimum version | Package manager | Channel: Stable | Channel: Development |
+| ------------ | --------------- | --------------- | --------------- | -------------------- |
+| Arch Linux   | rolling         | AUR             | `mayaflux`      | `mayaflux-dev-bin`   |
+| Fedora       | 43              | COPR            | `mayaflux`      | `mayaflux-dev`       |
+| Ubuntu       | 25              | PPA             | `mayaflux`      | `mayaflux-edge`      |
 
-Weave requires modern toolchain versions (GCC 15, LLVM 21, GLFW 3.4+ with Wayland support). Check your distro:
+Only one channel can be installed at a time. If a conflicting package is already installed, Weave will ask you to confirm its removal before proceeding.
 
-- **Arch Linux** - Run `pacman -Syu` (always up-to-date)
-- **Fedora** - Fedora 43 or later
-- **Ubuntu** - Ubuntu 25 or later
-- **openSUSE** - Tumbleweed (rolling release, same as Arch)
+---
 
-Advanced users with custom compiler builds can use Weave on older distributions.
+## Installing MayaFlux
 
-### Install from Tarball
-
-1. **Download** `Weave-X.X.X-linux.tar.gz` from [Releases](https://github.com/MayaFlux/Weave/releases)
-2. **Extract to `.local`:**
+1. Download `Weave-X.X.X-linux.tar.gz` from [Releases](https://github.com/MayaFlux/Weave/releases)
+2. Extract it:
    ```bash
    tar -xzf Weave-X.X.X-linux.tar.gz -C ~/.local/
    ```
-3. **Launch Weave GUI:**
+3. Launch Weave:
    ```bash
    ~/.local/Weave-X.X.X/Weave
    ```
-4. **Weave GUI opens:**
-   - Select "Install MayaFlux" mode
-   - Follow step-by-step installer
-   - May prompt for password (sudo needed for system packages)
-5. **When complete**, you can create projects
+4. Choose **Install MayaFlux**
+5. Select a release channel. Stable is recommended for most users
+6. Enter your sudo password when prompted. It is needed once to install system packages and is not stored
+7. Restart your terminal when complete
 
-### Installed components
+### What gets installed
 
-- **`~/.local/Weave-X.X.X/`** - Weave application, CLI tool, templates
-- **MayaFlux framework** - Via package manager:
-  - Arch: `mayaflux-dev-bin` from AUR
-  - Fedora: `mayaflux-dev` from custom COPR
-- **`~/.local/bin/weave`** - Symlink to CLI tool (added to PATH)
-- **`~/.bashrc` or `~/.zshrc`** - Environment variables (MAYAFLUX_ROOT, CMAKE_PREFIX_PATH, PATH)
+- MayaFlux framework via your distribution's package manager
+- `weave` CLI tool symlinked at `~/.local/bin/weave`
 
-### Post-Installation
+### What each distro does
 
-**Reload environment variables:**
+**Arch Linux** : installs from the AUR using `yay` or `paru` if available, otherwise falls back to cloning and running `makepkg`.
 
-```bash
-# For bash
-source ~/.bashrc
+**Fedora** : enables three COPR repositories (`ranjithshegde/spirv-cross`, `ranjithshegde/asio-standalone`, and `ranjithshegde/mayaflux` or `ranjithshegde/mayaflux-dev`) then installs via `dnf`.
 
-# For zsh
-source ~/.zshrc
-```
-
-Or restart your terminal.
-
-**Verify installation:**
-
-```bash
-echo $MAYAFLUX_ROOT
-# Should output: ~/MayaFlux
-
-weave --version
-# Should show version number
-```
+**Ubuntu** : adds the `ppa:mayaflux/mayaflux` or `ppa:mayaflux/mayaflux-dev` PPA, runs `apt-get update`, then installs.
 
 ---
 
-## Creating Projects
+## Creating a Project
 
-### Using Weave GUI
+Open Weave and choose **Create Project**. Enter a name, pick a destination, optionally enable **Live Coding (Lila)** and **VS Code configuration**, then click **Create Project**.
 
-1. Run: `~/.local/Weave-X.X.X/Weave`
-2. Select **"Create Project"** mode
-3. Enter **Project Name** (e.g., "MyFirstProject")
-4. Click **"Browse..."** to select location
-5. Optional: Enable "Live Coding (Lila)" or "VS Code configuration"
-6. Click **"Create Project"**
-7. Success shows your project location
+The generated project includes a `CMakePresets.json` with `debug` and `release` presets. Any CMake-aware IDE (VS Code, CLion) will pick these up automatically when you open the project folder.
 
-### Using CLI Tool
-
-```bash
-# Basic project
-weave new MyProject ~/Projects/
-
-# With live coding enabled
-weave new MyProject ~/Projects/ --with-lila
-
-# Without VS Code setup
-weave new MyProject ~/Projects/ --no-vscode
-```
-
----
-
-## Building & Running
-
-### Quick Start
+### Building
 
 ```bash
 cd MyProject
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build . --parallel
-./MyProject
-```
 
-### With VS Code
+# with presets
+cmake --preset release
+cmake --build --preset release
+./build/MyProject
 
-1. Open project folder: `code .`
-2. VS Code should auto-detect build configuration
-3. Terminal → Run Task → "Build Project"
-4. Press F5 to debug (with gdb/lldb)
-
-### Manual Build with Make
-
-```bash
-cd MyProject/build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j$(nproc)
-./MyProject
-```
-
-### With Ninja
-
-```bash
-cd MyProject/build
-cmake .. -DCMAKE_BUILD_TYPE=Release -G Ninja
-ninja
-./MyProject
+# without presets
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+./build/MyProject
 ```
 
 ---
 
-## Environment Variables
+## Community Modules
 
-After installation, these are set in your shell config:
+### Adding a module
 
-| Variable            | Value                                            | Purpose            |
-| ------------------- | ------------------------------------------------ | ------------------ |
-| `MAYAFLUX_ROOT`     | `~/MayaFlux` or `/usr/` (if via package manager) | Framework location |
-| `CMAKE_PREFIX_PATH` | Includes `$MAYAFLUX_ROOT`                        | CMake discovery    |
-| `PATH`              | Includes `~/.local/bin`                          | CLI tools          |
+Open Weave and choose **Add Community Module**, select your project directory, and enter the module name. Weave fetches the registry, checks version compatibility, clones the module into `community/<name>/`, and registers it in `community.cmake`. Rebuild your project after adding modules.
 
-**To apply immediately without restarting:**
+### Creating a module
 
-```bash
-source ~/.bashrc   # or ~/.zshrc
-```
+Choose **Create Community Module** in Weave. Enter a name (snake_case), description, minimum MayaFlux version, and whether the module requires Lila. Weave scaffolds the module with `src/`, `test/`, a `CMakePresets.json`, and a git repository ready to push.
+
+See the [Weave README](../README.md) for details on module structure and registry submission.
 
 ---
 
 ## Troubleshooting
 
-### "GTK4 not found" during GUI launch
-
-**Fix:**
-
-```bash
-# Arch Linux
-sudo pacman -S gtk4
-
-# Fedora
-sudo dnf install gtk4
-
-# Ubuntu/Debian
-sudo apt install libgtk-4-dev
-
-# openSUSE
-sudo zypper install gtk4-devel
-```
-
-Then run Weave again.
-
 ### "weave: command not found"
 
-**Cause:** Environment variables not loaded
-
-**Fix:**
+`~/.local/bin` may not be on your PATH. Add it:
 
 ```bash
-source ~/.bashrc    # or ~/.zshrc
-weave new MyProject
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Or restart your terminal completely.
+Add that line to your shell config to make it permanent, then restart your terminal.
 
 ### CMake can't find MayaFlux
 
-**Verify environment is set:**
+Check that `MAYAFLUX_ROOT` is set:
 
 ```bash
 echo $MAYAFLUX_ROOT
-# Should show: ~/MayaFlux or /home/username/MayaFlux
 ```
 
-**If empty, reload:**
+If empty, restart your terminal so the package manager's environment is picked up. If it is still not found, you can point CMake at it directly:
 
 ```bash
-source ~/.bashrc    # or ~/.zshrc
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DMAYAFLUX_ROOT=/path/to/mayaflux
 ```
 
-**If still not found, set manually in CMake:**
+### Switching channels
 
-```bash
-cd build
-cmake .. -DCMAKE_PREFIX_PATH=~/.local/Weave/lib/cmake/MayaFlux -DCMAKE_BUILD_TYPE=Release
-```
+If you switch from Stable to Development (or vice versa), Weave detects the conflicting package and shows a confirmation dialog before removing it. Both channels cannot coexist.
 
-### "No suitable asset found" during download
+### Installation fails on an unsupported distribution
 
-**This shouldn't happen.** Weave automatically detects your distribution and installs MayaFlux via the appropriate package manager (AUR for Arch, COPR for Fedora).
-
-If you see this error:
-
-1. Verify you're on a supported distribution (Arch or Fedora 43+)
-2. Check installation log: `~/.weave_install.log`
-3. Report as issue on GitHub
-
-### Build errors with C++23 features
-
-**Ensure you have a modern compiler:**
-
-```bash
-g++ --version     # Should be 12+
-clang++ --version # Should be 16+
-```
-
-**Update compiler:**
-
-```bash
-# Arch Linux
-sudo pacman -S gcc
-
-# Fedora
-sudo dnf install gcc-c++
-
-# Ubuntu/Debian
-sudo apt install build-essential
-
-# openSUSE
-sudo zypper install gcc-c++
-```
-
-### Permission denied on ~/.local/bin/weave
-
-**Fix permissions:**
-
-```bash
-chmod +x ~/.local/bin/weave
-chmod +x ~/.local/Weave-X.X.X/Weave
-```
-
-### Dependency installation asks for password
-
-**This is normal.** Installing system packages requires sudo. Provide your password when prompted.
-
-### "python3 not found" during GUI launch
-
-**Install Python:**
-
-```bash
-# Arch Linux
-sudo pacman -S python
-
-# Fedora
-sudo dnf install python3
-
-# Ubuntu/Debian
-sudo apt install python3
-
-# openSUSE
-sudo zypper install python3
-```
+Weave detects distros by checking for `pacman`, `dnf`, or `apt-get` in that order. If none are found, installation is not supported. Running Arch, Fedora, or Ubuntu inside a container or WSL should work if the package managers are available.
 
 ---
 
 ## Uninstalling
 
-### Remove Everything
-
 ```bash
-# Remove Weave installation
-rm -rf ~/.local/Weave-*
-
-# Remove CLI symlink
+# Remove Weave
+rm -rf ~/.local/Weave-X.X.X
 rm ~/.local/bin/weave
 
-# Remove environment setup (optional)
-nano ~/.bashrc    # or ~/.zshrc
-# Find and delete lines containing MAYAFLUX_ROOT, CMAKE_PREFIX_PATH additions
-```
+# Remove MayaFlux — Arch
+sudo pacman -R mayaflux         # or mayaflux-dev-bin
 
-### Remove MayaFlux Package
+# Remove MayaFlux — Fedora
+sudo dnf remove mayaflux        # or mayaflux-dev
 
-```bash
-# Arch Linux
-yay -R mayaflux-dev-bin
+# Remove MayaFlux — Ubuntu
+sudo apt-get remove mayaflux    # or mayaflux-edge
 
-# Fedora
-sudo dnf remove mayaflux-dev
-```
-
----
-
-## FAQ
-
-**Q: Can I use Weave on Ubuntu 24 / Fedora 42 / older Arch?**
-
-A: Weave requires modern toolchains:
-
-- **GCC 15** (C++20/23 features)
-- **LLVM 21** (live coding JIT)
-- **GLFW 3.4+** with Wayland support
-
-Check your distro versions. If you want to use Weave on older systems, you'll need to install newer compilers yourself (not officially supported).
-
-**Q: Can I use Weave CLI and GUI together?**
-
-A: Yes. Use whichever is more convenient. Both create the same project structure.
-
-**Q: Can I build with different compilers?**
-
-A: Yes. Set compiler before building:
-
-```bash
-export CC=gcc-15 CXX=g++-15
-cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build . --parallel
-```
-
-Or with Clang:
-
-```bash
-export CC=clang CXX=clang++
-# ... same cmake commands
-```
-
-**Q: How do I debug my project?**
-
-A: With VS Code and gdb/lldb installed:
-
-```bash
-# Install debugger (if not already installed)
-# Arch: sudo pacman -S gdb
-# Fedora: sudo dnf install gdb
-
-# Open project in VS Code and press F5
-code .
-# Then F5 to debug
+# Remove environment config (optional)
+# Edit ~/.bashrc or ~/.zshrc and delete the MAYAFLUX_ROOT lines
 ```
 
 ---
 
 ## Links
 
-- **[MayaFlux Framework](https://github.com/MayaFlux/MayaFlux)** - Learn the API
-- **[Back to README](../README.md)** - Overview and quick start
+- [Weave README](../README.md)
+- [MayaFlux](https://github.com/MayaFlux/MayaFlux)
+- [LilaCode (VS Code)](https://github.com/MayaFlux/LilaCode)
+- [lila.nvim (Neovim)](https://github.com/MayaFlux/lila.nvim)
