@@ -1,0 +1,292 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Weave community module manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "min_version"],
+
+  "properties": {
+    "$schema": { "$ref": "#/$defs/description" },
+    "schema_version": { "type": "integer", "const": 1 },
+    "name": { "$ref": "#/$defs/identifier" },
+    "min_version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?![\\s\\S])"
+    },
+    "needs_lila": { "type": "boolean", "default": false },
+    "licence": { "$ref": "#/$defs/text" },
+    "description": { "$ref": "#/$defs/text" },
+
+    "packages": { "$ref": "#/$defs/packages" },
+    "manual_installs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/manual_install" }
+    },
+    "assets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/asset" }
+    }
+  },
+
+  "dependentRequired": {
+    "packages": ["schema_version"],
+    "manual_installs": ["schema_version"],
+    "assets": ["schema_version"]
+  },
+
+  "$defs": {
+    "text": {
+      "type": "string",
+      "not": { "pattern": "[\\u0000-\\u001f\\u007f]" }
+    },
+    "description": {
+      "allOf": [
+        { "$ref": "#/$defs/text" },
+        { "minLength": 1 }
+      ]
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(?![\\s\\S])"
+    },
+    "https_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://[^\\s/@?#]+(?:[/?][^\\s#]*)?(?![\\s\\S])"
+    },
+    "relative_path": {
+      "type": "string",
+      "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/\\\\:<>\"|?*\\u0000-\\u001f\\u007f]+(?:/[^/\\\\:<>\"|?*\\u0000-\\u001f\\u007f]+)*(?![\\s\\S])"
+    },
+
+    "positive_size": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "platforms": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["linux", "macos", "windows"] }
+    },
+
+    "package_name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9+_.-]*(?![\\s\\S])"
+    },
+    "repository_name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*(?![\\s\\S])"
+    },
+    "package_list": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/package_name" }
+    },
+    "repository_list": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/repository_name" }
+    },
+
+    "formula": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9+_.@-]*(?:/[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9+_.@-]*)?(?![\\s\\S])"
+    },
+    "winget_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*(?![\\s\\S])"
+    },
+    "source_name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*(?![\\s\\S])"
+    },
+
+    "winget_package": {
+      "oneOf": [
+        { "$ref": "#/$defs/winget_id" },
+
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "source"],
+          "properties": {
+            "id": { "$ref": "#/$defs/winget_id" },
+            "source": { "$ref": "#/$defs/source_name" }
+          }
+        }
+      ]
+    },
+    "winget_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "url", "type"],
+      "properties": {
+        "name": { "$ref": "#/$defs/source_name" },
+        "url": { "$ref": "#/$defs/https_url" },
+        "type": { "enum": ["Microsoft.PreIndexed.Package", "Microsoft.Rest"] }
+      }
+    },
+
+    "vcpkg_port": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*(?![\\s\\S])"
+    },
+    "packages": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "linux": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "arch": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "official": { "$ref": "#/$defs/package_list" },
+                "aur": { "$ref": "#/$defs/package_list" }
+              }
+            },
+            "fedora": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "copr": { "$ref": "#/$defs/repository_list" },
+                "packages": { "$ref": "#/$defs/package_list" }
+              }
+            },
+            "ubuntu": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "ppa": { "$ref": "#/$defs/repository_list" },
+                "packages": { "$ref": "#/$defs/package_list" }
+              }
+            }
+          }
+        },
+        "macos": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "brew": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "taps": { "$ref": "#/$defs/repository_list" },
+                "formulae": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": { "$ref": "#/$defs/formula" }
+                }
+              }
+            }
+          }
+        },
+        "windows": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "winget_sources": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/winget_source" }
+            },
+            "winget": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/winget_package" }
+            },
+            "vcpkg": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/vcpkg_port" }
+            }
+          }
+        }
+      }
+    },
+
+    "environment_value": {
+      "allOf": [
+        { "$ref": "#/$defs/text" },
+        {
+          "minLength": 1,
+          "pattern": "^(?:[^{}]|\\{selected_install_directory\\})*(?![\\s\\S])"
+        }
+      ]
+    },
+    "environment_change": {
+      "oneOf": [
+        { "$ref": "#/$defs/environment_value" },
+
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "operation", "scope"],
+          "properties": {
+            "value": { "$ref": "#/$defs/environment_value" },
+            "operation": { "enum": ["set", "append_path"] },
+            "scope": { "enum": ["project", "user"] }
+          }
+        }
+      ]
+    },
+
+    "manual_install": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "platforms", "url", "description", "verify"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "platforms": { "$ref": "#/$defs/platforms" },
+        "url": { "$ref": "#/$defs/https_url" },
+        "description": { "$ref": "#/$defs/description" },
+        "verify": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path"],
+          "properties": {
+            "path": { "$ref": "#/$defs/relative_path" }
+          }
+        },
+        "environment": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?![\\s\\S])"
+          },
+          "additionalProperties": { "$ref": "#/$defs/environment_change" }
+        }
+      }
+    },
+
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "url", "sha256", "size_bytes", "license_url", "destination",
+        "description", "archive_format", "max_extracted_size_bytes", "max_files"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "platforms": { "$ref": "#/$defs/platforms" },
+        "url": { "$ref": "#/$defs/https_url" },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}(?![\\s\\S])"
+        },
+        "size_bytes": { "$ref": "#/$defs/positive_size" },
+        "license_url": { "$ref": "#/$defs/https_url" },
+        "destination": { "$ref": "#/$defs/relative_path" },
+        "destination_root": { "enum": ["project", "module"], "default": "project" },
+        "description": { "$ref": "#/$defs/description" },
+        "optional": { "type": "boolean", "default": false },
+        "archive_format": { "const": "zip" },
+        "max_extracted_size_bytes": { "$ref": "#/$defs/positive_size" },
+        "max_files": { "$ref": "#/$defs/positive_size" }
+      }
+    }
+  }
+}

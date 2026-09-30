@@ -15,6 +15,7 @@ TEMP_PROJECT="$BUILD_DIR/Weave"
 mkdir -p "$TEMP_PROJECT"
 
 cp "$MACOS_DIR/WeaveGUI.swift" "$TEMP_PROJECT/"
+cp "$MACOS_DIR/CommunityManifest.swift" "$TEMP_PROJECT/"
 
 cat >"$TEMP_PROJECT/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -65,7 +66,7 @@ swiftc -o Weave-arm64 \
     -sdk "$SDK_PATH" \
     -framework SwiftUI \
     -framework AppKit \
-    WeaveGUI.swift
+    WeaveGUI.swift CommunityManifest.swift
 
 echo "Building for x86_64 (Intel)..."
 swiftc -o Weave-x86_64 \
@@ -74,7 +75,7 @@ swiftc -o Weave-x86_64 \
     -sdk "$SDK_PATH" \
     -framework SwiftUI \
     -framework AppKit \
-    WeaveGUI.swift
+    WeaveGUI.swift CommunityManifest.swift
 
 echo "Creating universal binary..."
 lipo -create -output Weave Weave-arm64 Weave-x86_64

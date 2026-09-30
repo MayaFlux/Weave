@@ -110,6 +110,8 @@ my_module/
 
 `community.json` carries registry metadata: name, description, minimum MayaFlux version, and whether Lila is required.
 
+The [community manifest contract](docs/COMMUNITY_MANIFEST.md) defines this metadata and typed declarations for community-module packages, manual installations, environment configuration, and verified assets.
+
 The `test/` directory contains a standalone CMake project for building and testing your module independently. `CMakePresets.json` at the module root points both presets at `test/build`, so any IDE opened on the module folder just works:
 
 ```bash

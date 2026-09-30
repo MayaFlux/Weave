@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Weave.Theme;
 using Weave.UI.Layout;
+using Weave.Shared;
 
 namespace Weave.UI.Project;
 
@@ -216,6 +217,24 @@ public partial class CommunityCreatorView : UserControl
 
     private void CreateModule(string moduleName, string destPath, string description, string minVersion, bool needsLila)
     {
+        var communityJsonSrc = Path.Combine(templatesDir, "community", "community.json");
+
+        if (!File.Exists(communityJsonSrc))
+            throw new FileNotFoundException("Required template missing: community/community.json");
+
+        var rawJson = File.ReadAllText(communityJsonSrc).Replace("@MODULE_NAME@", moduleName);
+        CommunityManifest.Parse(rawJson, moduleName);
+        var json = JObject.Parse(rawJson);
+
+        if (!string.IsNullOrEmpty(description))
+            json["description"] = description;
+
+        if (!string.IsNullOrEmpty(minVersion))
+            json["min_version"] = minVersion;
+
+        json["needs_lila"] = needsLila;
+        var manifest = CommunityManifest.Parse(json.ToString(Formatting.None), moduleName);
+
         var moduleDir = Path.Combine(destPath, moduleName);
         var srcDir = Path.Combine(moduleDir, "src");
         var testDir = Path.Combine(moduleDir, "test");
@@ -247,22 +266,18 @@ public partial class CommunityCreatorView : UserControl
         if (!File.Exists(moduleCmakeSrc))
             throw new FileNotFoundException("Required template missing: community/module.cmake");
         var moduleCmake = File.ReadAllText(moduleCmakeSrc)
-            .Replace("@MODULE_NAME@", moduleName)
-            .Replace("set(MF_NEEDS_LILA OFF)", $"set(MF_NEEDS_LILA {(needsLila ? "ON" : "OFF")})");
+            .Replace("@MODULE_NAME@", moduleName);
+
+        moduleCmake = Regex.Replace(moduleCmake, "set\\(MF_NEEDS_LILA (?:ON|OFF)\\)",
+            $"set(MF_NEEDS_LILA {(needsLila ? "ON" : "OFF")})");
+
+        moduleCmake = Regex.Replace(moduleCmake, "set\\(MF_MIN_VERSION \"[^\"\\n]+\"\\)",
+            $"set(MF_MIN_VERSION \"{manifest.GetProperty("min_version").GetString()}\")");
+
         File.WriteAllText(Path.Combine(moduleDir, $"{moduleName}.cmake"), moduleCmake);
         Log($"  Generated {moduleName}.cmake");
 
-        var communityJsonSrc = Path.Combine(templatesDir, "community", "community.json");
-        if (!File.Exists(communityJsonSrc))
-            throw new FileNotFoundException("Required template missing: community/community.json");
-        var rawJson = File.ReadAllText(communityJsonSrc).Replace("@MODULE_NAME@", moduleName);
-        var json = JObject.Parse(rawJson);
-        if (!string.IsNullOrEmpty(description))
-            json["description"] = description;
-        if (!string.IsNullOrEmpty(minVersion))
-            json["min_version"] = minVersion;
-        json["needs_lila"] = needsLila;
-        File.WriteAllText(Path.Combine(moduleDir, "community.json"), json.ToString(Formatting.Indented).Replace("\r\n", "\n") + "\n"); ;
+        File.WriteAllText(Path.Combine(moduleDir, "community.json"), json.ToString(Formatting.Indented).Replace("\r\n", "\n") + "\n");
         Log("  Generated community.json");
 
         var testCmakeSrc = Path.Combine(templatesDir, "community", "test", "CMakeLists.txt");

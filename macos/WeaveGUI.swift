@@ -1087,6 +1087,23 @@ struct CreateCommunityView: View {
 
     func createModule() {
         guard !moduleName.isEmpty, nameIsValid else { return }
+        do {
+            let metadata: [String: Any] = [
+                "name": moduleName,
+                "min_version": minVersion.isEmpty ? "0.5.0" : minVersion,
+                "description": description,
+                "needs_lila": needsLila,
+            ]
+
+            let data = try JSONSerialization.data(withJSONObject: metadata)
+            _ = try CommunityManifest.parse(
+                String(decoding: data, as: UTF8.self), expectedName: moduleName)
+        } catch {
+            alertMessage = error.localizedDescription
+            showAlert = true
+            return
+        }
+
         isCreating = true
 
         guard FileManager.default.fileExists(atPath: weavePath) else {
@@ -1106,26 +1123,66 @@ struct CreateCommunityView: View {
         task.standardError = pipe
 
         do {
+            let adjacentTemplates = URL(fileURLWithPath: weavePath)
+                .deletingLastPathComponent().appendingPathComponent("templates")
+            let sharedTemplates = URL(fileURLWithPath: NSHomeDirectory())
+                .appendingPathComponent(".local/share/weave/templates")
+            var isDirectory: ObjCBool = false
+            let templateDirectory: URL
+
+            if FileManager.default.fileExists(
+                atPath: adjacentTemplates.path, isDirectory: &isDirectory),
+                isDirectory.boolValue
+            {
+                templateDirectory = adjacentTemplates
+            } else {
+                templateDirectory = sharedTemplates
+            }
+
+            let templateURL = templateDirectory.appendingPathComponent("community/community.json")
+            let templateSource = try String(contentsOf: templateURL, encoding: .utf8)
+                .replacingOccurrences(of: "@MODULE_NAME@", with: moduleName)
+            _ = try CommunityManifest.parse(templateSource, expectedName: moduleName)
+
             try task.run()
             task.waitUntilExit()
 
             if task.terminationStatus == 0 {
-                // Patch community.json with GUI-supplied values
                 let moduleDir = URL(fileURLWithPath: destination).appendingPathComponent(moduleName)
                 let cjPath = moduleDir.appendingPathComponent("community.json")
-                if var data = try? Data(contentsOf: cjPath),
-                    var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-                {
-                    if !description.isEmpty { json["description"] = description }
-                    if !minVersion.isEmpty { json["min_version"] = minVersion }
-                    json["needs_lila"] = needsLila
-                    if let patched = try? JSONSerialization.data(
-                        withJSONObject: json, options: .prettyPrinted)
-                    {
-                        data = patched
-                        try? data.write(to: cjPath)
-                    }
+                let source = try String(contentsOf: cjPath, encoding: .utf8)
+                var json = try CommunityManifest.parse(source, expectedName: moduleName)
+
+                if !description.isEmpty { json["description"] = description }
+
+                if !minVersion.isEmpty { json["min_version"] = minVersion }
+
+                json["needs_lila"] = needsLila
+                let candidate = try JSONSerialization.data(withJSONObject: json)
+                let validated = try CommunityManifest.parse(
+                    String(decoding: candidate, as: UTF8.self), expectedName: moduleName)
+
+                guard let minimumVersion = validated["min_version"] as? String else {
+                    throw ManifestError(path: "$.min_version", reason: "Expected string")
                 }
+
+                let cmakePath = moduleDir.appendingPathComponent("\(moduleName).cmake")
+                var cmake = try String(contentsOf: cmakePath, encoding: .utf8)
+
+                cmake = cmake.replacingOccurrences(
+                    of: "set\\(MF_MIN_VERSION \"[^\"\\n]+\"\\)",
+                    with: "set(MF_MIN_VERSION \"\(minimumVersion)\")",
+                    options: .regularExpression)
+
+                cmake = cmake.replacingOccurrences(
+                    of: "set\\(MF_NEEDS_LILA (?:ON|OFF)\\)",
+                    with: "set(MF_NEEDS_LILA \(needsLila ? "ON" : "OFF"))",
+                    options: .regularExpression)
+
+                try cmake.write(to: cmakePath, atomically: true, encoding: .utf8)
+                let patched = try JSONSerialization.data(
+                    withJSONObject: validated, options: .prettyPrinted)
+                try patched.write(to: cjPath, options: .atomic)
                 alertMessage =
                     "Module '\(moduleName)' created successfully!\n\nLocation: \(moduleDir.path)"
             } else {

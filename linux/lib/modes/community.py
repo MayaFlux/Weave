@@ -8,7 +8,9 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import Gtk, Gio, GLib
 import subprocess
 import re
+import json
 from pathlib import Path
+from lib.community_manifest import ManifestError, parse_manifest
 
 
 class CommunityModuleMode(Gtk.ApplicationWindow):
@@ -195,6 +197,22 @@ class CommunityModuleMode(Gtk.ApplicationWindow):
             self._show_error(f"Destination directory does not exist:\n{dest}")
             return
 
+        try:
+            parse_manifest(
+                json.dumps(
+                    {
+                        "name": name,
+                        "min_version": min_ver or "0.5.0",
+                        "description": desc,
+                        "needs_lila": needs_lila,
+                    }
+                ),
+                expected_name=name,
+            )
+        except ManifestError as error:
+            self._show_error(str(error))
+            return
+
         self.create_btn.set_sensitive(False)
         self.create_btn.set_label("Creating...")
 
@@ -206,6 +224,12 @@ class CommunityModuleMode(Gtk.ApplicationWindow):
 
             env = os.environ.copy()
             env["WEAVE_TEMPLATE_DIR"] = str(self.template_dir)
+
+            template = Path(self.template_dir) / "community" / "community.json"
+            parse_manifest(
+                template.read_text(encoding="utf-8").replace("@MODULE_NAME@", name),
+                expected_name=name,
+            )
 
             script_path = Path(self.script_dir) / "create_project.sh"
             cmd = [str(script_path), "community", name, dest]
@@ -220,19 +244,32 @@ class CommunityModuleMode(Gtk.ApplicationWindow):
                 self.create_btn.set_label("Create Module")
                 return
 
-            # Patch community.json with GUI-supplied values
-            import json
-
             module_dir = Path(dest) / name
             cj_path = module_dir / "community.json"
-            with open(cj_path) as f:
-                data = json.load(f)
+            data = parse_manifest(
+                cj_path.read_text(encoding="utf-8"), expected_name=name
+            )
             if desc:
                 data["description"] = desc
             if min_ver:
                 data["min_version"] = min_ver
+
             data["needs_lila"] = needs_lila
-            with open(cj_path, "w") as f:
+            data = parse_manifest(json.dumps(data), expected_name=name)
+            cmake_path = module_dir / f"{name}.cmake"
+            cmake = cmake_path.read_text(encoding="utf-8")
+            cmake = re.sub(
+                r'set\(MF_MIN_VERSION "[^"\n]+"\)',
+                f'set(MF_MIN_VERSION "{data["min_version"]}")',
+                cmake,
+            )
+            cmake = re.sub(
+                r"set\(MF_NEEDS_LILA (?:ON|OFF)\)",
+                f"set(MF_NEEDS_LILA {'ON' if needs_lila else 'OFF'})",
+                cmake,
+            )
+            cmake_path.write_text(cmake, encoding="utf-8")
+            with open(cj_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
                 f.write("\n")
 
