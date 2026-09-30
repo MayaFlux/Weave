@@ -70,7 +70,7 @@ public partial class CommunityCreatorView : UserControl
         descriptionInput = descInput;
         descriptionInput.PlaceholderText = "A short description of what this module does";
 
-        var verInput = layoutManager.AddLabeledInput("Minimum MayaFlux Version:", "0.4.0");
+        var verInput = layoutManager.AddLabeledInput("Minimum MayaFlux Version:", "0.5.0");
         minVersionInput = verInput;
 
         needsLilaCheckbox = layoutManager.AddCheckbox("Requires Lila (live coding)");

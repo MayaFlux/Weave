@@ -940,7 +940,7 @@ struct CreateCommunityView: View {
     @State private var moduleName: String = ""
     @State private var moduleNameError: String = ""
     @State private var description: String = ""
-    @State private var minVersion: String = "0.4.0"
+    @State private var minVersion: String = "0.5.0"
     @State private var needsLila: Bool = false
     @State private var destination: String = NSHomeDirectory() + "/Projects"
     @State private var isCreating: Bool = false
@@ -1005,7 +1005,7 @@ struct CreateCommunityView: View {
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Minimum MayaFlux Version").font(.headline)
-                        TextField("0.4.0", text: $minVersion)
+                        TextField("0.5.0", text: $minVersion)
                             .textFieldStyle(.roundedBorder)
                     }
 

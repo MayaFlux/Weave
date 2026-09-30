@@ -73,7 +73,7 @@ class CommunityModuleMode(Gtk.ApplicationWindow):
         content.append(ver_label)
 
         self.ver_entry = Gtk.Entry()
-        self.ver_entry.set_text("0.4.0")
+        self.ver_entry.set_text("0.5.0")
         content.append(self.ver_entry)
 
         # Needs Lila
