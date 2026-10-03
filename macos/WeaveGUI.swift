@@ -131,6 +131,7 @@ class InstallerState: ObservableObject {
     @Published var formula: String = "mayaflux"
     @Published var password: String = ""
     @Published var logLines: [String] = []
+    @Published var createdZshenvPath: String? = nil
 
     var brewCmd: String? {
         for p in ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"] {
@@ -209,6 +210,7 @@ class InstallerState: ObservableObject {
     func startInstall() async {
         step = .running
         logLines = []
+        createdZshenvPath = nil
 
         // --- Homebrew ---
         let brew: String
@@ -258,6 +260,22 @@ class InstallerState: ObservableObject {
             return
         }
         log("✅ Tap added")
+
+        let trustAvailable = await run("\(brew) help trust >/dev/null 2>&1") == 0
+        if trustAvailable {
+            log("➤ Trusting the mayaflux/mayaflux tap...")
+            let trustCode = await run("\(brew) trust --tap mayaflux/mayaflux")
+            guard trustCode == 0 else {
+                step = .failed(
+                    "Failed to trust the mayaflux/mayaflux tap.\n\n"
+                        + "Review the log, then run: \(brew) trust --tap mayaflux/mayaflux"
+                )
+                return
+            }
+            log("✅ Tap trusted")
+        } else {
+            log("  This Homebrew version does not provide tap trust.")
+        }
 
         // --- Install ---
         log("➤ Installing \(formula)...")
@@ -357,14 +375,17 @@ class InstallerState: ObservableObject {
             return
         }
 
-        // If file does not exist, refuse to create it
-        guard fileExists else {
-            step = .failed(
-                "No .zshenv found at \(zshenvPath)\n\n"
-                    + "MayaFlux cannot configure your shell environment without an existing .zshenv.\n\n"
-                    + "Create one first:\n  touch \(zshenvPath)"
-            )
-            return
+        if !fileExists {
+            guard
+                FileManager.default.createFile(
+                    atPath: zshenvPath, contents: Data(), attributes: nil
+                )
+            else {
+                step = .failed("Failed to create \(zshenvPath) for shell configuration.")
+                return
+            }
+            createdZshenvPath = zshenvPath
+            log("  Created \(zshenvPath)")
         }
 
         guard let handle = FileHandle(forWritingAtPath: zshenvPath) else {
@@ -561,6 +582,14 @@ struct InstallView: View {
             }
             .padding(.horizontal, 40)
 
+            Text(
+                "Weave will add the mayaflux/mayaflux Homebrew tap and trust it when supported. Trust allows Homebrew to load its current and future formulae, casks, and commands."
+            )
+            .font(.caption)
+            .foregroundColor(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 40)
+
             Spacer()
 
             Button("Continue") { advanceFromChannelSelect() }
@@ -677,6 +706,15 @@ struct InstallView: View {
                 .multilineTextAlignment(.center)
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 40)
+            if let createdPath = state.createdZshenvPath {
+                Text(
+                    "Weave created \(createdPath) and added the MayaFlux setup. If your .zshenv is elsewhere, copy the MayaFlux block from this file into yours, or set ZDOTDIR to your config directory and rerun Weave."
+                )
+                .font(.caption)
+                .multilineTextAlignment(.center)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 30)
+            }
             VStack(alignment: .leading, spacing: 6) {
                 Text("source ${ZDOTDIR:-$HOME}/.zshenv")
                     .font(.system(.body, design: .monospaced))
