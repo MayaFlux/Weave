@@ -6,9 +6,11 @@ import gi
 gi.require_version("Gtk", "4.0")
 
 from gi.repository import Gtk, Gio, GLib
-import subprocess
-import re
+import os
+import threading
 from pathlib import Path
+
+from ..community_update import UpdateError, parse_names, update
 
 
 class UpdateProjectMode(Gtk.ApplicationWindow):
@@ -57,12 +59,12 @@ class UpdateProjectMode(Gtk.ApplicationWindow):
         content.append(proj_row)
 
         # Module name
-        name_label = Gtk.Label(label="Module Name:")
+        name_label = Gtk.Label(label="Module Names:")
         name_label.set_halign(Gtk.Align.START)
         content.append(name_label)
 
         self.name_entry = Gtk.Entry()
-        self.name_entry.set_placeholder_text("my_module")
+        self.name_entry.set_placeholder_text("module_one, module_two")
         self.name_entry.connect("changed", self._on_name_changed)
         content.append(self.name_entry)
 
@@ -135,13 +137,15 @@ class UpdateProjectMode(Gtk.ApplicationWindow):
         dialog.present()
 
     def _on_name_changed(self, entry):
-        name = entry.get_text()
-        if name and not re.match(r"^[a-z][a-z0-9_]*$", name):
-            self.name_error.set_text(
-                "Must be snake_case: lowercase letters, digits, underscores, no leading digit"
-            )
-        else:
+        if not entry.get_text():
             self.name_error.set_text("")
+            return
+
+        try:
+            parse_names([entry.get_text()])
+            self.name_error.set_text("")
+        except UpdateError as error:
+            self.name_error.set_text(str(error))
 
     def _append_log(self, text):
         end = self.log_buffer.get_end_iter()
@@ -150,7 +154,7 @@ class UpdateProjectMode(Gtk.ApplicationWindow):
 
     def _on_add(self, btn):
         proj = self.proj_entry.get_text().strip()
-        name = self.name_entry.get_text().strip()
+        raw_names = self.name_entry.get_text()
 
         if not proj or not Path(proj).is_dir():
             self._show_error("Project directory does not exist.")
@@ -158,51 +162,36 @@ class UpdateProjectMode(Gtk.ApplicationWindow):
         if not Path(proj, "CMakeLists.txt").exists():
             self._show_error("Not a MayaFlux project (no CMakeLists.txt found).")
             return
-        if not name:
-            self._show_error("Module name is required.")
-            return
-        if not re.match(r"^[a-z][a-z0-9_]*$", name):
-            self._show_error("Module name must be snake_case.")
+        try:
+            parse_names([raw_names])
+        except UpdateError as error:
+            self._show_error(str(error))
             return
 
         self.add_btn.set_sensitive(False)
         self.add_btn.set_label("Adding…")
         self.log_buffer.set_text("")
 
-        script = Path(self.script_dir) / "create_project.sh"
-
         def run():
             try:
-                result = subprocess.run(
-                    ["bash", str(script), "update", proj, name],
-                    capture_output=True,
-                    text=True,
-                    timeout=120,
+                update(
+                    proj,
+                    [raw_names],
+                    os.environ.get("MAYAFLUX_ROOT"),
+                    lambda line: GLib.idle_add(self._append_log, line),
                 )
-                GLib.idle_add(self._on_done, result)
-            except subprocess.TimeoutExpired:
-                GLib.idle_add(self._on_error, "Timed out waiting for git clone.")
+                GLib.idle_add(self._on_done)
             except Exception as e:
                 GLib.idle_add(self._on_error, str(e))
 
-        import threading
-
         threading.Thread(target=run, daemon=True).start()
 
-    def _on_done(self, result):
-        output = (result.stdout or "") + (result.stderr or "")
-        for line in output.splitlines():
-            self._append_log(line)
-
-        if result.returncode == 0:
-            dialog = Gtk.AlertDialog(
-                message="Module Added",
-                detail=f"Rebuild your project to include it.",
-            )
-            dialog.choose(self, None, self._on_dismissed, None)
-        else:
-            self.add_btn.set_sensitive(True)
-            self.add_btn.set_label("Add Module")
+    def _on_done(self):
+        dialog = Gtk.AlertDialog(
+            message="Modules Added",
+            detail="Rebuild your project to include them.",
+        )
+        dialog.choose(self, None, self._on_dismissed, None)
 
         return False
 

@@ -1253,16 +1253,8 @@ struct AddCommunityView: View {
     @State private var showAlert: Bool = false
     @State private var alertMessage: String = ""
 
-    private var weavePath: String {
-        let localBin = "\(NSHomeDirectory())/.local/bin/weave"
-        if FileManager.default.fileExists(atPath: localBin) { return localBin }
-        return "\(Bundle.main.resourcePath ?? "")/weave"
-    }
-
     private var nameIsValid: Bool {
-        let r = try! NSRegularExpression(pattern: "^[a-z][a-z0-9_]*$")
-        return r.firstMatch(
-            in: moduleName, range: NSRange(moduleName.startIndex..., in: moduleName)) != nil
+        (try? CommunityUpdate.names([moduleName])) != nil
     }
 
     var body: some View {
@@ -1308,13 +1300,13 @@ struct AddCommunityView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Module Name").font(.headline)
-                        TextField("my_module", text: $moduleName)
+                        Text("Module Names").font(.headline)
+                        TextField("module_one, module_two", text: $moduleName)
                             .textFieldStyle(.roundedBorder)
                             .onChange(of: moduleName) { _ in
                                 moduleNameError =
                                     (!moduleName.isEmpty && !nameIsValid)
-                                    ? "Must be snake_case: lowercase letters, digits, underscores"
+                                    ? "Use comma-separated snake_case module names"
                                     : ""
                             }
                         if !moduleNameError.isEmpty {
@@ -1367,32 +1359,26 @@ struct AddCommunityView: View {
         isAdding = true
         output = ""
 
-        DispatchQueue.global(qos: .userInitiated).async {
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            task.arguments = [weavePath, "update", projectPath, moduleName]
-
-            let pipe = Pipe()
-            task.standardOutput = pipe
-            task.standardError = pipe
-
+        Task.detached(priority: .userInitiated) {
             do {
-                try task.launch()
-                task.waitUntilExit()
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                let text = String(data: data, encoding: .utf8) ?? ""
-                DispatchQueue.main.async {
-                    output = text
-                    isAdding = false
-                    if task.terminationStatus == 0 {
-                        alertMessage =
-                            "Module '\(moduleName)' added.\n\nRebuild your project to include it."
-                        showAlert = true
+                try await CommunityUpdate.run(
+                    projectPath: projectPath,
+                    values: [moduleName],
+                    report: { line in
+                        DispatchQueue.main.async {
+                            output += line + "\n"
+                        }
                     }
+                )
+
+                await MainActor.run {
+                    isAdding = false
+                    alertMessage = "Modules added. Rebuild your project to include them."
+                    showAlert = true
                 }
             } catch {
-                DispatchQueue.main.async {
-                    output = "Error: \(error.localizedDescription)"
+                await MainActor.run {
+                    output += "Error: \(error.localizedDescription)\n"
                     isAdding = false
                 }
             }
