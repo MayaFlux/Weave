@@ -19,6 +19,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="..\..\templates\validate.ps1">
+      <Link>Resources/templates/validate.ps1</Link>
+    </EmbeddedResource>
     <EmbeddedResource Include="..\..\templates\CMakeLists.txt">
       <Link>Resources/templates/CMakeLists.txt</Link>
     </EmbeddedResource>

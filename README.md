@@ -10,6 +10,14 @@ Weave installs MayaFlux, creates projects, and manages community modules. Downlo
 
 Launch Weave and choose **Install MayaFlux**. Weave downloads the framework, installs all dependencies, and configures your environment. Restart your terminal when it finishes.
 
+On Windows, run the installation check before reporting a problem:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:MAYAFLUX_ROOT\share\weave\templates\validate.ps1"
+```
+
+The check reports your installed MayaFlux version, required tools and environment settings, with suggested fixes. It makes no changes and does not contact the network. Copy the report into your issue. If `MAYAFLUX_ROOT` is missing, use the script's full installed path and add `-MayaFluxRoot "C:\Your MayaFlux Folder"`.
+
 ---
 
 ## Creating a Project
