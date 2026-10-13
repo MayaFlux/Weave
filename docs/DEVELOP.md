@@ -126,6 +126,14 @@ cd Weave
 
 The AppImage bundles a Python standalone runtime, GTK4, libadwaita, and all typelibs. If Podman is not available the script runs directly, but output compatibility is not guaranteed.
 
+After building, run the Linux AppImage integration tests with:
+
+```bash
+python3 -m unittest discover -s tests/linux/integration -p 'test_*.py' -v
+```
+
+CI runs these tests on the built AppImage before uploading it. They extract the image, verify that the Python and GTK runtime loads from the bundle, and exercise the packaged installer process and CLI with local fixtures. The AppImage still uses host services such as glibc, a display server, a shell, and the native package manager.
+
 ---
 
 ## CI/CD

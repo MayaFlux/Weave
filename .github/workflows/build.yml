@@ -227,6 +227,9 @@ jobs:
       - name: Verify source files
         run: bash .github/scripts/verify-linux-files.sh
 
+      - name: Test Linux source
+        run: python3 -m unittest discover -s tests/linux -p 'test_*.py' -v
+
       - name: Make build script executable
         run: chmod +x linux/scripts/build_appimage.sh
 
@@ -235,6 +238,9 @@ jobs:
 
       - name: Verify build output
         run: bash .github/scripts/verify-linux-build.sh
+
+      - name: Test AppImage integration
+        run: python3 -m unittest discover -s tests/linux/integration -p 'test_*.py' -v
 
       - name: Generate SHA256 hash
         id: hash
