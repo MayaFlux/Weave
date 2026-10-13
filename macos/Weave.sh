@@ -75,8 +75,19 @@ EOF
 }
 
 error() {
+    if [ "${WEAVE_NEW_ENTRY_CREATED:-false}" = true ]; then
+        rm -rf -- "$WEAVE_NEW_ENTRY_DIR"
+        WEAVE_NEW_ENTRY_CREATED=false
+    fi
     echo "[Weave ERROR] $*" >&2
     exit 1
+}
+
+_cleanup_new_entry() {
+    local exit_code=$?
+    if [ "$exit_code" -ne 0 ] && [ "${WEAVE_NEW_ENTRY_CREATED:-false}" = true ]; then
+        rm -rf -- "$WEAVE_NEW_ENTRY_DIR"
+    fi
 }
 
 _version_gte() {
@@ -150,20 +161,26 @@ cmd_new() {
     [[ "$PROJECT_NAME" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] ||
         error "Project name must start with a letter or underscore and contain only letters, digits, and underscores"
 
+    [ -d "$DEST_DIR" ] && [ ! -L "$DEST_DIR" ] \
+        || error "Project destination must be an existing directory and cannot be a symbolic link: $DEST_DIR"
+
     local PROJECT_DIR="$DEST_DIR/$PROJECT_NAME"
 
     # ============================================================================
     # CHECK IF PROJECT EXISTS
     # ============================================================================
 
-    if [ -d "$PROJECT_DIR" ]; then
-        if [ -f "$PROJECT_DIR/CMakeLists.txt" ] && grep -q "MayaFlux" "$PROJECT_DIR/CMakeLists.txt" 2>/dev/null; then
-            echo "[Weave] Project '$PROJECT_NAME' already exists and is a MayaFlux project."
-            echo "Nothing to do."
-            exit 0
-        else
-            error "Directory '$PROJECT_DIR' already exists but is not a MayaFlux project"
+    if [ -e "$PROJECT_DIR" ] || [ -L "$PROJECT_DIR" ]; then
+        if [ -d "$PROJECT_DIR" ]; then
+            if [ -f "$PROJECT_DIR/CMakeLists.txt" ] && grep -q "MayaFlux" "$PROJECT_DIR/CMakeLists.txt" 2>/dev/null; then
+                echo "[Weave] Project '$PROJECT_NAME' already exists and is a MayaFlux project."
+                echo "Nothing to do."
+                exit 0
+            else
+                error "Directory '$PROJECT_DIR' already exists but is not a MayaFlux project"
+            fi
         fi
+        error "Path '$PROJECT_DIR' already exists"
     fi
 
     # ============================================================================
@@ -175,6 +192,9 @@ cmd_new() {
     [ ! -f "$TEMPLATES_DIR/cmake/mayaflux.cmake" ] && error "Required template missing: cmake/mayaflux.cmake"
     [ ! -f "$TEMPLATES_DIR/cmake/shaders.cmake" ] && error "Required template missing: cmake/shaders.cmake"
     [ ! -f "$TEMPLATES_DIR/cmake/build_community.cmake" ] && error "Required template missing: cmake/build_community.cmake"
+    [ ! -f "$TEMPLATES_DIR/main.cpp" ] && error "Required template missing: main.cpp"
+    [ ! -f "$TEMPLATES_DIR/user_project.hpp" ] && error "Required template missing: user_project.hpp"
+    [ ! -f "$TEMPLATES_DIR/.gitignore" ] && error "Required template missing: .gitignore"
 
     if [ "$COPY_SHADER_SOURCES" = true ]; then
         SHADER_SOURCE_DIR="$MAYAFLUX_ROOT/share/MayaFlux/src/shaders"
@@ -194,8 +214,12 @@ cmd_new() {
     # ============================================================================
 
     echo "[Weave] Creating project: $PROJECT_NAME"
-    mkdir -p "$PROJECT_DIR/src"
-    mkdir -p "$PROJECT_DIR/cmake"
+    mkdir "$PROJECT_DIR" || error "Could not create project directory: $PROJECT_DIR"
+    WEAVE_NEW_ENTRY_DIR="$PROJECT_DIR"
+    WEAVE_NEW_ENTRY_CREATED=true
+    trap '_cleanup_new_entry' EXIT
+    mkdir -p "$PROJECT_DIR/src" || error "Could not create project source directory"
+    mkdir -p "$PROJECT_DIR/cmake" || error "Could not create project CMake directory"
 
     # ============================================================================
     # GENERATE CMakeLists.txt
@@ -217,7 +241,8 @@ cmd_new() {
         LILA_DLL_COPY=''
     fi
 
-    sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" "$TEMPLATES_DIR/CMakeLists.txt" >"$PROJECT_DIR/CMakeLists.txt"
+    sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" "$TEMPLATES_DIR/CMakeLists.txt" >"$PROJECT_DIR/CMakeLists.txt" \
+        || error "Failed to generate CMakeLists.txt"
     echo "✅ CMakeLists.txt generated"
 
     # ============================================================================
@@ -227,20 +252,25 @@ cmd_new() {
     sed "s|@LILA_LINK_BLOCK@|$LILA_LINK_BLOCK|g" "$TEMPLATES_DIR/cmake/mayaflux.cmake" |
         sed "s|@LILA_DEBUGGER_PATH@||g" |
         sed "s|@LILA_DLL_COPY@||g" \
-            >"$PROJECT_DIR/cmake/mayaflux.cmake"
+            >"$PROJECT_DIR/cmake/mayaflux.cmake" \
+        || error "Failed to generate cmake/mayaflux.cmake"
     echo "✅ cmake/mayaflux.cmake generated"
-    cp "$TEMPLATES_DIR/cmake/shaders.cmake" "$PROJECT_DIR/cmake/shaders.cmake"
+    cp "$TEMPLATES_DIR/cmake/shaders.cmake" "$PROJECT_DIR/cmake/shaders.cmake" \
+        || error "Failed to copy cmake/shaders.cmake"
     echo "✅ cmake/shaders.cmake copied"
-    cp "$TEMPLATES_DIR/cmake/build_community.cmake" "$PROJECT_DIR/cmake/build_community.cmake"
+    cp "$TEMPLATES_DIR/cmake/build_community.cmake" "$PROJECT_DIR/cmake/build_community.cmake" \
+        || error "Failed to copy cmake/build_community.cmake"
     echo "✅ cmake/build_community.cmake copied"
 
-    cp "$TEMPLATES_DIR/CMakePresets.json" "$PROJECT_DIR/CMakePresets.json"
+    cp "$TEMPLATES_DIR/CMakePresets.json" "$PROJECT_DIR/CMakePresets.json" \
+        || error "Failed to copy CMakePresets.json"
     echo "  ✓ Copied CMakePresets.json"
 
-    cp "$TEMPLATES_DIR/validate-macos.sh" "$PROJECT_DIR/validate.sh"
-    chmod +x "$PROJECT_DIR/validate.sh"
+    cp "$TEMPLATES_DIR/validate-macos.sh" "$PROJECT_DIR/validate.sh" \
+        || error "Failed to copy validate-macos.sh"
+    chmod +x "$PROJECT_DIR/validate.sh" || error "Could not make validate.sh executable"
     echo "  ✓ Copied validate.sh"
-    touch "$PROJECT_DIR/community.cmake"
+    printf '\n' >"$PROJECT_DIR/community.cmake"
 
     # ============================================================================
     # COPY main.cpp
@@ -250,7 +280,7 @@ cmd_new() {
         error "main.cpp template not found at $TEMPLATES_DIR/main.cpp"
     fi
 
-    cp "$TEMPLATES_DIR/main.cpp" "$PROJECT_DIR/src/main.cpp"
+    cp "$TEMPLATES_DIR/main.cpp" "$PROJECT_DIR/src/main.cpp" || error "Failed to copy main.cpp"
     echo "✅ main.cpp created"
 
     # ============================================================================
@@ -261,17 +291,19 @@ cmd_new() {
         error "user_project.hpp template not found at $TEMPLATES_DIR/user_project.hpp"
     fi
 
-    cp "$TEMPLATES_DIR/user_project.hpp" "$PROJECT_DIR/src/user_project.hpp"
+    cp "$TEMPLATES_DIR/user_project.hpp" "$PROJECT_DIR/src/user_project.hpp" \
+        || error "Failed to copy user_project.hpp"
     echo "✅ user_project.hpp created"
 
     # ============================================================================
     # CREATE data/shaders AND COPY TEMPLATE SHADERS
     # ============================================================================
 
-    mkdir -p "$PROJECT_DIR/data/shaders"
+    mkdir -p "$PROJECT_DIR/data/shaders" || error "Could not create data/shaders"
 
     if [ -d "$TEMPLATES_DIR/shaders" ] && [ -n "$(ls -A "$TEMPLATES_DIR/shaders" 2>/dev/null)" ]; then
-        cp "$TEMPLATES_DIR/shaders/"* "$PROJECT_DIR/data/shaders/"
+        cp "$TEMPLATES_DIR/shaders/"* "$PROJECT_DIR/data/shaders/" \
+            || error "Failed to copy project shader templates"
         echo "  ✓ Copied template shaders"
     else
         echo "  ✓ Created empty data/shaders (no template shaders)"
@@ -286,8 +318,8 @@ cmd_new() {
                 echo "  ✓ Preserved project shader: $relative"
                 continue
             fi
-            mkdir -p "$(dirname "$destination")"
-            cp "$shader" "$destination"
+            mkdir -p "$(dirname "$destination")" || error "Could not create shader directory: $relative"
+            cp "$shader" "$destination" || error "Failed to copy MayaFlux shader source: $relative"
             echo "  ✓ Copied MayaFlux shader source: $relative"
         done
     fi
@@ -297,7 +329,7 @@ cmd_new() {
     # ============================================================================
 
     if [ "$WITH_VSCODE" = true ]; then
-        mkdir -p "$PROJECT_DIR/.vscode"
+            mkdir -p "$PROJECT_DIR/.vscode" || error "Could not create VS Code configuration directory"
 
         # Check if VS Code templates exist
         if [ -d "$TEMPLATES_DIR/vscode" ]; then
@@ -307,6 +339,7 @@ cmd_new() {
                     sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" \
                         "$TEMPLATES_DIR/vscode/${vscode_file}" \
                         >"$PROJECT_DIR/.vscode/$vscode_file"
+                    [ "$?" -eq 0 ] || error "Failed to generate VS Code $vscode_file"
                 fi
             done
             echo "✅ VS Code configuration created"
@@ -315,7 +348,7 @@ cmd_new() {
         fi
     fi
 
-    cp "$TEMPLATES_DIR/.gitignore" "$PROJECT_DIR/.gitignore"
+    cp "$TEMPLATES_DIR/.gitignore" "$PROJECT_DIR/.gitignore" || error "Failed to copy .gitignore"
     echo "✅ .gitignore copied"
 
     # ============================================================================
@@ -337,7 +370,7 @@ cmake --build . --parallel
 
 ## Troubleshooting
 
-If setup or a build fails, run `./validate.sh` to check the MayaFlux Homebrew setup, shell environment, build tools, and project files.
+If setup or a build fails, run \`./validate.sh\` to check the MayaFlux Homebrew setup, shell environment, build tools, and project files.
 
 ## Running
 
@@ -383,6 +416,9 @@ EOF
     echo "  cmake .. && make"
     echo "  ./$PROJECT_NAME"
     echo ""
+
+    WEAVE_NEW_ENTRY_CREATED=false
+    trap - EXIT
 }
 
 # ============================================================================
@@ -471,34 +507,51 @@ cmd_community() {
         error "Module name must be snake_case (lowercase letters, digits, underscores, no leading digit)"
 
     DEST_DIR="${DEST_DIR/#\~/$HOME}"
+    [ ! -L "$DEST_DIR" ] \
+        || error "Community destination cannot be a symbolic link: $DEST_DIR"
     mkdir -p "$DEST_DIR" || error "Cannot create destination directory: $DEST_DIR"
+    [ -d "$DEST_DIR" ] || error "Community destination is not a directory: $DEST_DIR"
     DEST_DIR="$(cd "$DEST_DIR" && pwd)"
 
     local MODULE_DIR="$DEST_DIR/$MODULE_NAME"
-    [ -d "$MODULE_DIR" ] && error "Directory already exists: $MODULE_DIR"
+    if [ -e "$MODULE_DIR" ] || [ -L "$MODULE_DIR" ]; then
+        error "Directory already exists: $MODULE_DIR"
+    fi
 
     [ ! -f "$TEMPLATES_DIR/community/module.cmake" ] && error "Required template missing: community/module.cmake"
     [ ! -f "$TEMPLATES_DIR/community/community.json" ] && error "Required template missing: community/community.json"
     [ ! -f "$TEMPLATES_DIR/community/test/CMakeLists.txt" ] && error "Required template missing: community/test/CMakeLists.txt"
 
-    mkdir -p "$MODULE_DIR/src"
-    mkdir -p "$MODULE_DIR/test"
+    mkdir "$MODULE_DIR" || error "Could not create module directory: $MODULE_DIR"
+    WEAVE_NEW_ENTRY_DIR="$MODULE_DIR"
+    WEAVE_NEW_ENTRY_CREATED=true
+    trap '_cleanup_new_entry' EXIT
+    mkdir -p "$MODULE_DIR/src" || error "Could not create community source directory"
+    mkdir -p "$MODULE_DIR/test" || error "Could not create community test directory"
 
-    cp "$TEMPLATES_DIR/.gitignore" "$MODULE_DIR/.gitignore"
-    cp "$TEMPLATES_DIR/community/CMakePresets.json" "$MODULE_DIR/CMakePresets.json"
+    cp "$TEMPLATES_DIR/.gitignore" "$MODULE_DIR/.gitignore" \
+        || error "Failed to copy community template: .gitignore"
+    cp "$TEMPLATES_DIR/community/CMakePresets.json" "$MODULE_DIR/CMakePresets.json" \
+        || error "Failed to copy community template: CMakePresets.json"
 
     sed "s|@MODULE_NAME@|$MODULE_NAME|g" "$TEMPLATES_DIR/community/module.cmake" \
-        >"$MODULE_DIR/${MODULE_NAME}.cmake"
+        >"$MODULE_DIR/${MODULE_NAME}.cmake" \
+        || error "Failed to generate community CMake file"
 
     sed "s|@MODULE_NAME@|$MODULE_NAME|g" "$TEMPLATES_DIR/community/community.json" \
-        >"$MODULE_DIR/community.json"
+        >"$MODULE_DIR/community.json" \
+        || error "Failed to generate community manifest"
 
     sed "s|@MODULE_NAME@|$MODULE_NAME|g" "$TEMPLATES_DIR/community/test/CMakeLists.txt" \
-        >"$MODULE_DIR/test/CMakeLists.txt"
+        >"$MODULE_DIR/test/CMakeLists.txt" \
+        || error "Failed to generate community test configuration"
 
-    touch "$MODULE_DIR/test/test_${MODULE_NAME}.cpp"
-    git -C "$MODULE_DIR" init -q -b main
-    git -C "$MODULE_DIR" add -A
+    touch "$MODULE_DIR/test/test_${MODULE_NAME}.cpp" || error "Could not create community test source"
+    git -C "$MODULE_DIR" init -q -b main || error "Failed to initialize community module repository"
+    git -C "$MODULE_DIR" add -A || error "Failed to stage community module files"
+
+    WEAVE_NEW_ENTRY_CREATED=false
+    trap - EXIT
 
     echo ""
     echo "[Weave] Community module created: $MODULE_DIR"

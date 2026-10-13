@@ -23,6 +23,50 @@ final class InstallerWorkflowTests: XCTestCase {
         XCTAssertFalse(configurationRequested)
     }
 
+    func testSuccessfulHomebrewBootstrapRediscoversAndUsesInstalledExecutable() async {
+        var commands: [String] = []
+        var discoveryCount = 0
+        var configuredBrew: String?
+        let result = await InstallerWorkflow.run(
+            formula: "mayaflux-dev",
+            findBrew: {
+                discoveryCount += 1
+                return discoveryCount == 1 ? nil : "/opt/homebrew/bin/brew"
+            },
+            runCommand: { command in
+                commands.append(command)
+                return 0
+            },
+            configureEnvironment: { brew, formula in
+                configuredBrew = "\(brew):\(formula)"
+                return nil
+            }, log: { _ in })
+
+        guard case .done = result else { return XCTFail("Bootstrapped installation should complete") }
+        XCTAssertEqual(discoveryCount, 2)
+        XCTAssertEqual(configuredBrew, "/opt/homebrew/bin/brew:mayaflux-dev")
+        XCTAssertTrue(commands.first?.contains("NONINTERACTIVE=1") == true)
+        XCTAssertTrue(commands.contains("'/opt/homebrew/bin/brew' install mayaflux-dev"))
+        XCTAssertTrue(commands.contains("'/opt/homebrew/bin/brew' list --formula | grep -E '^mayaflux-dev$'"))
+    }
+
+    func testSuccessfulBootstrapWithoutDiscoverableHomebrewStopsBeforeFormulaCommands() async {
+        var commands: [String] = []
+        var discoveryCount = 0
+        let result = await InstallerWorkflow.run(
+            formula: "mayaflux", findBrew: { discoveryCount += 1; return nil },
+            runCommand: { command in commands.append(command); return 0 },
+            configureEnvironment: { _, _ in XCTFail("Configuration must not run"); return nil },
+            log: { _ in })
+
+        guard case .failed(let message) = result else {
+            return XCTFail("Missing Homebrew after bootstrap should fail")
+        }
+        XCTAssertTrue(message.contains("executable not found"))
+        XCTAssertEqual(discoveryCount, 2)
+        XCTAssertEqual(commands.count, 1)
+    }
+
     func testTapFailureStopsBeforeTrustAndFormulaInstall() async {
         var commands: [String] = []
         let brew = "/opt/homebrew/bin/brew"
@@ -60,6 +104,33 @@ final class InstallerWorkflowTests: XCTestCase {
         XCTAssertTrue(message.contains("Failed to remove mayaflux-dev"))
         XCTAssertEqual(commands.count, 2)
         XCTAssertTrue(commands[1].contains("uninstall mayaflux-dev"))
+    }
+
+    func testConflictingFormulaIsRemovedBeforeSelectedDevelopmentFormulaIsInstalled() async {
+        var commands: [String] = []
+        let result = await InstallerWorkflow.run(
+            formula: "mayaflux-dev", findBrew: { "/opt/homebrew/bin/brew" },
+            runCommand: { command in
+                commands.append(command)
+                if command.contains("help trust") { return 1 }
+                return 0
+            },
+            configureEnvironment: { _, formula in
+                XCTAssertEqual(formula, "mayaflux-dev")
+                return nil
+            }, log: { _ in })
+
+        guard case .done = result else { return XCTFail("Selected formula should install") }
+        let removal = try? XCTUnwrap(commands.firstIndex(of: "'/opt/homebrew/bin/brew' uninstall mayaflux"))
+        let tap = try? XCTUnwrap(commands.firstIndex(of: "'/opt/homebrew/bin/brew' tap mayaflux/mayaflux"))
+        let install = try? XCTUnwrap(commands.firstIndex(of: "'/opt/homebrew/bin/brew' install mayaflux-dev"))
+        XCTAssertNotNil(removal)
+        XCTAssertNotNil(tap)
+        XCTAssertNotNil(install)
+        if let removal, let tap, let install {
+            XCTAssertLessThan(removal, tap)
+            XCTAssertLessThan(tap, install)
+        }
     }
 
     func testSuccessfulInstallWithoutHomebrewTrustConfiguresEnvironment() async {
