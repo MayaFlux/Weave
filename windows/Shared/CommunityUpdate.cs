@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.ComponentModel;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -14,12 +15,14 @@ public sealed class CommunityUpdate
     private readonly HttpClient http;
     private readonly Action<string> report;
     private readonly string? mayafluxRoot;
+    private readonly CommunityUpdateHost host;
 
-    public CommunityUpdate(HttpClient http, Action<string> report, string? mayafluxRoot)
+    public CommunityUpdate(HttpClient http, Action<string> report, string? mayafluxRoot, CommunityUpdateHost? host = null)
     {
         this.http = http;
         this.report = report;
         this.mayafluxRoot = mayafluxRoot;
+        this.host = host ?? new CommunityUpdateHost();
     }
 
     public static IReadOnlyList<string> ParseNames(IEnumerable<string> values)
@@ -35,7 +38,8 @@ public sealed class CommunityUpdate
                 if (name.Length == 0)
                     throw new InvalidOperationException("Empty module name in request");
 
-                if (!Regex.IsMatch(name, @"\A[a-z][a-z0-9_]*\z"))
+                if (!Regex.IsMatch(name, @"\A[a-z][a-z0-9_]*\z") ||
+                    Regex.IsMatch(name, @"\A(?:con|prn|aux|nul|com[1-9]|lpt[1-9])\z"))
                     throw new InvalidOperationException($"Invalid module name: {name}");
 
                 if (seen.Add(name))
@@ -73,20 +77,40 @@ public sealed class CommunityUpdate
             var source = File.ReadAllText(path);
             var match = Regex.Match(source, "set\\(PACKAGE_VERSION\\s+\"([^\"]+)\"\\)");
             if (!match.Success)
-                throw new InvalidOperationException($"Malformed MayaFlux version file: {path}");
+                throw new InvalidOperationException($"Malformed MayaFlux version file: {path}. Repair or reinstall MayaFlux, then retry.");
 
             var text = match.Groups[1].Value;
-            return (text, ParseVersion(text, "installed MayaFlux"));
+            try { return (text, ParseVersion(text, "installed MayaFlux")); }
+            catch (InvalidOperationException error)
+            {
+                throw new InvalidOperationException($"{error.Message}. Repair or reinstall MayaFlux at {root}, then retry.", error);
+            }
         }
 
         throw new InvalidOperationException(
-            $"MayaFlux version file not found. Checked: {string.Join(", ", checkedPaths)}");
+            $"MayaFlux version file not found. Repair or reinstall MayaFlux at {root}, then retry. Checked: {string.Join(", ", checkedPaths)}");
     }
 
     private async Task<Dictionary<string, (string Repo, Version Minimum)>> RegistryAsync()
     {
         report("Fetching registry...");
-        using var document = JsonDocument.Parse(await http.GetStringAsync(RegistryUrl));
+        string source;
+        try { source = await http.GetStringAsync(RegistryUrl); }
+        catch (HttpRequestException error)
+        {
+            throw new InvalidOperationException($"Could not fetch the community registry: {error.Message}. Check your connection and retry.", error);
+        }
+        catch (TaskCanceledException error)
+        {
+            throw new InvalidOperationException("Fetching the community registry timed out. Check your connection and retry.", error);
+        }
+        JsonDocument parsed;
+        try { parsed = JsonDocument.Parse(source); }
+        catch (JsonException error)
+        {
+            throw new InvalidOperationException("The community registry contains invalid JSON. Your project was not changed; retry later.", error);
+        }
+        using var document = parsed;
         if (document.RootElement.ValueKind != JsonValueKind.Array)
             throw new InvalidOperationException("Community registry must be an array");
 
@@ -132,37 +156,65 @@ public sealed class CommunityUpdate
         foreach (var argument in new[] { "clone", "--progress", "--depth=1", repo, destination })
             start.ArgumentList.Add(argument);
 
-        using var process = Process.Start(start)
-            ?? throw new InvalidOperationException("Could not start git");
+        Process process;
+        try { process = host.StartProcess(start); }
+        catch (Win32Exception error)
+        {
+            throw new InvalidOperationException(error.NativeErrorCode is 2 or 3
+                ? "Git was not found. Install Git for Windows, reopen Weave and retry."
+                : $"Git could not start: {error.Message}. Check access to Git and retry.", error);
+        }
+        using var ownedProcess = process;
+        using var deadline = new CancellationTokenSource(host.CloneTimeout);
 
         async Task DrainAsync(StreamReader stream)
         {
-            while (await stream.ReadLineAsync() is { } line)
-                report(line);
+            while (await stream.ReadLineAsync(deadline.Token) is { } line)
+                report(line.Length > 4096 ? line[..4096] + "…" : line);
         }
 
-        await Task.WhenAll(
-            DrainAsync(process.StandardOutput),
-            DrainAsync(process.StandardError),
-            process.WaitForExitAsync());
+        try
+        {
+            await Task.WhenAll(
+                DrainAsync(process.StandardOutput),
+                DrainAsync(process.StandardError),
+                process.WaitForExitAsync(deadline.Token));
+        }
+        catch
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(true);
+                await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            if (deadline.IsCancellationRequested)
+                throw new InvalidOperationException("Git clone timed out. Check your connection and retry.");
+            throw;
+        }
 
         if (process.ExitCode != 0)
         {
             var name = Path.GetFileName(destination);
-            throw new InvalidOperationException($"Git clone failed for {name} (exit {process.ExitCode})");
+            throw new InvalidOperationException($"Git clone failed for {name} (exit {process.ExitCode}). Check the Git output and your connection, then retry");
         }
     }
 
     public async Task<IReadOnlyList<string>> RunAsync(string projectPath, IEnumerable<string> values)
     {
         var names = ParseNames(values);
+        if (string.IsNullOrWhiteSpace(projectPath) || !Path.IsPathFullyQualified(projectPath))
+            throw new InvalidOperationException("Select the full path to your project directory and retry.");
         var project = Path.GetFullPath(projectPath);
+        EnsureUnlinked(project);
+        EnsureUnlinked(Path.Combine(project, "CMakeLists.txt"));
         if (!File.Exists(Path.Combine(project, "CMakeLists.txt")))
             throw new InvalidOperationException($"Not a MayaFlux project: {project}");
 
         var registry = await RegistryAsync();
         var installed = InstalledVersion();
         var community = Path.Combine(project, "community");
+        EnsureUnlinked(community);
+        EnsureUnlinked(Path.Combine(project, "community.cmake"));
         var cloned = new List<string>();
 
         try
@@ -171,12 +223,15 @@ public sealed class CommunityUpdate
             {
                 if (!registry.ContainsKey(name))
                     throw new InvalidOperationException($"Module {name} is not in the community registry");
+                if (installed.Parsed.CompareTo(registry[name].Minimum) < 0)
+                    throw new InvalidOperationException($"Module {name} requires MayaFlux >= {registry[name].Minimum}; found {installed.Text}. Update MayaFlux and retry.");
             }
 
             foreach (var name in names)
             {
                 var entry = registry[name];
                 var module = Path.Combine(community, name);
+                EnsureUnlinked(module);
                 report($"Preparing {name}...");
 
                 if (File.Exists(module))
@@ -191,6 +246,23 @@ public sealed class CommunityUpdate
                     {
                         await CloneAsync(entry.Repo, module);
                     }
+                    catch (Exception error)
+                    {
+                        if (Directory.Exists(module))
+                        {
+                            try
+                            {
+                                EnsureUnlinkedTree(module);
+                                host.DeleteIncompleteClone(module);
+                                report($"Removed incomplete clone for {name}; you can retry.");
+                            }
+                            catch (Exception cleanup)
+                            {
+                                throw new InvalidOperationException($"{error.Message}. Could not clean incomplete clone at {module}: {cleanup.Message}. Review and remove that incomplete directory before retrying.", error);
+                            }
+                        }
+                        throw;
+                    }
                     finally
                     {
                         if (Directory.Exists(module))
@@ -202,6 +274,8 @@ public sealed class CommunityUpdate
                     report($"Using existing community/{name}");
                 }
 
+                foreach (var relative in new[] { $"{name}.cmake", "src", "community.json" })
+                    EnsureUnlinked(Path.Combine(module, relative));
                 if (!File.Exists(Path.Combine(module, $"{name}.cmake")))
                     throw new InvalidOperationException($"Module {name} is missing {name}.cmake");
 
@@ -222,7 +296,7 @@ public sealed class CommunityUpdate
                 if (installed.Parsed.CompareTo(required) < 0)
                 {
                     throw new InvalidOperationException(
-                        $"Module {name} requires MayaFlux >= {required}; found {installed.Text}");
+                        $"Module {name} requires MayaFlux >= {required}; found {installed.Text}. Update MayaFlux and retry.");
                 }
 
                 if (manifest.GetProperty("packages").EnumerateObject().Any() ||
@@ -254,7 +328,7 @@ public sealed class CommunityUpdate
                 try
                 {
                     await File.WriteAllTextAsync(temporary, updated, new UTF8Encoding(false));
-                    File.Move(temporary, cmake, true);
+                    host.MoveRegistration(temporary, cmake);
                 }
                 finally
                 {
@@ -277,7 +351,31 @@ public sealed class CommunityUpdate
         {
             var remaining = cloned.Count == 0 ? "none" : string.Join(", ", cloned);
             throw new InvalidOperationException(
-                $"{error.Message}. Clones left in community/: {remaining}", error);
+                $"{error.Message}. Clones left in community/: {remaining}. Existing modules were preserved; review or repair any incomplete module before retrying.", error);
+        }
+    }
+
+    private void EnsureUnlinked(string path)
+    {
+        for (var current = Path.GetFullPath(path); current != null; current = Path.GetDirectoryName(current))
+        {
+            try
+            {
+                if ((host.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                    throw new InvalidOperationException($"Project update cannot use a linked path: {current}. Select an ordinary project directory and retry.");
+            }
+            catch (FileNotFoundException) { }
+            catch (DirectoryNotFoundException) { }
+        }
+    }
+
+    private void EnsureUnlinkedTree(string path)
+    {
+        EnsureUnlinked(path);
+        foreach (var entry in Directory.EnumerateFileSystemEntries(path))
+        {
+            EnsureUnlinked(entry);
+            if (Directory.Exists(entry)) EnsureUnlinkedTree(entry);
         }
     }
 }

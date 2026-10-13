@@ -19,9 +19,13 @@ public class AddCommunityView : UserControl
     private Button cancelButton;
     private RichTextBox outputLog;
     private LayoutManager layoutManager;
+    private readonly Func<Action<string>, CommunityUpdate>? createUpdate;
+    private readonly Action<string, string, MessageBoxIcon> notify;
 
-    public AddCommunityView()
+    public AddCommunityView(Func<Action<string>, CommunityUpdate>? createUpdate = null, Action<string, string, MessageBoxIcon>? notify = null)
     {
+        this.createUpdate = createUpdate;
+        this.notify = notify ?? ((message, title, icon) => MessageBox.Show(message, title, MessageBoxButtons.OK, icon));
         InitializeComponent();
         InitializeUI();
     }
@@ -128,21 +132,19 @@ public class AddCommunityView : UserControl
         }
     }
 
-    private void AddButton_Click(object sender, EventArgs e)
+    private async void AddButton_Click(object sender, EventArgs e)
     {
         var projectPath = projectPathInput.Text.Trim();
         var names = moduleNameInput.Text;
 
         if (string.IsNullOrWhiteSpace(projectPath) || !Directory.Exists(projectPath))
         {
-            MessageBox.Show("Project directory does not exist.", "Validation Error",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            notify("Project directory does not exist.", "Validation Error", MessageBoxIcon.Warning);
             return;
         }
         if (!File.Exists(Path.Combine(projectPath, "CMakeLists.txt")))
         {
-            MessageBox.Show("Not a MayaFlux project (no CMakeLists.txt found).", "Validation Error",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            notify("Not a MayaFlux project (no CMakeLists.txt found).", "Validation Error", MessageBoxIcon.Warning);
             return;
         }
         try
@@ -151,14 +153,14 @@ public class AddCommunityView : UserControl
         }
         catch (InvalidOperationException error)
         {
-            MessageBox.Show(error.Message, "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            notify(error.Message, "Validation Error", MessageBoxIcon.Warning);
             return;
         }
 
         SetFormEnabled(false);
         outputLog.Clear();
 
-        Task.Run(() => AddModuleAsync(projectPath, names));
+        await AddModuleAsync(projectPath, names);
     }
 
     private async Task AddModuleAsync(string projectPath, string names)
@@ -166,27 +168,26 @@ public class AddCommunityView : UserControl
         try
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-            var update = new CommunityUpdate(
+            var update = createUpdate?.Invoke(Log) ?? new CommunityUpdate(
                 http,
                 Log,
                 Environment.GetEnvironmentVariable("MAYAFLUX_ROOT"));
 
             await update.RunAsync(projectPath, [names]);
 
-            Invoke(() =>
+            if (!IsDisposed && !Disposing)
             {
-                MessageBox.Show(
+                notify(
                     "Modules added. Rebuild your project to include them.",
                     "Modules Added",
-                    MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
                 ParentForm?.Close();
-            });
+            }
         }
         catch (Exception error)
         {
             Log($"[ERROR] {error.Message}");
-            Invoke(() => SetFormEnabled(true));
+            if (!IsDisposed && !Disposing) SetFormEnabled(true);
         }
     }
 
@@ -201,6 +202,7 @@ public class AddCommunityView : UserControl
 
     private void Log(string message)
     {
+        if (IsDisposed || Disposing) return;
         if (outputLog.InvokeRequired)
         {
             outputLog.Invoke(new Action(() => Log(message)));
