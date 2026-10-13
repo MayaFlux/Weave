@@ -69,11 +69,13 @@ public static class ProcessRunner
         }
     }
 
-    public static bool SetEnvironmentVariable(string name, string value, Logger logger)
+    public static bool SetEnvironmentVariable(string name, string value, Logger logger) => SetEnvironmentVariable(name, value, logger, new WindowsInstallationHost());
+
+    internal static bool SetEnvironmentVariable(string name, string value, Logger logger, WindowsInstallationHost host)
     {
         try
         {
-            Environment.SetEnvironmentVariable(name, value, EnvironmentVariableTarget.Machine);
+            host.SetEnvironmentVariable(name, value, EnvironmentVariableTarget.Machine);
             logger.Log($"[OK] Set {name}={value}");
             return true;
         }
@@ -84,20 +86,23 @@ public static class ProcessRunner
         }
     }
 
-    public static bool AddToPath(string pathToAdd, Logger logger)
+    public static bool AddToPath(string pathToAdd, Logger logger) => AddToPath(pathToAdd, logger, new WindowsInstallationHost());
+
+    internal static bool AddToPath(string pathToAdd, Logger logger, WindowsInstallationHost host)
     {
         try
         {
-            var currentPath = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine) ?? "";
+            if (!WindowsInstallationPaths.IsSafeEnvironmentPath(pathToAdd)) throw new ArgumentException("PATH entry must be an absolute path without separators or control characters.");
+            var currentPath = host.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine) ?? "";
             
-            if (currentPath.Contains(pathToAdd, StringComparison.OrdinalIgnoreCase))
+            if (ContainsPath(currentPath, pathToAdd, host))
             {
                 logger.Log($"[OK] Already in PATH: {pathToAdd}");
                 return true;
             }
 
-            var newPath = $"{pathToAdd};{currentPath}";
-            Environment.SetEnvironmentVariable("PATH", newPath, EnvironmentVariableTarget.Machine);
+            var newPath = string.IsNullOrEmpty(currentPath) ? pathToAdd : $"{pathToAdd};{currentPath}";
+            host.SetEnvironmentVariable("PATH", newPath, EnvironmentVariableTarget.Machine);
             logger.Log($"[OK] Added to PATH: {pathToAdd}");
             return true;
         }
@@ -108,30 +113,49 @@ public static class ProcessRunner
         }
     }
 
-    public static void AppendToEnvironmentVariable(string name, string path, Logger logger)
-    {
-        var existing = Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.Machine) ?? "";
+    public static void AppendToEnvironmentVariable(string name, string path, Logger logger) => AppendToEnvironmentVariable(name, path, logger, new WindowsInstallationHost());
 
-        if (!existing.Split(';').Contains(path))
+    internal static bool AppendToEnvironmentVariable(string name, string path, Logger logger, WindowsInstallationHost host)
+    {
+        try
         {
+            if (!WindowsInstallationPaths.IsSafeEnvironmentPath(path)) throw new ArgumentException($"Invalid path for {name}.");
+            var existing = host.GetEnvironmentVariable(name, EnvironmentVariableTarget.Machine) ?? "";
+            if (ContainsPath(existing, path, host)) return true;
             var newValue = string.IsNullOrEmpty(existing) ? path : $"{existing};{path}";
-            SetEnvironmentVariable(name, newValue, logger);
+            return SetEnvironmentVariable(name, newValue, logger, host);
+        }
+        catch (Exception ex)
+        {
+            logger.Log($"[ERROR] Failed to update {name}: {ex.Message}");
+            return false;
         }
     }
 
-    public static void AddIncludeDirectory(string path, Logger logger)
+    public static void AddIncludeDirectory(string path, Logger logger) => AddIncludeDirectory(path, logger, new WindowsInstallationHost());
+
+    internal static bool AddIncludeDirectory(string path, Logger logger, WindowsInstallationHost host)
     {
-        if (Directory.Exists(path))
-        {
-            AppendToEnvironmentVariable("CPATH", path, logger);
-        }
+        return host.DirectoryExists(path) && AppendToEnvironmentVariable("CPATH", path, logger, host);
     }
 
-    public static void AddLibraryDirectory(string path, Logger logger)
+    public static void AddLibraryDirectory(string path, Logger logger) => AddLibraryDirectory(path, logger, new WindowsInstallationHost());
+
+    internal static bool AddLibraryDirectory(string path, Logger logger, WindowsInstallationHost host)
     {
-        if (Directory.Exists(path))
+        return host.DirectoryExists(path) && AppendToEnvironmentVariable("LIBRARY_PATH", path, logger, host);
+    }
+
+    private static bool ContainsPath(string existing, string path, WindowsInstallationHost host)
+    {
+        string Normalize(string entry)
         {
-            AppendToEnvironmentVariable("LIBRARY_PATH", path, logger);
+            entry = entry.Trim().Trim('"');
+            entry = System.Text.RegularExpressions.Regex.Replace(entry, "%([^%]+)%", match =>
+                host.GetEnvironmentVariable(match.Groups[1].Value, EnvironmentVariableTarget.Machine) ?? match.Value);
+            return Path.IsPathFullyQualified(entry) ? Path.GetFullPath(entry).TrimEnd('\\', '/') : entry;
         }
+        var normalized = Normalize(path);
+        return existing.Split(';').Any(entry => Normalize(entry).Equals(normalized, StringComparison.OrdinalIgnoreCase));
     }
 }

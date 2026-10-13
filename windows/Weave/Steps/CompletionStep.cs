@@ -13,7 +13,24 @@ namespace Weave.UI.Pages;
 
 public class CompletionStep : IInstallationStep
 {
-    private Logger logger = new();
+    private readonly CompletionHost host;
+    internal event Action<string>? ErrorReported;
+    public CompletionStep() : this(new CompletionHost()) { }
+    internal CompletionStep(CompletionHost host)
+    {
+        this.host = host;
+    }
+    internal static string Subtitle(InstallationConfig config) =>
+        (config.SkipDownload ? "Your existing MayaFlux installation has been configured." : "MayaFlux has been successfully installed.") +
+        (config.SkipDependencies ? " Dependencies were skipped; verify them before building projects." : "");
+
+    internal static string Instructions(InstallationConfig config) =>
+        (config.NeedsReboot ? "1. Restart Windows before building projects." : "1. Restart your terminal/PowerShell completely.") +
+        (config.SkipDependencies ? "\r\n   Check that the required dependencies are installed before building." : "") +
+        "\r\n\r\n2. Reopen Weave, choose Projects, then Create Project." +
+        "\r\n\r\n3. Open an x64 Visual Studio developer shell in your project directory and build:" +
+        "\r\n   cmake --preset release\r\n   cmake --build --preset release" +
+        "\r\n\r\nDocumentation: https://github.com/MayaFlux/MayaFlux";
 
     public void BuildUI(
         LayoutManager layout,
@@ -23,7 +40,7 @@ public class CompletionStep : IInstallationStep
     {
         layout.AddTitle("Installation Complete!");
 
-        layout.AddSubtitle("MayaFlux has been successfully installed.");
+        layout.AddSubtitle(Subtitle(config));
 
         var detailsLabel = new Label
         {
@@ -45,7 +62,7 @@ public class CompletionStep : IInstallationStep
             BorderStyle = BorderStyle.FixedSingle,
             Height = 80,
             Width = layout.GetUsableWidth(),
-            Text = $"Location: {config.MayaFluxRoot}\nTemplates: {config.TemplatesDirectory}\nScripts: {config.ScriptsDirectory}"
+            Text = $"Location: {config.MayaFluxRoot}\r\nTemplates: {config.TemplatesDirectory}"
         };
         layout.AddToStack(detailsBox,  LayoutConstants.SpacingLarge);
 
@@ -67,23 +84,9 @@ public class CompletionStep : IInstallationStep
             BackColor = ThemeColors.BackgroundMedium,
             ForeColor = ThemeColors.TextPrimary,
             BorderStyle = BorderStyle.FixedSingle,
-            Height = 140,
+            Height = 180,
             Width = layout.GetUsableWidth(),
-            Text = @"1. Restart your terminal/PowerShell completely
-
-2. Verify installation:
-   cmake --version
-   weave --version
-
-3. Create a new project:
-   weave new MyProject C:\MyProjects
-
-4. Build and run:
-   cd MyProject\build
-   cmake .. -DCMAKE_BUILD_TYPE=Release
-   cmake --build . --config Release
-
-Documentation: https://github.com/MayaFlux/MayaFlux"
+            Text = Instructions(config)
         };
         layout.AddToStack(instructionsBox,  LayoutConstants.SpacingLarge);
 
@@ -121,26 +124,30 @@ Documentation: https://github.com/MayaFlux/MayaFlux"
         var viewLogBtn = layout.AddButton("View Log", ThemeColors.ButtonSecondary);
         viewLogBtn.Click += (s, e) =>
         {
-            var logPath = logger.GetLogFile();
-            if (File.Exists(logPath))
-            {
-                try
-                {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = "notepad.exe",
-                        Arguments = logPath,
-                        UseShellExecute = true
-                    });
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Failed to open log: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-            }
+            if (!OpenLog(out var error))
+                MessageBox.Show(error, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
         };
 
         var exitBtn = layout.AddButton("Exit", ThemeColors.ButtonPrimary);
         exitBtn.Click += (s, e) => Application.Exit();
+    }
+    internal bool OpenLog(out string? error)
+    {
+        error = null;
+        try
+        {
+            var logPath = host.LogPath;
+            if (!host.FileExists(logPath)) throw new FileNotFoundException($"Installation log was not found: {logPath}");
+            var request = new ProcessStartInfo { FileName = "notepad.exe", UseShellExecute = false };
+            request.ArgumentList.Add(logPath);
+            if (!host.StartProcess(request)) throw new IOException("The log viewer could not be started. Retry opening the log.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to open log: {ex.Message}";
+            ErrorReported?.Invoke(error);
+            return false;
+        }
     }
 }

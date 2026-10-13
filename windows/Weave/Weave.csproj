@@ -82,6 +82,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Shared\Shared.csproj" />
+    <InternalsVisibleTo Include="Weave.Windows.UnitTests" />
   </ItemGroup>
 
   <ItemGroup>

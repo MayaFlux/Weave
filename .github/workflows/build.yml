@@ -149,6 +149,20 @@ jobs:
           dotnet build windows\Weave.sln -c Release -p:Platform=x64 --no-restore
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
+      - name: Test Windows unit suite
+        shell: powershell
+        run: |
+          dotnet test tests/windows/unit/Weave.Windows.UnitTests.csproj -c Release -p:Platform=x64 --logger "trx;LogFileName=windows-unit.trx" --results-directory build/windows/test-results
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload Windows unit test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weave-windows-unit-results
+          path: build/windows/test-results/*.trx
+          if-no-files-found: ignore
+
       - name: Publish executable
         shell: powershell
         run: |

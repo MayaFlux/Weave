@@ -13,10 +13,17 @@ namespace Weave.UI.Pages;
 
 public class TemplatesInstallStep : IInstallationStep
 {
-    private Logger logger = new();
+    private readonly ResourceExtractionHost host;
+    internal event Action<string>? MessageLogged;
+    internal event Action<bool>? ProceedChanged;
+    public TemplatesInstallStep() : this(new ResourceExtractionHost()) { }
+    internal TemplatesInstallStep(ResourceExtractionHost host) => this.host = host;
     private bool extractSuccess = false;
     private TextBox? logBox;
     private Button? nextButton;
+    private Button? retryButton;
+    private int running;
+    private Action<string>? logCallback;
 
     public void BuildUI(
         LayoutManager layout,
@@ -24,6 +31,7 @@ public class TemplatesInstallStep : IInstallationStep
         Action<string> logCallback,
         Action nextCallback)
     {
+        this.logCallback = logCallback;
         layout.AddTitle("Step 5: Install Templates & Tools");
 
         var statusLabel = layout.AddStatusLabel("Extracting project templates and tools...");
@@ -36,12 +44,18 @@ public class TemplatesInstallStep : IInstallationStep
         nextButton.Enabled = false;
         nextButton.Click += (s, e) => nextCallback();
         cancelButton.Click += (s, e) => Application.Exit();
+        retryButton = layout.AddButton("Retry", ThemeColors.ButtonSecondary);
+        retryButton.Enabled = false;
+        retryButton.Click += (s, e) => Task.Run(() => ExtractResourcesAsync(config, statusLabel, logCallback));
 
         Task.Run(() => ExtractResourcesAsync(config, statusLabel, logCallback));
     }
 
-    private async Task ExtractResourcesAsync(InstallationConfig config, Label statusLabel, Action<string> logCallback)
+    internal async Task ExtractResourcesAsync(InstallationConfig config, Label? statusLabel = null, Action<string>? logCallback = null)
     {
+        if (System.Threading.Interlocked.CompareExchange(ref running, 1, 0) != 0) return;
+        extractSuccess = false;
+        EnableButton();
         try
         {
             await LogAsync("=== Template & Tool Installation ===");
@@ -52,41 +66,22 @@ public class TemplatesInstallStep : IInstallationStep
 
             await Task.Run(() =>
             {
-                ResourceExtractor.ExtractAllResources(config.MayaFluxRoot);
+                ResourceExtractor.ExtractAllResources(config.MayaFluxRoot, host);
             });
 
             await LogAsync("[OK] Resource extraction complete");
             await LogAsync("");
 
             await LogAsync("Verifying templates installation...");
-            if (Directory.Exists(config.TemplatesDirectory))
+            if (host.DirectoryExists(config.TemplatesDirectory))
             {
-                var required = new[]
-                {
-                    "CMakeLists.txt",
-                    "CMakePresets.json",
-                    "main.cpp",
-                    "user_project.hpp",
-                    ".gitignore",
-                    Path.Combine("cmake", "mayaflux.cmake"),
-                    Path.Combine("cmake", "shaders.cmake"),
-                    Path.Combine("cmake", "build_community.cmake"),
-
-                    Path.Combine("community", "module.cmake"),
-                    Path.Combine("community", "community.json"),
-                    Path.Combine("community", "CMakePresets.json"),
-                    Path.Combine("community", "test", "CMakeLists.txt"),
-
-                    Path.Combine("vscode", "settings.json"),
-                    Path.Combine("vscode", "tasks.json"),
-                    Path.Combine("vscode", "launch.json"),
-                };
+                var required = ResourceExtractor.RequiredTemplates;
 
                 var missing = new System.Collections.Generic.List<string>();
                 foreach (var rel in required)
                 {
                     var full = Path.Combine(config.TemplatesDirectory, rel);
-                    if (File.Exists(full))
+                    if (host.FileExists(full) && host.FileLength(full) > 0)
                         await LogAsync($"[OK] {rel}");
                     else
                         missing.Add(rel);
@@ -99,7 +94,7 @@ public class TemplatesInstallStep : IInstallationStep
                     throw new Exception($"{missing.Count} required template file(s) missing — installation is broken.");
                 }
 
-                var totalFiles = Directory.GetFiles(config.TemplatesDirectory, "*", SearchOption.AllDirectories);
+                var totalFiles = host.GetFiles(config.TemplatesDirectory, "*", SearchOption.AllDirectories);
                 await LogAsync($"[OK] Templates directory: {config.TemplatesDirectory}");
                 await LogAsync($"[OK] {totalFiles.Length} total template files");
             }
@@ -110,16 +105,12 @@ public class TemplatesInstallStep : IInstallationStep
 
             await LogAsync("");
 
-            await LogAsync("Verifying scripts installation...");
-            if (Directory.Exists(config.ScriptsDirectory))
+            if (host.ResourceNames.Any(name => name.StartsWith("Weave.Resources.scripts.", StringComparison.OrdinalIgnoreCase)))
             {
-                var scriptFiles = Directory.GetFiles(config.ScriptsDirectory, "*.ps1", SearchOption.AllDirectories);
+                if (!host.DirectoryExists(config.ScriptsDirectory)) throw new IOException($"Scripts directory not found: {config.ScriptsDirectory}");
+                var scriptFiles = host.GetFiles(config.ScriptsDirectory, "*.ps1", SearchOption.AllDirectories);
                 await LogAsync($"[OK] Scripts directory: {config.ScriptsDirectory}");
                 await LogAsync($"[OK] Found {scriptFiles.Length} PowerShell scripts");
-            }
-            else
-            {
-                await LogAsync($"[WARN] Scripts directory not found: {config.ScriptsDirectory}");
             }
 
             await LogAsync("");
@@ -137,42 +128,31 @@ public class TemplatesInstallStep : IInstallationStep
         }
         finally
         {
+            System.Threading.Interlocked.Exchange(ref running, 0);
             EnableButton();
         }
     }
 
-    private async Task LogAsync(string message)
+    private Task LogAsync(string message)
     {
-        if (logBox?.Parent != null)
-        {
-            await logBox.Invoke(new Func<Task>(async () =>
-            {
-                logBox.AppendText(message + Environment.NewLine);
-                await Task.CompletedTask;
-            }));
-        }
+        MessageLogged?.Invoke(message);
+        logCallback?.Invoke(message);
+        return InstallationStepUi.AppendLogAsync(logBox, message);
     }
 
-    private void UpdateStatus(Label statusLabel, string text, Color color)
-    {
-        if (statusLabel.Parent != null)
-        {
-            statusLabel.Invoke(new Action(() =>
-            {
-                statusLabel.Text = text;
-                statusLabel.ForeColor = color;
-            }));
-        }
-    }
+    private void UpdateStatus(Label? statusLabel, string text, Color color) => InstallationStepUi.UpdateStatus(statusLabel, text, color);
 
     private void EnableButton()
     {
+        ProceedChanged?.Invoke(extractSuccess && running == 0);
         if (nextButton?.Parent != null)
         {
             nextButton.Invoke(new Action(() =>
             {
-                nextButton.Enabled = true;
+                nextButton.Enabled = extractSuccess && running == 0;
             }));
         }
+        if (retryButton?.Parent != null)
+            retryButton.Invoke(new Action(() => retryButton.Enabled = !extractSuccess && running == 0));
     }
 }

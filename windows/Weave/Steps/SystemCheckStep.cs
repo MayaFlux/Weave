@@ -2,8 +2,6 @@ using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
-using System.Security.Principal;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Weave.Modes;
@@ -16,12 +14,25 @@ namespace Weave.UI.Pages;
 
 public class SystemCheckStep : IInstallationStep
 {
-    private Logger logger = new();
+    private Logger? logger;
+    private readonly SystemCheckHost host;
     private bool checksPass = false;
-    private bool needsReboot = false; 
     private TextBox? logBox;
     private Label? statusLabel;
     private Button? nextButton;
+
+    public SystemCheckStep() : this(new SystemCheckHost())
+    {
+        logger = new();
+    }
+
+    internal SystemCheckStep(SystemCheckHost host)
+    {
+        this.host = host;
+    }
+
+    internal event Action<string>? MessageLogged;
+    internal event Action<bool>? ProceedChanged;
 
     public void BuildUI(
         LayoutManager layout,
@@ -42,22 +53,25 @@ public class SystemCheckStep : IInstallationStep
         nextButton.Click += (s, e) => nextCallback();
         cancelButton.Click += (s, e) => Application.Exit();
 
-        Task.Run(() => PerformChecksAsync());
+        Task.Run(() => PerformChecksAsync(config));
     }
 
-    private async Task PerformChecksAsync()
+    internal async Task<bool> PerformChecksAsync(InstallationConfig config)
     {
         checksPass = true;
 
         await LogAsync("Checking Windows architecture...");
-        if (IntPtr.Size == 8)
+        if (host.PointerSize == 8 && host.ProcessArchitecture == System.Runtime.InteropServices.Architecture.X64)
         {
             await LogAsync("[OK] 64-bit Windows");
         }
         else
         {
-            await LogAsync("[ERROR] 64-bit Windows required");
+            await LogAsync("[ERROR] An x64 Windows process is required");
             checksPass = false;
+            UpdateStatus("Unsupported architecture", ThemeColors.Error);
+            EnableButton();
+            return false;
         }
 
         await LogAsync("");
@@ -72,13 +86,27 @@ public class SystemCheckStep : IInstallationStep
             checksPass = false;
             UpdateStatus("Admin privileges required", ThemeColors.Error);
             EnableButton();
-            return;
+            return false;
         }
 
         await LogAsync("");
         await LogAsync("Checking for 7-Zip...");
 
-        if (string.IsNullOrEmpty(Find7zPath()))
+        string? sevenZipPath;
+        try
+        {
+            sevenZipPath = Find7zPath();
+        }
+        catch (Exception ex)
+        {
+            await LogAsync($"[ERROR] Cannot check 7-Zip: {ex.Message}");
+            checksPass = false;
+            UpdateStatus("Cannot check prerequisites", ThemeColors.Error);
+            EnableButton();
+            return false;
+        }
+
+        if (string.IsNullOrEmpty(sevenZipPath))
         {
             await LogAsync("[INSTALLING] Downloading 7-Zip...");
             bool installed = await Install7ZipAsync();
@@ -103,20 +131,22 @@ public class SystemCheckStep : IInstallationStep
         if (!HasMsvcToolchain())
         {
             await LogAsync("[INSTALLING] Visual Studio Build Tools not found");
-            await LogAsync("[INSTALLING] Installing MSVC build tools via winget (this may take 10-20 minutes)...");
+            await LogAsync("[INSTALLING] Windows requires additional Microsoft C++ libraries and SDK files to build MayaFlux projects and support live C++ compilation, even when LLVM is used. These shared prerequisites account for most of this installation's size. Microsoft's installer will display progress, and Weave will continue when it finishes.");
+            await LogAsync("[INSTALLING] Installing Microsoft C++ prerequisites (this may take 10-20 minutes)...");
             int exitCode = await InstallMsvcAsync();
-            if (exitCode == 0 || exitCode == 3010)
+            if (exitCode == 3010)
+                config.NeedsReboot = true;
+            if ((exitCode == 0 || exitCode == 3010) && HasMsvcToolchain())
             {
                 await LogAsync("[OK] MSVC build tools installed");
                 if (exitCode == 3010)
                 {
                     await LogAsync("[WARN] A system restart is required before building");
-                    needsReboot = true;
                 }
             }
             else
             {
-                await LogAsync($"[ERROR] MSVC install failed (exit code {exitCode})");
+                await LogAsync($"[ERROR] MSVC installation did not provide a usable x64 toolchain (exit code {exitCode})");
                 checksPass = false;
             }
         }
@@ -138,29 +168,41 @@ public class SystemCheckStep : IInstallationStep
         }
 
         EnableButton();
+        return checksPass;
     }
 
     private async Task<bool> Install7ZipAsync()
     {
+        string? installerPath = null;
+        bool ownsInstaller = false;
         try
         {
-            string tempDir = Path.GetTempPath();
-            string installerPath = Path.Combine(tempDir, "7z-install.exe");
+            string tempDir = host.TempDirectory;
+            if (!Path.IsPathFullyQualified(tempDir) || tempDir.StartsWith(@"\\") ||
+                Path.TrimEndingDirectorySeparator(Path.GetFullPath(tempDir)) == Path.GetPathRoot(tempDir))
+                throw new IOException("Installer temporary directory must be a local absolute directory below a drive root");
+            installerPath = Path.Combine(Path.GetFullPath(tempDir), "7z-install.exe");
+            if (host.FileExists(installerPath))
+                throw new IOException("Temporary installer already exists; it will not be overwritten");
 
-            using (var client = new HttpClient())
+            using (var response = await host.DownloadAsync("https://www.7-zip.org/a/7z2301-x64.exe", TimeSpan.FromMinutes(5)))
             {
-                client.Timeout = TimeSpan.FromMinutes(5);
-                var response = await client.GetAsync("https://www.7-zip.org/a/7z2301-x64.exe");
-
                 if (!response.IsSuccessStatusCode)
                 {
                     await LogAsync("[ERROR] Download failed");
                     return false;
                 }
 
-                using (var fs = File.Create(installerPath))
+                using (var fs = host.CreateFile(installerPath))
                 {
+                    ownsInstaller = true;
                     await response.Content.CopyToAsync(fs);
+                    fs.Position = 0;
+                    using var executable = new System.Reflection.PortableExecutable.PEReader(fs, System.Reflection.PortableExecutable.PEStreamOptions.LeaveOpen);
+                    if (executable.PEHeaders.PEHeader == null ||
+                        executable.PEHeaders.CoffHeader.Machine != System.Reflection.PortableExecutable.Machine.Amd64 ||
+                        !executable.PEHeaders.CoffHeader.Characteristics.HasFlag(System.Reflection.PortableExecutable.Characteristics.ExecutableImage))
+                        throw new IOException("Downloaded installer is not an x64 Windows executable");
                 }
             }
 
@@ -174,7 +216,7 @@ public class SystemCheckStep : IInstallationStep
                 CreateNoWindow = true
             };
 
-            using (var process = System.Diagnostics.Process.Start(psi))
+            using (var process = host.StartProcess(psi))
             {
                 if (process == null)
                 {
@@ -182,14 +224,22 @@ public class SystemCheckStep : IInstallationStep
                     return false;
                 }
 
-                process.WaitForExit(300000); 
+                if (!process.WaitForExit(300000))
+                {
+                    process.Terminate();
+                    await LogAsync("[ERROR] 7-Zip installer timed out");
+                    return false;
+                }
+                if (process.ExitCode != 0)
+                {
+                    await LogAsync($"[ERROR] 7-Zip installer failed (exit code {process.ExitCode})");
+                    return false;
+                }
             }
 
-            await Task.Delay(3000);
+            await host.DelayAsync(TimeSpan.FromSeconds(3));
 
             bool found = !string.IsNullOrEmpty(Find7zPath());
-
-            try { File.Delete(installerPath); } catch { }
 
             return found;
         }
@@ -197,6 +247,14 @@ public class SystemCheckStep : IInstallationStep
         {
             await LogAsync($"[ERROR] {ex.Message}");
             return false;
+        }
+        finally
+        {
+            if (ownsInstaller && installerPath != null)
+            {
+                try { host.DeleteFile(installerPath); }
+                catch (Exception ex) { await LogAsync($"[WARN] Temporary installer cleanup failed: {ex.Message}"); }
+            }
         }
     }
     private string? Find7zPath()
@@ -207,12 +265,14 @@ public class SystemCheckStep : IInstallationStep
             "C:\\Program Files (x86)\\7-Zip\\7z.exe"
         };
 
-        return possiblePaths.FirstOrDefault(path => File.Exists(path));
+        return possiblePaths.FirstOrDefault(host.FileExists);
     }
 
     private bool HasMsvcToolchain()
     {
-        var vswhere = FindVsWhere();
+        string? vswhere;
+        try { vswhere = FindVsWhere(); }
+        catch { return false; }
         if (vswhere != null)
         {
             try
@@ -220,17 +280,23 @@ public class SystemCheckStep : IInstallationStep
                 var psi = new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = vswhere,
-                    Arguments = "-latest -prerelease -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationVersion",
+                    Arguments = "-latest -prerelease -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find VC\\Tools\\MSVC\\**\\bin\\Hostx64\\x64\\cl.exe",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     CreateNoWindow = true
                 };
-                using var p = System.Diagnostics.Process.Start(psi);
+                using var p = host.StartProcess(psi);
                 if (p != null)
                 {
-                    var output = p.StandardOutput.ReadToEnd().Trim();
-                    p.WaitForExit();
-                    if (!string.IsNullOrEmpty(output))
+                    if (!p.WaitForExit(30000))
+                    {
+                        p.Terminate();
+                        return false;
+                    }
+                    var output = p.ReadStandardOutput().Trim();
+                    if (p.ExitCode == 0 && output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .Any(path => Path.IsPathFullyQualified(path) &&
+                            path.EndsWith(@"\bin\Hostx64\x64\cl.exe", StringComparison.OrdinalIgnoreCase) && host.FileExists(path)))
                         return true;
                 }
             }
@@ -247,8 +313,15 @@ public class SystemCheckStep : IInstallationStep
         foreach (var b in basePaths)
             foreach (var y in years)
                 foreach (var e in editions)
-                    if (Directory.Exists(Path.Combine(b, y, e, "VC", "Tools", "MSVC")))
-                        return true;
+                {
+                    try
+                    {
+                        if (host.EnumerateFiles(Path.Combine(b, y, e, "VC", "Tools", "MSVC"), "cl.exe")
+                            .Any(path => path.EndsWith(@"\bin\Hostx64\x64\cl.exe", StringComparison.OrdinalIgnoreCase) && host.FileExists(path)))
+                            return true;
+                    }
+                    catch { }
+                }
         return false;
     }
 
@@ -259,12 +332,12 @@ public class SystemCheckStep : IInstallationStep
             @"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe",
             @"C:\Program Files\Microsoft Visual Studio\Installer\vswhere.exe"
         };
-        return candidates.FirstOrDefault(File.Exists);
+        return candidates.FirstOrDefault(host.FileExists);
     }
 
     private bool IsWindows11()
     {
-        return Environment.OSVersion.Version.Build >= 22000;
+        return host.WindowsBuild >= 22000;
     }
 
     private async Task<int> InstallMsvcAsync()
@@ -287,7 +360,7 @@ public class SystemCheckStep : IInstallationStep
             {
                 FileName = "winget",
                 Arguments = $"install {wingetId} " +
-                            "--override \"--wait --quiet " +
+                            "--override \"--wait --passive --norestart " +
                             "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 " +
                             "--add Microsoft.VisualStudio.Component.Windows11SDK.22621 " +
                             "--add Microsoft.VisualStudio.Component.VC.Redist.14.Latest\"",
@@ -297,10 +370,14 @@ public class SystemCheckStep : IInstallationStep
                 CreateNoWindow = true
             };
 
-            using var process = System.Diagnostics.Process.Start(psi);
+            using var process = host.StartProcess(psi);
             if (process == null) return -1;
 
-            process.WaitForExit();
+            if (!process.WaitForExit(3600000))
+            {
+                await LogAsync("[ERROR] Microsoft prerequisite installation timed out. The Microsoft installer may still be running; let it finish before retrying.");
+                return -1;
+            }
             return process.ExitCode;
         }
         catch (Exception ex)
@@ -310,33 +387,17 @@ public class SystemCheckStep : IInstallationStep
         }
     }
 
-    private async Task LogAsync(string message)
+    private Task LogAsync(string message)
     {
-        if (logBox != null && logBox.Parent != null)
-        {
-            await logBox.Invoke(new Func<Task>(async () =>
-            {
-                logBox.AppendText(message + Environment.NewLine);
-                logBox.Refresh();
-                await Task.CompletedTask;
-            }));
-        }
+        MessageLogged?.Invoke(message);
+        return InstallationStepUi.AppendLogAsync(logBox, message, refresh: true);
     }
 
-    private void UpdateStatus(string text, Color color)
-    {
-        if (statusLabel != null && statusLabel.Parent != null)
-        {
-            statusLabel.Invoke(new Action(() =>
-            {
-                statusLabel.Text = text;
-                statusLabel.ForeColor = color;
-            }));
-        }
-    }
+    private void UpdateStatus(string text, Color color) => InstallationStepUi.UpdateStatus(statusLabel, text, color);
 
     private void EnableButton()
     {
+        ProceedChanged?.Invoke(checksPass);
         if (nextButton != null && nextButton.Parent != null)
         {
             nextButton.Invoke(new Action(() =>
@@ -350,9 +411,7 @@ public class SystemCheckStep : IInstallationStep
     {
         try
         {
-            var identity = WindowsIdentity.GetCurrent();
-            var principal = new WindowsPrincipal(identity);
-            return principal.IsInRole(WindowsBuiltInRole.Administrator);
+            return host.IsAdministrator();
         }
         catch
         {

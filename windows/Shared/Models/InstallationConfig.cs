@@ -12,4 +12,5 @@ public class InstallationConfig
     public string LibDirectory => Path.Combine(MayaFluxRoot, "lib");
     public string BinDirectory => Path.Combine(MayaFluxRoot, "bin");
     public bool NeedsReboot { get; set; } = false;
+    public Dictionary<string, string> DependencyExecutablePaths { get; } = new(StringComparer.OrdinalIgnoreCase);
 }
