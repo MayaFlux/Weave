@@ -160,6 +160,7 @@ cmd_new() {
     # ============================================================================
 
     [ ! -f "$TEMPLATES_DIR/CMakeLists.txt" ] && error "Required template missing: CMakeLists.txt"
+    [ ! -f "$TEMPLATES_DIR/validate-macos.sh" ] && error "Required template missing: validate-macos.sh"
     [ ! -f "$TEMPLATES_DIR/cmake/mayaflux.cmake" ] && error "Required template missing: cmake/mayaflux.cmake"
     [ ! -f "$TEMPLATES_DIR/cmake/shaders.cmake" ] && error "Required template missing: cmake/shaders.cmake"
     [ ! -f "$TEMPLATES_DIR/cmake/build_community.cmake" ] && error "Required template missing: cmake/build_community.cmake"
@@ -211,6 +212,11 @@ cmd_new() {
 
     cp "$TEMPLATES_DIR/CMakePresets.json" "$PROJECT_DIR/CMakePresets.json"
     echo "  ✓ Copied CMakePresets.json"
+
+    cp "$TEMPLATES_DIR/validate-macos.sh" "$PROJECT_DIR/validate.sh"
+    chmod +x "$PROJECT_DIR/validate.sh"
+    echo "  ✓ Copied validate.sh"
+    touch "$PROJECT_DIR/community.cmake"
 
     # ============================================================================
     # COPY main.cpp
@@ -289,6 +295,10 @@ mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 cmake --build . --parallel
 \`\`\`
+
+## Troubleshooting
+
+If setup or a build fails, run `./validate.sh` to check the MayaFlux Homebrew setup, shell environment, build tools, and project files.
 
 ## Running
 

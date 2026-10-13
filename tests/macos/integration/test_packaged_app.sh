@@ -44,6 +44,7 @@ assert_file "$cli"
 assert_directory "$resources/templates"
 assert_file "$resources/templates/CMakeLists.txt"
 assert_file "$resources/templates/community/community.json"
+assert_file "$resources/templates/validate-macos.sh"
 
 architectures="$(lipo -archs "$app/Contents/MacOS/Weave")"
 [ "$architectures" = arm64 ] || fail "Expected arm64 app binary, found: $architectures"
@@ -58,6 +59,9 @@ fixture_root="$test_root/mayaflux"
 mkdir -p "$fixture_root/lib/cmake/MayaFlux" "$test_root/shims"
 printf 'set(PACKAGE_VERSION "0.5.0")\n' \
     >"$fixture_root/lib/cmake/MayaFlux/MayaFluxConfigVersion.cmake"
+printf 'include(CMakeFindDependencyMacro)\n' \
+    >"$fixture_root/lib/cmake/MayaFlux/MayaFluxConfig.cmake"
+printf 'export MAYAFLUX_ROOT=%s\n' "$fixture_root" >"$fixture_root/env.sh"
 
 cat >"$test_root/shims/curl" <<'SH'
 #!/bin/sh
@@ -84,7 +88,24 @@ cat >"$test_root/shims/jq" <<'SH'
 #!/bin/sh
 printf 'https://invalid.example/%s 0.5.0\n' "$4"
 SH
-chmod +x "$test_root/shims/curl" "$test_root/shims/git" "$test_root/shims/jq"
+cat >"$test_root/shims/brew" <<'SH'
+#!/bin/sh
+case "${1:-}" in
+    list) printf 'mayaflux-dev\n' ;;
+    --prefix) printf '%s\n' "$WEAVE_TEST_MAYAFLUX_ROOT" ;;
+    *) exit 1 ;;
+esac
+SH
+cat >"$test_root/shims/cmake" <<'SH'
+#!/bin/sh
+printf 'cmake version 3.31.0\n'
+SH
+cat >"$test_root/shims/ninja" <<'SH'
+#!/bin/sh
+exit 0
+SH
+chmod +x "$test_root/shims/curl" "$test_root/shims/git" "$test_root/shims/jq" \
+    "$test_root/shims/brew" "$test_root/shims/cmake" "$test_root/shims/ninja"
 mkdir -p "$test_root/curl-only"
 ln -s "$test_root/shims/curl" "$test_root/curl-only/curl"
 
@@ -93,12 +114,14 @@ export HOME="$test_root/home"
 export ZDOTDIR="$test_root/zdotdir"
 tool_bin="$test_root/tools"
 mkdir -p "$tool_bin"
-for utility in zsh cat cp dirname grep head ls mkdir pwd sed seq sleep touch tr wc; do
+for utility in zsh cat cp dirname grep head ls mkdir mv pwd sed seq sleep touch tr wc python3; do
     utility_path="$(command -v "$utility" || true)"
     [ -n "$utility_path" ] && ln -s "$utility_path" "$tool_bin/$utility"
 done
-export PATH="$test_root/shims:$tool_bin"
+mkdir -p "$test_root/home/.local/bin"
+export PATH="$HOME/.local/bin:$test_root/shims:$tool_bin"
 export MAYAFLUX_ROOT="$fixture_root"
+export WEAVE_TEST_MAYAFLUX_ROOT="$fixture_root"
 export WEAVE_TEST_REGISTRY="$test_root/registry.json"
 export WEAVE_TEST_MODULE_FIXTURE="$test_root/module-fixture"
 export WEAVE_TEST_GIT_LOG="$test_root/git.log"
@@ -124,9 +147,41 @@ project="$project_parent/DemoProject"
 assert_file "$project/CMakeLists.txt"
 assert_file "$project/src/main.cpp"
 assert_file "$project/cmake/build_community.cmake"
+assert_file "$project/validate.sh"
+[ -x "$project/validate.sh" ] || fail "Project validator is not executable"
+assert_file "$project/community.cmake"
 assert_file "$project/.vscode/settings.json"
 assert_output_contains "$(cat "$project/CMakeLists.txt")" DemoProject
 assert_output_contains "$(cat "$project/cmake/mayaflux.cmake")" MayaFlux::MayaFluxHost
+printf "# MayaFlux (installed via Homebrew)\nsource '%s/env.sh'\nexport PATH=\"\$HOME/.local/bin:\$PATH\"\n" \
+    "$fixture_root" >"$ZDOTDIR/.zshenv"
+validator_output="$("$project/validate.sh" 2>&1)" \
+    || fail "Generated project validator rejected the controlled environment: $validator_output"
+assert_output_contains "$validator_output" "zsh startup file: $ZDOTDIR/.zshenv"
+assert_output_contains "$validator_output" 'MAYAFLUX_ROOT:'
+if missing_tools_output="$(PATH="$tool_bin" "$project/validate.sh" 2>&1)"; then
+    fail "Validator unexpectedly succeeded without Homebrew, CMake, or Ninja"
+fi
+assert_output_contains "$missing_tools_output" 'Homebrew was not found'
+assert_output_contains "$missing_tools_output" 'CMake was not found'
+if invalid_root_output="$(MAYAFLUX_ROOT=relative "$project/validate.sh" 2>&1)"; then
+    fail "Validator unexpectedly accepted a relative MAYAFLUX_ROOT"
+fi
+assert_output_contains "$invalid_root_output" 'MAYAFLUX_ROOT must be an absolute path'
+if missing_config_output="$(MAYAFLUX_ROOT="$test_root/missing-mayaflux" "$project/validate.sh" 2>&1)"; then
+    fail "Validator unexpectedly accepted MAYAFLUX_ROOT without MayaFluxConfig.cmake"
+fi
+assert_output_contains "$missing_config_output" 'MayaFluxConfig.cmake is missing under MAYAFLUX_ROOT'
+cp "$project/CMakePresets.json" "$test_root/CMakePresets.json.saved"
+printf '{bad json\n' >"$project/CMakePresets.json"
+assert_failure_contains 'Project presets are invalid' "$project/validate.sh"
+cp "$test_root/CMakePresets.json.saved" "$project/CMakePresets.json"
+printf '../outside\n' >>"$project/community.cmake"
+assert_failure_contains 'Unsafe or unsupported community module entry' "$project/validate.sh"
+printf '\n' >"$project/community.cmake"
+mv "$ZDOTDIR/.zshenv" "$ZDOTDIR/.zshenv.saved"
+assert_failure_contains "zsh startup file is missing: $ZDOTDIR/.zshenv" "$project/validate.sh"
+mv "$ZDOTDIR/.zshenv.saved" "$ZDOTDIR/.zshenv"
 
 unsafe_parent="$test_root/Unsafe Projects"
 mkdir -p "$unsafe_parent"
