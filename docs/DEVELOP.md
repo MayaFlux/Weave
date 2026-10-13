@@ -124,7 +124,7 @@ cd Weave
 # Output: build/linux/Weave-X.X.X-x86_64.AppImage
 ```
 
-The AppImage bundles a Python standalone runtime, GTK4, libadwaita, and all typelibs. If Podman is not available the script runs directly, but output compatibility is not guaranteed.
+The AppImage bundles a Python standalone runtime, GTK4, libadwaita, typelibs, and the EGL and GL libraries required to load GTK. If Podman is not available the script runs directly, but output compatibility is not guaranteed.
 
 After building, run the Linux AppImage integration tests with:
 
@@ -132,7 +132,9 @@ After building, run the Linux AppImage integration tests with:
 python3 -m unittest discover -s tests/linux/integration -p 'test_*.py' -v
 ```
 
-CI runs these tests on the built AppImage before uploading it. They extract the image, verify that the Python and GTK runtime loads from the bundle, and exercise the packaged installer process and CLI with local fixtures. The AppImage still uses host services such as glibc, a display server, a shell, and the native package manager.
+CI runs these tests on the built AppImage before uploading it. They extract the image, verify that the Python and GTK runtime loads from the bundle, and exercise the packaged installer process and CLI with local fixtures. A second runtime test runs in a minimal Ubuntu container with no GTK or graphics libraries installed. The AppImage still uses the host kernel, glibc, display server, hardware driver, shell, and native package manager.
+
+The manual build workflow has a checkbox for each platform, enabled by default. It uploads artifacts for the selected platforms and publishes a release only when all three builds succeed.
 
 ---
 

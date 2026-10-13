@@ -53,6 +53,7 @@ if [ "${WEAVE_APPIMAGE_CONTAINER:-0}" = "1" ]; then
         libgtk-4-dev \
         gtk-4-examples \
         libadwaita-1-dev libadwaita-1-0 \
+        libegl1 libgl1 libgbm1 \
         libgirepository-2.0-dev \
         libglib2.0-dev \
         libcairo2-dev libcairo2 \
@@ -224,6 +225,10 @@ cd "$REPO_ROOT"
 
 echo "Manually deploying GTK4 modules and typelibs..."
 
+for library in libEGL.so.1 libGL.so.1 libGLX.so.0 libGLdispatch.so.0; do
+    cp -L "$GTK_LIB_DIR/$library" "$APPDIR/usr/lib/$library"
+done
+
 GTK_MOD_SRC="${GTK_LIB_DIR}/gtk-4.0"
 GTK_MOD_DST="$APPDIR/usr/lib/gtk-4.0"
 if [ -d "$GTK_MOD_SRC" ]; then
@@ -241,6 +246,26 @@ SCHEMA_SRC="/usr/share/glib-2.0/schemas"
 SCHEMA_DST="$APPDIR/usr/share/glib-2.0/schemas"
 mkdir -p "$SCHEMA_DST"
 cp "$SCHEMA_SRC/gschemas.compiled" "$SCHEMA_DST/" 2>/dev/null || glib-compile-schemas "$SCHEMA_DST"
+
+echo "Bundling remaining shared library dependencies..."
+while :; do
+    COPIED=0
+    while IFS= read -r -d '' binary; do
+        while read -r library source; do
+            case "$library" in
+                libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libresolv.so.*|libnss_*.so.*|libanl.so.*|libutil.so.*|libmvec.so.*|libthread_db.so.*)
+                    continue
+                    ;;
+            esac
+            if [ ! -e "$APPDIR/usr/lib/$library" ]; then
+                echo "  $library <- $source"
+                cp -L "$source" "$APPDIR/usr/lib/$library"
+                COPIED=1
+            fi
+        done < <(LD_LIBRARY_PATH="$APPDIR/usr/lib" ldd "$binary" 2>/dev/null | awk '$2 == "=>" && $3 ~ /^\// {print $1, $3}')
+    done < <(find "$APPDIR/usr" -type f \( -name '*.so*' -o -name 'python3' -o -name 'Weave' \) -print0)
+    [ "$COPIED" -eq 0 ] && break
+done
 
 cat >"$APPDIR/AppRun" <<'EOF'
 #!/bin/bash
@@ -293,6 +318,10 @@ check() {
 
 check "libgtk-4.so*" "libgtk-4"
 check "libadwaita-1.so*" "libadwaita"
+check "libEGL.so.1" "libEGL"
+check "libGL.so.1" "libGL"
+check "libGLX.so.0" "libGLX"
+check "libGLdispatch.so.0" "libGLdispatch"
 check "Gtk-4.0.typelib" "Gtk-4.0 typelib"
 check "Adw-1.typelib" "Adw-1 typelib"
 

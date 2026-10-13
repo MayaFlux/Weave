@@ -114,6 +114,10 @@ class AppImageIntegrationTests(unittest.TestCase):
             "lib/templates/main.cpp",
             "lib/templates/community",
             "usr/bin/python3",
+            "usr/lib/libEGL.so.1",
+            "usr/lib/libGL.so.1",
+            "usr/lib/libGLX.so.0",
+            "usr/lib/libGLdispatch.so.0",
             "usr/lib/girepository-1.0/Gtk-4.0.typelib",
             "usr/lib/girepository-1.0/Adw-1.typelib",
             "usr/share/glib-2.0/schemas/gschemas.compiled",
@@ -142,7 +146,10 @@ from lib.config import get_config
 
 maps = Path("/proc/self/maps").read_text().splitlines()
 libraries = {}
-for name in ("libgtk-4.so", "libadwaita-1.so"):
+for name in (
+    "libgtk-4.so", "libadwaita-1.so", "libEGL.so", "libGL.so",
+    "libGLX.so", "libGLdispatch.so",
+):
     libraries[name] = sorted({
         line.split()[-1] for line in maps
         if name in line and line.split()[-1].startswith("/")

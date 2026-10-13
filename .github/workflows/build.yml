@@ -2,6 +2,19 @@ name: Build Weave Installers
 
 on:
   workflow_dispatch:
+    inputs:
+      macos:
+        description: Build macOS
+        type: boolean
+        default: true
+      windows:
+        description: Build Windows
+        type: boolean
+        default: true
+      linux:
+        description: Build Linux
+        type: boolean
+        default: true
   push:
     branches: [main]
     tags:
@@ -9,6 +22,7 @@ on:
 
 jobs:
   build-macos:
+    if: github.event_name != 'workflow_dispatch' || inputs.macos
     runs-on: macos-26
     outputs:
       sha256: ${{ steps.hash.outputs.SHA256 }}
@@ -89,6 +103,7 @@ jobs:
           retention-days: 7
 
   build-windows:
+    if: github.event_name != 'workflow_dispatch' || inputs.windows
     runs-on: windows-latest
     outputs:
       sha256: ${{ steps.hash.outputs.SHA256 }}
@@ -209,6 +224,7 @@ jobs:
         run: .\.github\scripts\verify-windows-build.ps1
 
   build-linux:
+    if: github.event_name != 'workflow_dispatch' || inputs.linux
     runs-on: ubuntu-latest
     outputs:
       sha256: ${{ steps.hash.outputs.SHA256 }}
@@ -242,6 +258,27 @@ jobs:
       - name: Test AppImage integration
         run: python3 -m unittest discover -s tests/linux/integration -p 'test_*.py' -v
 
+      - name: Test AppImage runtime without host GUI libraries
+        run: |
+          podman run --rm --pull=never --network none \
+            -v "$PWD:/workspace:ro" -w /workspace \
+            ubuntu:25.10 bash -euc '
+              test ! -e /usr/lib/x86_64-linux-gnu/libgtk-4.so.1
+              test ! -e /usr/lib/x86_64-linux-gnu/libEGL.so.1
+              test ! -e /usr/lib/x86_64-linux-gnu/libGL.so.1
+              image="$(find /workspace/build/linux -maxdepth 1 -type f -name "Weave-*.AppImage" -print -quit)"
+              test -n "$image"
+              extract_dir="$(mktemp -d)"
+              cd "$extract_dir"
+              "$image" --appimage-extract >/dev/null
+              export PYTHONHOME="$extract_dir/squashfs-root/usr"
+              export LD_LIBRARY_PATH="$extract_dir/squashfs-root/usr/lib"
+              export WEAVE_APPIMAGE="$image"
+              "$extract_dir/squashfs-root/usr/bin/python3" -m unittest discover \
+                -s /workspace/tests/linux/integration -p "test_*.py" \
+                -k test_bundled_python_imports_application_and_bundled_gtk -v
+            '
+
       - name: Generate SHA256 hash
         id: hash
         run: |
@@ -270,6 +307,7 @@ jobs:
           retention-days: 7
 
   publish-release:
+    if: ${{ !cancelled() && needs.build-macos.result == 'success' && needs.build-windows.result == 'success' && needs.build-linux.result == 'success' }}
     needs: [build-macos, build-windows, build-linux]
     runs-on: ubuntu-latest
     permissions:
