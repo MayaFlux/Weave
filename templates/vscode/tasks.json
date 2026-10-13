@@ -3,34 +3,29 @@
   "tasks": [
     {
       "label": "Configure",
-      "type": "shell",
-      "command": "cmake",
-      "args": [
-        "-B", "build",
-        "-S", ".",
-        "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
-        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
-      ],
+      "type": "cmake",
+      "command": "configure",
+      "preset": "release",
       "group": "build",
       "problemMatcher": []
     },
     {
       "label": "Build",
-      "type": "shell",
-      "command": "cmake",
-      "args": ["--build", "build", "--parallel"],
+      "type": "cmake",
+      "command": "build",
+      "preset": "release",
       "group": {
         "kind": "build",
         "isDefault": true
       },
       "dependsOn": ["Configure"],
-      "problemMatcher": ["$gcc"]
+      "problemMatcher": []
     },
     {
       "label": "Clean",
-      "type": "shell",
-      "command": "cmake",
-      "args": ["--build", "build", "--target", "clean"],
+      "type": "cmake",
+      "command": "clean",
+      "preset": "release",
       "group": "build",
       "problemMatcher": []
     },

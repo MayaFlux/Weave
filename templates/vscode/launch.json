@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run @PROJECT_NAME@",
+      "name": "Run @PROJECT_NAME@ (Linux/macOS)",
       "type": "cppdbg",
       "request": "launch",
       "program": "${command:cmake.launchTargetPath}",
@@ -14,7 +14,7 @@
       ],
       "externalConsole": false,
       "windows": {
-        "type": "cppvsdbg"
+        "presentation": { "hidden": true }
       },
       "osx": {
         "MIMode": "lldb"
@@ -24,7 +24,7 @@
       }
     },
     {
-      "name": "Run @PROJECT_NAME@ (verbose)",
+      "name": "Run @PROJECT_NAME@ (Linux/macOS, verbose)",
       "type": "cppdbg",
       "request": "launch",
       "program": "${command:cmake.launchTargetPath}",
@@ -37,13 +37,52 @@
       ],
       "externalConsole": false,
       "windows": {
-        "type": "cppvsdbg"
+        "presentation": { "hidden": true }
       },
       "osx": {
         "MIMode": "lldb"
       },
       "linux": {
         "MIMode": "gdb"
+      }
+    },
+    {
+      "name": "Run @PROJECT_NAME@ (Windows)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${command:cmake.launchTargetPath}",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [
+        { "name": "MAYAFLUX_ROOT", "value": "${env:MAYAFLUX_ROOT}" }
+      ],
+      "console": "integratedTerminal",
+      "osx": {
+        "presentation": { "hidden": true }
+      },
+      "linux": {
+        "presentation": { "hidden": true }
+      }
+    },
+    {
+      "name": "Run @PROJECT_NAME@ (Windows, verbose)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${command:cmake.launchTargetPath}",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [
+        { "name": "MAYAFLUX_ROOT", "value": "${env:MAYAFLUX_ROOT}" },
+        { "name": "MAYAFLUX_DEBUG", "value": "1" }
+      ],
+      "console": "integratedTerminal",
+      "osx": {
+        "presentation": { "hidden": true }
+      },
+      "linux": {
+        "presentation": { "hidden": true }
       }
     }
   ]

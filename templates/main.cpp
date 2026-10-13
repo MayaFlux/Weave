@@ -3,7 +3,6 @@
 #include "user_project.hpp"
 #define HAS_USER_PROJECT
 #else
-#define MAYASIMPLE
 #include "MayaFlux/MayaFlux.hpp"
 #endif
 #endif
@@ -79,7 +78,7 @@ int main(int argc, char* argv[])
 
         run();
 
-        std::cout << "Press Enter [Return] to stop...\n";
+        std::cout << "Press Ctrl-C to stop...\n";
         MayaFlux::Await();
 
         MayaFlux::End();

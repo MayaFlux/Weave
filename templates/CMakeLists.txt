@@ -24,13 +24,35 @@ endif()
 # ============================================================================
 file(GLOB_RECURSE USER_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/src/*.cpp"
+)
+
+file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/src/*.h"
+    "${CMAKE_SOURCE_DIR}/src/*.hh"
     "${CMAKE_SOURCE_DIR}/src/*.hpp"
+    "${CMAKE_SOURCE_DIR}/src/*.hxx"
+    "${CMAKE_SOURCE_DIR}/src/*.inl"
+    "${CMAKE_SOURCE_DIR}/src/*.ipp"
+    "${CMAKE_SOURCE_DIR}/src/*.tpp"
+    "${CMAKE_SOURCE_DIR}/src/*.tcc"
+    "${CMAKE_SOURCE_DIR}/include/*.h"
+    "${CMAKE_SOURCE_DIR}/include/*.hh"
+    "${CMAKE_SOURCE_DIR}/include/*.hpp"
+    "${CMAKE_SOURCE_DIR}/include/*.hxx"
+    "${CMAKE_SOURCE_DIR}/include/*.inl"
+    "${CMAKE_SOURCE_DIR}/include/*.ipp"
+    "${CMAKE_SOURCE_DIR}/include/*.tpp"
+    "${CMAKE_SOURCE_DIR}/include/*.tcc"
 )
 
 # ============================================================================
 # Project Executable
 # ============================================================================
-add_executable(${PROJECT_NAME} ${USER_SOURCES})
+add_executable(${PROJECT_NAME} ${USER_SOURCES} ${HEADERS})
+target_include_directories(${PROJECT_NAME} PRIVATE
+    "${CMAKE_SOURCE_DIR}/src"
+    "${CMAKE_SOURCE_DIR}/include"
+)
 
 # ============================================================================
 # Build Type Configuration

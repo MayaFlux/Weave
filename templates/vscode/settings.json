@@ -4,21 +4,26 @@
         "ms-vscode.cmake-tools"
     ],
     "C_Cpp.default.cppStandard": "c++23",
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "C_Cpp.default.includePath": [
         "${workspaceFolder}/src",
+        "${workspaceFolder}/include",
         "${env:MAYAFLUX_ROOT}/include"
     ],
     "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
     "C_Cpp.intelliSenseEngine": "default",
     "cmake.configureOnOpen": true,
-    "cmake.buildDirectory": "${workspaceFolder}/build",
-    "cmake.buildType": "RelWithDebInfo",
-    "cmake.useCMakePresets": "never",
-    "cmake.defaultKit": "unspecified",
-    "cmake.launchTargetName": "@PROJECT_NAME@",
+    "cmake.useCMakePresets": "always",
+    "cmake.buildBeforeRun": true,
     "files.associations": {
         "*.hpp": "cpp",
-        "*.h": "cpp"
+        "*.h": "cpp",
+        "*.hh": "cpp",
+        "*.hxx": "cpp",
+        "*.inl": "cpp",
+        "*.ipp": "cpp",
+        "*.tpp": "cpp",
+        "*.tcc": "cpp"
     },
     "C_Cpp.errorSquiggles": "enabled"
 }
