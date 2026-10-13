@@ -28,8 +28,13 @@ foreach(SHADER_FILE ${PROJECT_SHADER_FILES})
 
     add_custom_command(
         OUTPUT  "${OUTPUT_FILE}"
-        COMMAND glslc "${SHADER_FILE}" -o "${OUTPUT_FILE}"
+        COMMAND glslc --target-env=vulkan1.3
+            -I "${PROJECT_SHADER_DIR}"
+            -I "${PROJECT_SHADER_DIR}/include"
+            -MD -MF "${OUTPUT_FILE}.d"
+            "${SHADER_FILE}" -o "${OUTPUT_FILE}"
         DEPENDS "${SHADER_FILE}"
+        DEPFILE "${OUTPUT_FILE}.d"
         COMMENT "Compiling shader: ${SHADER_FILE}"
         VERBATIM
     )

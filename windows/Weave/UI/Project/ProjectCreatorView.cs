@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
 using Weave.Theme;
 using Weave.UI.Layout;
+using Weave.Utils;
 
 namespace Weave.UI.Project;
 
@@ -17,6 +19,7 @@ public partial class ProjectCreatorView : UserControl
     private RichTextBox outputLog;
     private CheckBox withLilaCheckbox;
     private CheckBox withVscodeCheckbox;
+    private CheckBox withShaderSourcesCheckbox;
     private string templatesDir;
     private LayoutManager layoutManager;
 
@@ -60,6 +63,7 @@ public partial class ProjectCreatorView : UserControl
         withLilaCheckbox = layoutManager.AddCheckbox("Enable Live Coding (Lila)");
         withVscodeCheckbox = layoutManager.AddCheckbox("Configure for VS Code");
         withVscodeCheckbox.Checked = true;
+        withShaderSourcesCheckbox = layoutManager.AddCheckbox("Copy MayaFlux shader sources");
 
         var outputLabel = new Label
         {
@@ -168,6 +172,10 @@ public partial class ProjectCreatorView : UserControl
         var srcDir = Path.Combine(projectDir, "src");
         var cmakeDir = Path.Combine(projectDir, "cmake");
         var vsCodeDir = Path.Combine(projectDir, ".vscode");
+        var mayaFluxRoot = Environment.GetEnvironmentVariable("MAYAFLUX_ROOT") ?? "C:\\MayaFlux";
+        var validator = LoadTemplate("validate.ps1");
+        var installedShaderDir = Path.Combine(mayaFluxRoot, "share", "MayaFlux", "src", "shaders");
+        var installedShaders = withShaderSourcesCheckbox.Checked ? GetShaderSourceFiles(installedShaderDir) : Array.Empty<string>();
 
         Log($"Creating project structure at: {projectDir}");
 
@@ -188,8 +196,9 @@ public partial class ProjectCreatorView : UserControl
             Log("  Created .vscode/");
         }
 
-        var mayaFluxRoot = Environment.GetEnvironmentVariable("MAYAFLUX_ROOT") ?? "C:\\MayaFlux";
         Log($"  Using MAYAFLUX_ROOT: {mayaFluxRoot}");
+        File.WriteAllText(Path.Combine(projectDir, "validate.ps1"), validator);
+        Log("  Copied validate.ps1 (run manually for diagnostics)");
 
         // -------------------------------------------------------------------------
         // CMakeLists.txt
@@ -289,6 +298,20 @@ public partial class ProjectCreatorView : UserControl
             }
         }
 
+        foreach (var shader in installedShaders)
+        {
+            var relative = Path.GetRelativePath(installedShaderDir, shader);
+            var destination = Path.Combine(dataShadersDir, relative);
+            if (File.Exists(destination))
+            {
+                Log($"  Preserved project shader: {relative}");
+                continue;
+            }
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.Copy(shader, destination);
+            Log($"  Copied MayaFlux shader source: {relative}");
+        }
+
         // -------------------------------------------------------------------------
         // community.cmake (empty sentinel)
         // -------------------------------------------------------------------------
@@ -349,6 +372,12 @@ public partial class ProjectCreatorView : UserControl
         var readme =
             $"# {projectName}\r\n\r\n" +
             "A MayaFlux multimedia DSP project.\r\n\r\n" +
+            "## Diagnostics\r\n\r\n" +
+            "When you need diagnostics, run this manually from the project folder:\r\n\r\n" +
+            "```powershell\r\n" +
+            "powershell -NoProfile -ExecutionPolicy Bypass -File .\\validate.ps1\r\n" +
+            "```\r\n\r\n" +
+            "It checks the project, MayaFlux installation, tools and terminal settings without building or changing anything. Copy the report when requesting help.\r\n\r\n" +
             "## Building\r\n\r\n" +
             "```bash\r\n" +
             "mkdir build && cd build\r\n" +
@@ -367,6 +396,36 @@ public partial class ProjectCreatorView : UserControl
 
         File.WriteAllText(Path.Combine(projectDir, "README.md"), readme);
         Log("  Generated README.md");
+    }
+
+    private static string[] GetShaderSourceFiles(string directory)
+    {
+        if (!Directory.Exists(directory))
+            throw new DirectoryNotFoundException($"MayaFlux shader sources were not found at: {directory}. Update your MayaFlux installation or turn off Copy MayaFlux shader sources.");
+        var host = new WindowsInstallationHost();
+        WindowsInstallationPaths.EnsureNoReparseAncestors(directory, host);
+        var files = new List<string>();
+        var extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".glsl", ".vert", ".frag", ".comp", ".geom", ".tesc", ".tese", ".mesh", ".task",
+            ".rgen", ".rchit", ".rahit", ".rmiss", ".rint", ".rcall"
+        };
+        var pending = new Stack<string>();
+        pending.Push(directory);
+        while (pending.Count > 0)
+        {
+            foreach (var entry in Directory.EnumerateFileSystemEntries(pending.Pop()))
+            {
+                var attributes = File.GetAttributes(entry);
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                    throw new IOException($"MayaFlux shader sources contain a linked path: {entry}");
+                if ((attributes & FileAttributes.Directory) != 0) pending.Push(entry);
+                else if (extensions.Contains(Path.GetExtension(entry))) files.Add(entry);
+            }
+        }
+        if (files.Count == 0)
+            throw new IOException($"MayaFlux shader sources are empty at: {directory}. Update your MayaFlux installation or turn off Copy MayaFlux shader sources.");
+        return files.ToArray();
     }
 
     private string GenerateCMakeLists(string projectName, string mayaFluxCmakePath, string lilaBlock)

@@ -1,4 +1,4 @@
-param([string]$MayaFluxRoot)
+param([string]$MayaFluxRoot, [string]$ProjectRoot)
 
 function Get-ValidationEnvironment($Name, $Target = 'Process') {
     [Environment]::GetEnvironmentVariable($Name, [EnvironmentVariableTarget]$Target)
@@ -146,12 +146,132 @@ function Test-ValidationTool($Label, $Name, $Pattern, $Candidates = @(), $Argume
     catch { Write-ValidationResult 'FIX' "$Label could not be checked." ($_.Exception.Message + ' Check access to the tool and include this message in your report.') }
 }
 
-function Invoke-InstallValidation([string]$Root = $MayaFluxRoot) {
+function Test-ValidationProject([string]$Directory) {
+    try {
+        $Directory = [IO.Path]::GetFullPath($Directory)
+        if (-not (Test-Path -LiteralPath $Directory -PathType Container)) { throw 'The project folder does not exist.' }
+    }
+    catch {
+        Write-ValidationResult 'FIX' 'The project location could not be checked.' ($_.Exception.Message + ' Check -ProjectRoot and try again.')
+        return
+    }
+    Invoke-ValidationSection 'Project files' {
+        Write-Host "      Location: $Directory"
+        foreach ($relative in @('CMakeLists.txt', 'CMakePresets.json', 'cmake\mayaflux.cmake', 'cmake\shaders.cmake', 'cmake\build_community.cmake')) {
+            $path = Join-Path $Directory $relative
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+                Write-ValidationResult 'FIX' "A project build file is missing: $relative" 'Restore the file from your project backup or the installed Weave templates; preserve your custom changes.'
+                continue
+            }
+            $content = Get-Content -LiteralPath $path -Raw -ErrorAction Stop
+            if ([string]::IsNullOrWhiteSpace($content)) {
+                Write-ValidationResult 'FIX' "A project build file is empty: $relative" 'Restore the build file before configuring the project.'
+            }
+            elseif ($content -match '@[A-Z][A-Z0-9_]*@') {
+                Write-ValidationResult 'FIX' "A template substitution is unfinished in $relative." "Unresolved value: $($Matches[0]). Correct the generated project configuration."
+            }
+            else { Write-ValidationResult 'OK' $relative }
+        }
+        $sourceDirectory = Join-Path $Directory 'src'
+        $sources = @(if (Test-Path -LiteralPath $sourceDirectory -PathType Container) { Get-ChildItem -LiteralPath $sourceDirectory -Filter '*.cpp' -Recurse -File -ErrorAction Stop })
+        if ($sources.Count) { Write-ValidationResult 'OK' 'C++ source files' "$($sources.Count) file(s) under src, including nested folders." }
+        else { Write-ValidationResult 'WARN' 'No .cpp files were found under src.' 'The generated CMake template uses src. If you moved your sources, confirm that CMakeLists.txt lists their new locations.' }
+    }
+
+    Invoke-ValidationSection 'Project presets' {
+        $path = Join-Path $Directory 'CMakePresets.json'
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return }
+        $presets = Get-Content -LiteralPath $path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        if (-not $presets.version -or -not $presets.configurePresets) {
+            Write-ValidationResult 'FIX' 'Project presets are missing a version or configure presets.' 'Restore or correct CMakePresets.json.'
+            return
+        }
+        foreach ($name in @('release', 'debug')) {
+            $configure = @($presets.configurePresets | Where-Object { $_.name -ceq $name })
+            $build = @($presets.buildPresets | Where-Object { $_.name -ceq $name })
+            if ($configure.Count -ne 1 -or $build.Count -ne 1) {
+                Write-ValidationResult 'WARN' "The standard $name configure/build preset pair is unavailable." 'If you renamed the presets, update your VS Code tasks and build commands to match.'
+            }
+            elseif ($build[0].configurePreset -cne $name) {
+                Write-ValidationResult 'WARN' "The $name build preset references another configure preset." "It references '$($build[0].configurePreset)'. Confirm this is intentional."
+            }
+            else { Write-ValidationResult 'OK' "$name preset pair" }
+        }
+        $cmake = Find-ValidationTool 'cmake'
+        if ($cmake) {
+            $result = Invoke-ValidationTool $cmake @('-S', $Directory, '--list-presets=all')
+            if ($result.Code -ne 0) { Write-ValidationResult 'FIX' 'CMake could not read the project presets.' $result.Text }
+            else { Write-ValidationResult 'OK' 'CMake preset syntax, inheritance and references' }
+        }
+    }
+
+    Invoke-ValidationSection 'Project community modules' {
+        $list = Join-Path $Directory 'community.cmake'
+        if (-not (Test-Path -LiteralPath $list -PathType Leaf)) {
+            Write-ValidationResult 'WARN' 'community.cmake is missing.' 'No modules will be discovered through the standard project module list.'
+            return
+        }
+        $names = @(Get-Content -LiteralPath $list -ErrorAction Stop | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') })
+        foreach ($name in $names) {
+            if ($name -notmatch '^[A-Za-z_][A-Za-z0-9_-]*$') {
+                Write-ValidationResult 'FIX' "Unsafe or unsupported community module entry: $name" 'Use one module directory name per line, without paths or CMake commands.'
+                continue
+            }
+            $module = Join-Path $Directory "community\$name\$name.cmake"
+            if (-not (Test-Path -LiteralPath $module -PathType Leaf)) {
+                Write-ValidationResult 'FIX' "Community module '$name' is listed but its CMake file is missing." $module
+            }
+            else { Write-ValidationResult 'OK' "Community module: $name" }
+        }
+        if (-not $names.Count) { Write-ValidationResult 'OK' 'No community modules are requested.' }
+    }
+
+    Invoke-ValidationSection 'Project shader sources' {
+        $shaderDirectory = Join-Path $Directory 'data\shaders'
+        if (-not (Test-Path -LiteralPath $shaderDirectory -PathType Container)) {
+            Write-ValidationResult 'WARN' 'data/shaders is missing.' 'Create it if this project uses local shaders. Installed runtime shaders remain available.'
+            return
+        }
+        $stages = @('.vert', '.frag', '.comp', '.geom', '.tesc', '.tese', '.mesh', '.task', '.rgen', '.rchit', '.rahit', '.rmiss', '.rint', '.rcall')
+        $shaders = @(Get-ChildItem -LiteralPath $shaderDirectory -Recurse -File -ErrorAction Stop | Where-Object { $stages -contains $_.Extension })
+        Write-ValidationResult 'OK' 'Local shader source folder' "$($shaders.Count) stage source(s). GLSL include files remain under data/shaders."
+        $pending = @($shaders | Where-Object {
+            $compiled = $_.FullName + '.spv'
+            -not (Test-Path -LiteralPath $compiled -PathType Leaf) -or (Get-Item -LiteralPath $compiled).LastWriteTimeUtc -lt $_.LastWriteTimeUtc
+        })
+        if ($pending.Count) {
+            Write-ValidationResult 'WARN' 'Some local shader outputs are missing or older than their sources.' "$($pending.Count) source(s). Build the project to compile them; this diagnostic does not compile shaders."
+        }
+    }
+
+    Invoke-ValidationSection 'Project VS Code configuration' {
+        $editorDirectory = Join-Path $Directory '.vscode'
+        if (-not (Test-Path -LiteralPath $editorDirectory -PathType Container)) {
+            Write-ValidationResult 'OK' 'VS Code configuration is optional and is not present.'
+            return
+        }
+        foreach ($name in @('settings.json', 'tasks.json', 'launch.json')) {
+            $path = Join-Path $editorDirectory $name
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+                Write-ValidationResult 'WARN' "VS Code $name is missing." 'Configure the editor manually or restore the optional project editor files.'
+                continue
+            }
+            $content = Get-Content -LiteralPath $path -Raw -ErrorAction Stop
+            if ($content -match '@[A-Z][A-Z0-9_]*@') {
+                Write-ValidationResult 'FIX' "An unfinished template value remains in .vscode/$name." $Matches[0]
+            }
+            else { Write-ValidationResult 'OK' ".vscode/$name is present" }
+        }
+    }
+}
+
+function Invoke-InstallValidation([string]$Root = $MayaFluxRoot, [string]$ProjectDirectory = $ProjectRoot) {
     $ErrorActionPreference = 'Stop'
     $script:validationIssues = 0
     $script:validationWarnings = 0
-    Write-Host 'MayaFlux installation check'
-    Write-Host 'This checks your installation, tools and terminal settings. Nothing was changed.'
+    if ($ProjectDirectory) { Write-Host 'MayaFlux project diagnostics' }
+    else { Write-Host 'MayaFlux installation check' }
+    Write-Host 'This diagnostic is run manually. It checks files, tools and terminal settings without building or changing anything.'
     Write-Host "Windows: $([Environment]::OSVersion.Version) | PowerShell: $($PSVersionTable.PSVersion) | 64-bit terminal: $([Environment]::Is64BitProcess)"
     if (-not [Environment]::Is64BitProcess) { Write-ValidationResult 'FIX' 'Open the 64-bit version of PowerShell and try again.' }
     if (-not $Root) { $Root = Get-ValidationEnvironment 'MAYAFLUX_ROOT' }
@@ -182,6 +302,21 @@ function Invoke-InstallValidation([string]$Root = $MayaFluxRoot) {
             if (-not (Test-Path -LiteralPath (Join-Path $Root $relative) -PathType Leaf)) { Write-ValidationResult 'FIX' "A required MayaFlux file is missing: $relative" 'Run MayaFlux installation in Weave again.' }
         }
         if (-not (Test-Path -LiteralPath (Join-Path $Root 'include') -PathType Container)) { Write-ValidationResult 'FIX' 'MayaFlux headers are missing.' 'Run MayaFlux installation in Weave again.' }
+    }
+
+    Invoke-ValidationSection 'Installed shader resources' {
+        if (-not $Root) { return }
+        foreach ($entry in @(@('GLSL sources', 'share\MayaFlux\src\shaders'), @('Runtime SPIR-V', 'share\MayaFlux\runtime\shaders'))) {
+            $path = Join-Path $Root $entry[1]
+            if (-not (Test-Path -LiteralPath $path -PathType Container)) {
+                Write-ValidationResult 'WARN' "$($entry[0]) folder is missing." "Expected: $path. Older MayaFlux packages may use a different layout. Update MayaFlux if you need these resources."
+                continue
+            }
+            $pattern = if ($entry[0] -eq 'GLSL sources') { '\.(glsl|vert|frag|comp|geom|tesc|tese|mesh|task|rgen|rchit|rahit|rmiss|rint|rcall)$' } else { '\.spv$' }
+            $resources = @(Get-ChildItem -LiteralPath $path -Recurse -File -ErrorAction Stop | Where-Object { $_.Name -match $pattern })
+            if ($resources.Count) { Write-ValidationResult 'OK' $entry[0] "$($resources.Count) file(s) at $path" }
+            else { Write-ValidationResult 'WARN' "$($entry[0]) folder contains no shader files." "Location: $path. Update MayaFlux if you need these resources." }
+        }
     }
 
     Invoke-ValidationSection 'Tools used by MayaFlux and Weave' {
@@ -252,14 +387,33 @@ function Invoke-InstallValidation([string]$Root = $MayaFluxRoot) {
         if ($vulkan) { Test-ValidationEnvironment 'CPATH' (Join-Path $vulkan 'Include') -List }
     }
 
+    if ($ProjectDirectory) { Test-ValidationProject $ProjectDirectory }
+
     Write-Host "`nSummary"
-    if ($script:validationIssues -eq 0) { Write-Host 'No problems found in the installation checks.' }
+    if ($script:validationIssues -eq 0) { Write-Host 'No problems found in the required diagnostic checks.' }
     else { Write-Host "$script:validationIssues item(s) need attention. Follow the [FIX] messages above, then run this check again." }
     if ($script:validationWarnings) { Write-Host "$script:validationWarnings warning(s) are shown above for context." }
     Write-Host 'Copy this report, from the heading through this summary, when reporting a problem.'
-    Write-Host 'These checks cover installation only; they do not build or validate a project.'
+    if ($ProjectDirectory) { Write-Host 'Project checks do not prove successful compilation or runtime shader lookup. No configure, build or application launch was performed.' }
+    else { Write-Host 'To check a project as well, pass -ProjectRoot followed by its folder, or run the copy of this script in that project.' }
     if ($script:validationIssues -gt 0) { return 1 }
     return 0
 }
 
-if ($MyInvocation.InvocationName -ne '.') { exit (Invoke-InstallValidation) }
+if ($MyInvocation.InvocationName -ne '.') {
+    $diagnosticProject = $ProjectRoot
+    if (-not $diagnosticProject) {
+        foreach ($candidate in @($PSScriptRoot, (Get-Location).Path)) {
+            if ($candidate -match '[\\/]share[\\/]weave[\\/]templates[\\/]?$') { continue }
+            if ((Test-Path -LiteralPath (Join-Path $candidate 'main.cpp') -PathType Leaf) -and
+                (Test-Path -LiteralPath (Join-Path $candidate 'user_project.hpp') -PathType Leaf)) { continue }
+            if ((Test-Path -LiteralPath (Join-Path $candidate 'CMakeLists.txt') -PathType Leaf) -or
+                ((Test-Path -LiteralPath (Join-Path $candidate 'src') -PathType Container) -and
+                 (Test-Path -LiteralPath (Join-Path $candidate 'cmake') -PathType Container))) {
+                $diagnosticProject = $candidate
+                break
+            }
+        }
+    }
+    exit (Invoke-InstallValidation -ProjectDirectory $diagnosticProject)
+}

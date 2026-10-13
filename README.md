@@ -51,6 +51,16 @@ MyProject/
 - `settings()` runs before the engine starts. Configure sample rate, buffer size, graphics API, logging, and so on.
 - `compose()` is where you build your audio/visual processing graph.
 
+On Windows, **Copy MayaFlux shader sources** optionally copies the installed `share/MayaFlux/src/shaders` tree into `data/shaders`, preserving nested paths and GLSL include files. It copies source files only; installed runtime SPIR-V remains in the MayaFlux installation.
+
+Each new Windows project includes `validate.ps1`. Run it manually from the project folder when you need diagnostics:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\validate.ps1
+```
+
+The report checks project files, presets, community module references, shader build status, the MayaFlux installation, tools and terminal settings. It does not configure, build, launch or modify the project. To check a project elsewhere, add `-ProjectRoot "C:\Path\To\Project"`. Weave does not run the diagnostic automatically.
+
 `CMakeLists.txt` is yours to edit. Add source files, link libraries, and set compiler flags as needed. The MayaFlux integration lives in `cmake/mayaflux.cmake` and is included automatically at the end of `CMakeLists.txt`.
 
 ### Building
