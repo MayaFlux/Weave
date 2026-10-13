@@ -228,7 +228,11 @@ assert_output_contains "$(cat "$shader_project/data/shaders/attractor.frag")" '#
     || fail "CLI did not accept --copy-shader-sources when destination was omitted"
 assert_file "$shader_project_parent/DefaultShaderProject/data/shaders/basic.vert"
 
-if missing_shaders_output="$(MAYAFLUX_ROOT="$test_root/missing-mayaflux" "$cli" new MissingShaderProject "$shader_project_parent" --copy-shader-sources --no-vscode 2>&1)"; then
+mkdir -p "$test_root/isolated-zdotdir"
+if missing_shaders_output="$(
+    ZDOTDIR="$test_root/isolated-zdotdir" MAYAFLUX_ROOT="$test_root/missing-mayaflux" \
+        "$cli" new MissingShaderProject "$shader_project_parent" --copy-shader-sources --no-vscode 2>&1
+)"; then
     fail "Project creation unexpectedly succeeded without installed shader sources"
 fi
 assert_output_contains "$missing_shaders_output" 'MayaFlux shader sources were not found'
@@ -236,7 +240,10 @@ assert_output_contains "$missing_shaders_output" 'MayaFlux shader sources were n
     || fail "Missing shader source preflight left a partial project"
 
 mkdir -p "$test_root/empty-mayaflux/share/MayaFlux/src/shaders"
-if empty_shaders_output="$(MAYAFLUX_ROOT="$test_root/empty-mayaflux" "$cli" new EmptyShaderProject "$shader_project_parent" --copy-shader-sources --no-vscode 2>&1)"; then
+if empty_shaders_output="$(
+    ZDOTDIR="$test_root/isolated-zdotdir" MAYAFLUX_ROOT="$test_root/empty-mayaflux" \
+        "$cli" new EmptyShaderProject "$shader_project_parent" --copy-shader-sources --no-vscode 2>&1
+)"; then
     fail "Project creation unexpectedly succeeded with an empty installed shader directory"
 fi
 assert_output_contains "$empty_shaders_output" 'MayaFlux shader sources are empty'
