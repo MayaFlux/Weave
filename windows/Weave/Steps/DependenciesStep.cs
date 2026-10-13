@@ -21,6 +21,7 @@ public class DependenciesStep : IInstallationStep
     private Button? skipButton;
 
     private record WingetPackage(string Name, string Id, string Verify, bool IsPath);
+    internal const string FFmpegInstallRoot = @"C:\Program Files\FFmpeg_Shared";
 
     private static readonly WingetPackage[] Packages =
     [
@@ -28,7 +29,7 @@ public class DependenciesStep : IInstallationStep
         new("Git",        "Git.Git",                 "git",                                           false),
         new("Ninja",      "Ninja-build.Ninja",       "ninja",                                         false),
         new("LLVM",       "LLVM.LLVM",               @"C:\Program Files\LLVM\bin\clang.exe",          true),
-        new("FFmpeg",     "Gyan.FFmpeg.Shared",         @"Gyan.FFmpeg.Shared",                           false),
+        new("FFmpeg",     "Gyan.FFmpeg.Shared",       "ffmpeg",                                         false),
         new("Vulkan SDK", "KhronosGroup.VulkanSDK",  @"C:\VulkanSDK",                                 true),
     ];
 
@@ -66,7 +67,7 @@ public class DependenciesStep : IInstallationStep
         {
             await LogAsync("=== Dependency Installation ===");
             await LogAsync("");
-            await LogAsync("Installing via winget: CMake, Git, Ninja, 7-Zip, LLVM, FFmpeg, Vulkan SDK");
+            await LogAsync("Installing via winget: CMake, Git, Ninja, LLVM, FFmpeg Shared, Vulkan SDK");
             await LogAsync("");
 
             string? wingetSource = DetectWingetSource();
@@ -78,7 +79,7 @@ public class DependenciesStep : IInstallationStep
             {
                 await LogAsync($"[{pkg.Name}] Checking...");
 
-                if (IsInstalled(pkg))
+                if (pkg.Id != "Gyan.FFmpeg.Shared" && IsInstalled(pkg))
                 {
                     await LogAsync($"[{pkg.Name}] Already installed");
                     continue;
@@ -86,6 +87,17 @@ public class DependenciesStep : IInstallationStep
 
                 await LogAsync($"[{pkg.Name}] Installing...");
                 int code = await RunWingetAsync(pkg.Id, wingetSource);
+
+                if (pkg.Id == "Gyan.FFmpeg.Shared" && (code == 0 || code == -1978335189) && Directory.Exists(FFmpegInstallRoot))
+                {
+                    foreach (var directory in Directory.GetDirectories(FFmpegInstallRoot, "ffmpeg-*-full_build-shared"))
+                    {
+                        var version = Path.GetFileName(directory).Replace("ffmpeg-", "").Replace("-full_build-shared", "");
+                        var destination = Path.Combine(FFmpegInstallRoot, version);
+                        if (Version.TryParse(version, out _) && !Directory.Exists(destination))
+                            Directory.Move(directory, destination);
+                    }
+                }
 
                 if ((code == 0 || code == -1978335189) && IsInstalled(pkg))
                 {
@@ -151,15 +163,14 @@ public class DependenciesStep : IInstallationStep
 
     private static bool IsInstalled(WingetPackage pkg)
     {
+        if (pkg.Id == "Gyan.FFmpeg.Shared") return FindFFmpegRoot() != null;
+
         if (pkg.IsPath)
         {
             if (!pkg.Verify.Contains('\\'))
                 return Directory.Exists(pkg.Verify) && Directory.GetFileSystemEntries(pkg.Verify).Length > 0;
             return File.Exists(pkg.Verify) || Directory.Exists(pkg.Verify);
         }
-
-        if (pkg.Verify.StartsWith("Gyan.FFmpeg"))
-            return FindFFmpegRoot() != null;
 
         var machinePath = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine) ?? "";
         var userPath = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User) ?? "";
@@ -177,15 +188,13 @@ public class DependenciesStep : IInstallationStep
 
     internal static string? FindFFmpegRoot()
     {
-        var wingetPkgs = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            @"Microsoft\WinGet\Packages");
-
-        if (!Directory.Exists(wingetPkgs)) return null;
-
-        return Directory.GetDirectories(wingetPkgs, "Gyan.FFmpeg.Shared*")
-            .SelectMany(d => Directory.GetDirectories(d, "ffmpeg-*-full_build-shared"))
-            .FirstOrDefault(d => File.Exists(Path.Combine(d, "bin", "ffmpeg.exe")));
+        if (!Directory.Exists(FFmpegInstallRoot)) return null;
+        return Directory.GetDirectories(FFmpegInstallRoot)
+            .Select(path => new { Path = path, Version = Version.TryParse(Path.GetFileName(path), out var version) ? version : null })
+            .Where(entry => entry.Version != null && File.Exists(Path.Combine(entry.Path, "bin", "ffmpeg.exe")))
+            .OrderByDescending(entry => entry.Version)
+            .Select(entry => entry.Path)
+            .FirstOrDefault();
     }
 
     private static async Task<int> RunWingetAsync(string id, string? source)
@@ -206,6 +215,12 @@ public class DependenciesStep : IInstallationStep
             args.Add(source);
         }
 
+        if (id == "Gyan.FFmpeg.Shared")
+        {
+            args.AddRange(["--location", $"\"{FFmpegInstallRoot}\""]);
+            if (FindFFmpegRoot() == null) args.Add("--force");
+        }
+
         var psi = new ProcessStartInfo
         {
             FileName = "winget",
@@ -218,7 +233,10 @@ public class DependenciesStep : IInstallationStep
 
         using var p = Process.Start(psi);
         if (p == null) return 1;
+        var stdout = p.StandardOutput.ReadToEndAsync();
+        var stderr = p.StandardError.ReadToEndAsync();
         await p.WaitForExitAsync();
+        await Task.WhenAll(stdout, stderr);
         return p.ExitCode;
     }
 

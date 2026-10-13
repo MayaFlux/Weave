@@ -150,12 +150,13 @@ public class EnvironmentSetupStep : IInstallationStep
         var ffmpegRoot = DependenciesStep.FindFFmpegRoot();
         if (ffmpegRoot == null)
         {
-            await LogAsync("  [WARN] FFmpeg not found in WinGet packages");
-            return;
+            throw new InvalidOperationException($"FFmpeg Shared was not found under {DependenciesStep.FFmpegInstallRoot}. Run dependency setup again.");
         }
 
-        ProcessRunner.SetEnvironmentVariable("FFMPEG_ROOT", ffmpegRoot, logger);
-        ProcessRunner.AddToPath(Path.Combine(ffmpegRoot, "bin"), logger);
+        if (!ProcessRunner.SetEnvironmentVariable("FFMPEG_ROOT", ffmpegRoot, logger))
+            throw new InvalidOperationException("Failed to set FFMPEG_ROOT. Run Weave as administrator and retry environment setup.");
+        if (!ProcessRunner.AddToPath(Path.Combine(ffmpegRoot, "bin"), logger))
+            throw new InvalidOperationException("Failed to add FFmpeg Shared to PATH. Retry environment setup.");
         await LogAsync($"  [OK] FFMPEG_ROOT={ffmpegRoot}");
     }
 

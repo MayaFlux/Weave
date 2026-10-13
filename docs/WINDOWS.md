@@ -15,7 +15,7 @@
 | ---- | ------------ |
 | System check | Verifies 64-bit Windows, installs 7-Zip and MSVC build tools if missing |
 | Download MayaFlux | Downloads the framework archive from GitHub and extracts it to `C:\MayaFlux` |
-| Install dependencies | Installs CMake, Git, Ninja, LLVM, FFmpeg, and Vulkan SDK via winget |
+| Install dependencies | Installs CMake, Git, Ninja, LLVM, FFmpeg Shared, and Vulkan SDK via winget |
 | Environment setup | Sets system environment variables |
 | Templates | Extracts project templates |
 
@@ -31,9 +31,16 @@ The following are installed via winget and land in their standard locations:
 - Git
 - Ninja
 - LLVM
-- FFmpeg (`Gyan.FFmpeg.Shared`)
 - Vulkan SDK (`C:\VulkanSDK\`)
 - MSVC Build Tools : VS 2026 on Windows 11, VS 2022 on Windows 10 (skipped if already present)
+
+Weave installs the latest `Gyan.FFmpeg.Shared` available from WinGet using
+`--location "C:\Program Files\FFmpeg_Shared"`. It renames the extracted wrapper
+from `ffmpeg-<version>-full_build-shared` to `<version>`, preserving the complete
+`bin`, `include`, and `lib` layout inside that version directory. For example,
+version 9.0.2 is used from `C:\Program Files\FFmpeg_Shared\9.0.2`.
+Environment setup selects the newest renamed version containing `bin\ffmpeg.exe`.
+Older renamed versions are retained.
 
 ### Environment
 
@@ -45,6 +52,8 @@ Weave sets these as system environment variables:
 | `PATH`              | `+= C:\MayaFlux\bin` | Runtime DLLs and tools |
 | `INCLUDE`           | `+= C:\MayaFlux\include` | Headers for editors  |
 | `LIB`               | `+= C:\MayaFlux\lib` | Import libraries       |
+| `FFMPEG_ROOT`       | `C:\Program Files\FFmpeg_Shared\<version>` | Selected shared FFmpeg package root |
+| `PATH`              | `+= C:\Program Files\FFmpeg_Shared\<version>\bin` | FFmpeg executables and shared DLLs |
 
 These take effect in any new PowerShell or CMD window. The terminal you ran Weave from will not reflect them until restarted.
 
@@ -147,7 +156,13 @@ Remove-Item -Recurse -Force C:\MayaFlux
 # Delete MAYAFLUX_ROOT and remove C:\MayaFlux\bin from PATH
 ```
 
-Winget-installed tools (CMake, Git, Ninja, LLVM, FFmpeg, Vulkan SDK, MSVC) are independent installations. Remove them individually via **Settings > Apps** if no longer needed.
+Winget-installed tools (CMake, Git, Ninja, LLVM, Vulkan SDK, MSVC) are independent installations. Remove them individually via **Settings > Apps** if no longer needed.
+
+FFmpeg Shared is acquired through WinGet, but Weave renames its extracted version
+directory. To remove it completely, uninstall `Gyan.FFmpeg.Shared`, then remove
+any retained version directories under `C:\Program Files\FFmpeg_Shared` that no
+projects need. Delete `FFMPEG_ROOT` and remove its version's `bin` entry from the
+system `PATH`.
 
 ---
 
