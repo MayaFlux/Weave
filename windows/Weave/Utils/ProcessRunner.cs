@@ -115,6 +115,25 @@ public static class ProcessRunner
 
     public static void AppendToEnvironmentVariable(string name, string path, Logger logger) => AppendToEnvironmentVariable(name, path, logger, new WindowsInstallationHost());
 
+    internal static bool PreferPath(string path, Logger logger, WindowsInstallationHost host)
+    {
+        try
+        {
+            if (!WindowsInstallationPaths.IsSafeEnvironmentPath(path)) throw new ArgumentException("The selected tool directory must be a safe absolute path.");
+            var current = host.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine) ?? "";
+            var entries = current.Split(';').Where(entry => !ContainsPath(entry, path, host));
+            var updated = string.Join(';', new[] { path }.Concat(entries.Where(entry => !string.IsNullOrWhiteSpace(entry))));
+            if (updated != current) host.SetEnvironmentVariable("PATH", updated, EnvironmentVariableTarget.Machine);
+            logger.Log($"[OK] Selected tool directory takes precedence in PATH: {path}");
+            return true;
+        }
+        catch (Exception error)
+        {
+            logger.Log($"[ERROR] Failed to select tool directory in PATH: {error.Message}");
+            return false;
+        }
+    }
+
     internal static bool AppendToEnvironmentVariable(string name, string path, Logger logger, WindowsInstallationHost host)
     {
         try

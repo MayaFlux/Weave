@@ -18,8 +18,12 @@ public class SystemCheckStep : IInstallationStep
     private readonly SystemCheckHost host;
     private bool checksPass = false;
     private TextBox? logBox;
+    private Action<string>? logCallback;
     private Label? statusLabel;
     private Button? nextButton;
+    private Button? retryButton;
+    private int running;
+    private volatile ISystemCheckProcess? pendingInstaller;
 
     public SystemCheckStep() : this(new SystemCheckHost())
     {
@@ -40,6 +44,7 @@ public class SystemCheckStep : IInstallationStep
         Action<string> logCallback,
         Action nextCallback)
     {
+        this.logCallback = logCallback;
         layout.AddTitle("Step 1: System Check");
 
         statusLabel = layout.AddStatusLabel("Verifying system requirements...");
@@ -53,10 +58,41 @@ public class SystemCheckStep : IInstallationStep
         nextButton.Click += (s, e) => nextCallback();
         cancelButton.Click += (s, e) => Application.Exit();
 
-        Task.Run(() => PerformChecksAsync(config));
+        retryButton = layout.AddButton("Retry", ThemeColors.ButtonSecondary);
+        retryButton.Enabled = false;
+        retryButton.Click += (s, e) => Task.Run(() => PerformChecksAsync(config));
+        InstallationStepUi.RunWhenReady(logBox, () => PerformChecksAsync(config));
     }
 
     internal async Task<bool> PerformChecksAsync(InstallationConfig config)
+    {
+        if (System.Threading.Interlocked.CompareExchange(ref running, 1, 0) != 0) return false;
+        try
+        {
+            if (pendingInstaller != null)
+            {
+                await LogAsync("[WARN] Microsoft prerequisites are still being installed. Wait for completion before retrying.");
+                return false;
+            }
+            checksPass = false;
+            UpdateButtons();
+            return await PerformChecksCoreAsync(config);
+        }
+        catch (Exception error)
+        {
+            checksPass = false;
+            await LogAsync($"[ERROR] {error.Message}. Correct the reported problem and select Retry.");
+            UpdateStatus("System checks need attention", ThemeColors.Error);
+            return false;
+        }
+        finally
+        {
+            System.Threading.Interlocked.Exchange(ref running, 0);
+            EnableButton();
+        }
+    }
+
+    private async Task<bool> PerformChecksCoreAsync(InstallationConfig config)
     {
         checksPass = true;
 
@@ -70,7 +106,6 @@ public class SystemCheckStep : IInstallationStep
             await LogAsync("[ERROR] An x64 Windows process is required");
             checksPass = false;
             UpdateStatus("Unsupported architecture", ThemeColors.Error);
-            EnableButton();
             return false;
         }
 
@@ -82,10 +117,9 @@ public class SystemCheckStep : IInstallationStep
         }
         else
         {
-            await LogAsync("[ERROR] Not running as administrator");
+            await LogAsync("[ERROR] Not running as administrator. Close Weave, then choose Run as administrator to install system prerequisites.");
             checksPass = false;
             UpdateStatus("Admin privileges required", ThemeColors.Error);
-            EnableButton();
             return false;
         }
 
@@ -102,7 +136,6 @@ public class SystemCheckStep : IInstallationStep
             await LogAsync($"[ERROR] Cannot check 7-Zip: {ex.Message}");
             checksPass = false;
             UpdateStatus("Cannot check prerequisites", ThemeColors.Error);
-            EnableButton();
             return false;
         }
 
@@ -133,7 +166,7 @@ public class SystemCheckStep : IInstallationStep
             await LogAsync("[INSTALLING] Visual Studio Build Tools not found");
             await LogAsync("[INSTALLING] Windows requires additional Microsoft C++ libraries and SDK files to build MayaFlux projects and support live C++ compilation, even when LLVM is used. These shared prerequisites account for most of this installation's size. Microsoft's installer will display progress, and Weave will continue when it finishes.");
             await LogAsync("[INSTALLING] Installing Microsoft C++ prerequisites (this may take 10-20 minutes)...");
-            int exitCode = await InstallMsvcAsync();
+            int exitCode = await InstallMsvcAsync(config);
             if (exitCode == 3010)
                 config.NeedsReboot = true;
             if ((exitCode == 0 || exitCode == 3010) && HasMsvcToolchain())
@@ -163,11 +196,10 @@ public class SystemCheckStep : IInstallationStep
         }
         else
         {
-            await LogAsync("[ERROR] Cannot proceed");
+            await LogAsync("[ERROR] Prerequisites need attention. Correct the reported problem, then select Retry.");
             UpdateStatus("Prerequisites missing", ThemeColors.Error);
         }
 
-        EnableButton();
         return checksPass;
     }
 
@@ -340,8 +372,9 @@ public class SystemCheckStep : IInstallationStep
         return host.WindowsBuild >= 22000;
     }
 
-    private async Task<int> InstallMsvcAsync()
+    private async Task<int> InstallMsvcAsync(InstallationConfig config)
     {
+        ISystemCheckProcess? process = null;
         try
         {
             string wingetId;
@@ -370,11 +403,15 @@ public class SystemCheckStep : IInstallationStep
                 CreateNoWindow = true
             };
 
-            using var process = host.StartProcess(psi);
+            process = host.StartProcess(psi);
             if (process == null) return -1;
 
             if (!process.WaitForExit(3600000))
             {
+                var retained = process;
+                pendingInstaller = retained;
+                process = null;
+                _ = ObserveMsvcExitAsync(retained, config);
                 await LogAsync("[ERROR] Microsoft prerequisite installation timed out. The Microsoft installer may still be running; let it finish before retrying.");
                 return -1;
             }
@@ -382,14 +419,47 @@ public class SystemCheckStep : IInstallationStep
         }
         catch (Exception ex)
         {
+            if (process != null && !process.HasExited)
+            {
+                var retained = process;
+                pendingInstaller = retained;
+                process = null;
+                _ = ObserveMsvcExitAsync(retained, config);
+            }
             await LogAsync($"[ERROR] {ex.Message}");
             return -1;
+        }
+        finally { process?.Dispose(); }
+    }
+
+    private async Task ObserveMsvcExitAsync(ISystemCheckProcess process, InstallationConfig config)
+    {
+        try
+        {
+            await Task.Run(process.WaitForExit);
+            if (!process.HasExited) return;
+            await LogAsync("[INFO] Microsoft prerequisite installer has finished. Select Retry to verify the installed toolchain.");
+        }
+        catch (Exception error)
+        {
+            await LogAsync($"[WARN] Installer completion could not be observed: {error.Message}. Wait for Microsoft's installer to finish before restarting Weave.");
+        }
+        finally
+        {
+            if (process.HasExited)
+            {
+                if (process.ExitCode == 3010) config.NeedsReboot = true;
+                pendingInstaller = null;
+                process.Dispose();
+                UpdateButtons();
+            }
         }
     }
 
     private Task LogAsync(string message)
     {
         MessageLogged?.Invoke(message);
+        logCallback?.Invoke(message);
         return InstallationStepUi.AppendLogAsync(logBox, message, refresh: true);
     }
 
@@ -397,14 +467,17 @@ public class SystemCheckStep : IInstallationStep
 
     private void EnableButton()
     {
+        UpdateButtons();
         ProceedChanged?.Invoke(checksPass);
-        if (nextButton != null && nextButton.Parent != null)
-        {
-            nextButton.Invoke(new Action(() =>
-            {
-                nextButton.Enabled = checksPass;
-            }));
-        }
+    }
+
+    private void UpdateButtons()
+    {
+        var idle = running == 0 && pendingInstaller == null;
+        if (nextButton?.IsDisposed == false && nextButton.IsHandleCreated)
+            nextButton.Invoke(new Action(() => nextButton.Enabled = checksPass && idle));
+        if (retryButton?.IsDisposed == false && retryButton.IsHandleCreated)
+            retryButton.Invoke(new Action(() => retryButton.Enabled = !checksPass && idle));
     }
 
     private bool IsAdministrator()

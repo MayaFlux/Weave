@@ -21,8 +21,12 @@ public class MayaFluxDownloadStep : IInstallationStep
     private readonly MayaFluxDownloadHost host;
     private ReleaseType releaseType;
     private TextBox? logBox;
+    private Action<string>? logCallback;
     private ProgressBar? progressBar;
     private Button? nextButton;
+    private Button? retryButton;
+    private int running;
+    private bool downloadReady;
 
     private const int DevStaleHours = 24;
 
@@ -35,6 +39,7 @@ public class MayaFluxDownloadStep : IInstallationStep
     {
         this.releaseType = releaseType;
         this.host = host;
+        host.Report = message => LogAsync(message);
     }
 
     internal event Action<string>? MessageLogged;
@@ -47,6 +52,7 @@ public class MayaFluxDownloadStep : IInstallationStep
         Action<string> logCallback,
         Action nextCallback)
     {
+        this.logCallback = logCallback;
         layout.AddTitle("Step 2: Download MayaFlux");
 
         var statusLabel = layout.AddStatusLabel("Preparing download...");
@@ -62,11 +68,17 @@ public class MayaFluxDownloadStep : IInstallationStep
         nextButton.Click += (s, e) => nextCallback();
         cancelButton.Click += (s, e) => Application.Exit();
 
-        Task.Run(() => DownloadMayaFluxAsync(config, statusLabel, logCallback));
+        retryButton = layout.AddButton("Retry", ThemeColors.ButtonSecondary);
+        retryButton.Enabled = false;
+        retryButton.Click += (s, e) => Task.Run(() => DownloadMayaFluxAsync(config, statusLabel, logCallback));
+        InstallationStepUi.RunWhenReady(logBox, () => DownloadMayaFluxAsync(config, statusLabel, logCallback));
     }
 
     internal async Task<bool> DownloadMayaFluxAsync(InstallationConfig config, Label? statusLabel = null, Action<string>? logCallback = null)
     {
+        if (System.Threading.Interlocked.CompareExchange(ref running, 1, 0) != 0) return false;
+        downloadReady = false;
+        UpdateButtons();
         string? archivePath = null;
         string? stagingRoot = null;
         bool ownsArchive = false;
@@ -127,7 +139,7 @@ public class MayaFluxDownloadStep : IInstallationStep
             if (await ShouldSkipDownload(installRoot, version.ToString()))
             {
                 UpdateStatus(statusLabel, "Already up to date", ThemeColors.Success);
-                SetReadiness(true);
+                downloadReady = true;
                 return true;
             }
 
@@ -227,12 +239,12 @@ public class MayaFluxDownloadStep : IInstallationStep
             }
             await LogAsync("=== Download Complete ===");
             UpdateStatus(statusLabel, "Download successful", ThemeColors.Success);
-            SetReadiness(true);
+            downloadReady = true;
             return true;
         }
         catch (Exception ex)
         {
-            await LogAsync($"[ERROR] {ex.Message}");
+            await LogAsync($"[ERROR] {ex.Message}. Correct the reported problem and select Retry.");
             UpdateStatus(statusLabel, "Download failed", ThemeColors.Error);
             return false;
         }
@@ -248,6 +260,9 @@ public class MayaFluxDownloadStep : IInstallationStep
                 try { host.DeleteDirectory(stagingRoot); }
                 catch (Exception ex) { await LogAsync($"[WARN] Could not clean up staging directory {stagingRoot}: {ex.Message}"); }
             }
+            System.Threading.Interlocked.Exchange(ref running, 0);
+            if (downloadReady) SetReadiness(true);
+            UpdateButtons();
         }
     }
     private async Task<bool> ShouldSkipDownload(string mayafluxRoot, string remoteVersion)
@@ -330,9 +345,18 @@ public class MayaFluxDownloadStep : IInstallationStep
             nextButton.Invoke(new Action(() => nextButton.Enabled = ready));
     }
 
+    private void UpdateButtons()
+    {
+        if (nextButton?.IsDisposed == false && nextButton.IsHandleCreated)
+            nextButton.Invoke(new Action(() => nextButton.Enabled = downloadReady && running == 0));
+        if (retryButton?.IsDisposed == false && retryButton.IsHandleCreated)
+            retryButton.Invoke(new Action(() => retryButton.Enabled = !downloadReady && running == 0));
+    }
+
     private Task LogAsync(string message)
     {
         MessageLogged?.Invoke(message);
+        logCallback?.Invoke(message);
         return InstallationStepUi.AppendLogAsync(logBox, message);
     }
 

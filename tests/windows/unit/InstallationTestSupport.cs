@@ -50,6 +50,13 @@ internal sealed class TestDirectory : IDisposable
     public void Dispose()
     {
         if (!Path.GetFullPath(PathName).StartsWith(parent, StringComparison.OrdinalIgnoreCase)) throw new IOException("Unsafe test cleanup path.");
-        if (Directory.Exists(PathName)) Directory.Delete(PathName, true);
+        for (var attempt = 0; Directory.Exists(PathName); attempt++)
+        {
+            try { Directory.Delete(PathName, true); }
+            catch (IOException error) when (attempt < 4 && (error.HResult & 0xffff) is 32 or 33)
+            {
+                Thread.Sleep(50);
+            }
+        }
     }
 }

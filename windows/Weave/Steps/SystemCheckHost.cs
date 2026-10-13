@@ -39,6 +39,7 @@ internal class SystemCheckHost : WindowsInstallationHost
 internal interface ISystemCheckProcess : IDisposable
 {
     int ExitCode { get; }
+    bool HasExited { get; }
     string ReadStandardOutput();
     void WaitForExit();
     bool WaitForExit(int milliseconds);

@@ -73,6 +73,19 @@ internal static class WindowsInstallationPaths
 
 internal static class InstallationStepUi
 {
+    internal static void RunWhenReady(Control control, Func<Task> operation)
+    {
+        if (control.IsDisposed) return;
+        if (control.IsHandleCreated) { _ = Task.Run(operation); return; }
+        EventHandler? ready = null;
+        ready = (_, _) =>
+        {
+            control.HandleCreated -= ready;
+            _ = Task.Run(operation);
+        };
+        control.HandleCreated += ready;
+    }
+
     internal static Task AppendLogAsync(TextBox? logBox, string message, bool refresh = false)
     {
         if (logBox?.Parent != null)

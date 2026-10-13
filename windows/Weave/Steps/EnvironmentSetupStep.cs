@@ -28,6 +28,7 @@ public class EnvironmentSetupStep : IInstallationStep
     }
     private bool setupSuccess = false;
     private TextBox? logBox;
+    private Action<string>? logCallback;
     private Button? nextButton;
     private Button? retryButton;
     private int running;
@@ -38,6 +39,7 @@ public class EnvironmentSetupStep : IInstallationStep
         Action<string> logCallback,
         Action nextCallback)
     {
+        this.logCallback = logCallback;
         layout.AddTitle("Step 4: Environment Setup");
 
         var statusLabel = layout.AddStatusLabel("Configuring environment variables...");
@@ -54,7 +56,7 @@ public class EnvironmentSetupStep : IInstallationStep
         retryButton.Enabled = false;
         retryButton.Click += (s, e) => Task.Run(() => SetupEnvironmentAsync(config, statusLabel));
 
-        Task.Run(() => SetupEnvironmentAsync(config, statusLabel));
+        InstallationStepUi.RunWhenReady(logBox, () => SetupEnvironmentAsync(config, statusLabel));
     }
 
     internal async Task SetupEnvironmentAsync(InstallationConfig config, Label? statusLabel = null)
@@ -99,6 +101,15 @@ public class EnvironmentSetupStep : IInstallationStep
             await SetupVulkan(config);
             await SetupLLVM(config);
             await SetupFFmpeg(config);
+            foreach (var package in new[] { "Kitware.CMake", "Git.Git", "Ninja-build.Ninja" })
+            {
+                if (!config.DependencyExecutablePaths.TryGetValue(package, out var executable)) continue;
+                var directory = Path.GetDirectoryName(executable) ?? throw new IOException($"Selected {package} tool has no directory. Run dependency setup again.");
+                RequireDirectory(directory);
+                if (!host.FileExists(executable)) throw new FileNotFoundException($"Selected {package} tool is missing: {executable}. Run dependency setup again.");
+                RequireWrite(ProcessRunner.PreferPath(directory, logger, host), "PATH");
+                await LogAsync($"  [OK] {package} selected for new terminals: {executable}");
+            }
 
             await LogAsync("");
             await LogAsync("=== Environment Setup Complete ===");
@@ -216,6 +227,7 @@ public class EnvironmentSetupStep : IInstallationStep
     private Task LogAsync(string message)
     {
         MessageLogged?.Invoke(message);
+        logCallback?.Invoke(message);
         return InstallationStepUi.AppendLogAsync(logBox, message);
     }
 

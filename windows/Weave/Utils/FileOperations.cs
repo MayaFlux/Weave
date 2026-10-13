@@ -61,119 +61,142 @@ public static class FileOperations
     }
 
     public static bool Extract7z(string archivePath, string destinationPath, Logger logger)
+        => Extract7z(archivePath, destinationPath, logger, new ArchiveExtractionHost());
+
+    internal static bool Extract7z(string archivePath, string destinationPath, Logger logger, ArchiveExtractionHost host, Action<string>? report = null)
+        => Extract7zAsync(archivePath, destinationPath, logger, host, report).GetAwaiter().GetResult();
+
+    private static async Task<bool> Extract7zAsync(string archivePath, string destinationPath, Logger logger, ArchiveExtractionHost host, Action<string>? report)
     {
+        void Log(string message) { if (report != null) report(message); else logger.Log(message); }
+        string? temporary = null;
+        var owned = false;
+        using var deadline = new CancellationTokenSource(host.Timeout);
         try
         {
-            logger.Log($"Extracting archive: {archivePath}");
-            
-            var sevenZipPath = Find7zPath();
-            if (string.IsNullOrEmpty(sevenZipPath))
+            Log($"Extracting archive: {archivePath}");
+            var sevenZip = Find7zPath(host) ?? throw new FileNotFoundException("7-Zip was not found. Install it or rerun the system checks.");
+            WindowsInstallationPaths.EnsureNoReparseAncestors(archivePath, host);
+            WindowsInstallationPaths.EnsureNoReparseAncestors(destinationPath, host);
+            temporary = Path.Combine(host.TempDirectory, $"weave_extract_{Guid.NewGuid():N}");
+            WindowsInstallationPaths.EnsureNoReparseAncestors(temporary, host);
+            if (host.DirectoryExists(temporary)) throw new IOException("The temporary extraction directory already exists.");
+            host.CreateDirectory(temporary);
+            owned = true;
+            var request = new ProcessStartInfo(sevenZip)
             {
-                logger.Log("[ERROR] 7-Zip not found at expected locations");
-                return false;
-            }
-
-            Directory.CreateDirectory(destinationPath);
-
-            var tempExtractDir = Path.Combine(Path.GetTempPath(), $"weave_extract_{Guid.NewGuid():N}");
-            Directory.CreateDirectory(tempExtractDir);
-
-            var psi = new ProcessStartInfo
-            {
-                FileName = sevenZipPath,
-                Arguments = $"x \"{archivePath}\" -o\"{tempExtractDir}\" -y",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
+                UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true
             };
-
-            using (var process = Process.Start(psi))
+            foreach (var argument in new[] { "x", archivePath, "-o" + temporary, "-y" }) request.ArgumentList.Add(argument);
+            using (var process = host.StartProcess(request) ?? throw new IOException("7-Zip could not be started."))
             {
-                process?.WaitForExit();
-                
-                if (process?.ExitCode != 0)
+                try
                 {
-                    logger.Log($"[ERROR] 7-Zip extraction failed with exit code: {process?.ExitCode}");
-                    return false;
+                    var output = process.ReadStandardOutputAsync();
+                    var error = process.ReadStandardErrorAsync();
+                    await process.WaitForExitAsync(deadline.Token).WaitAsync(deadline.Token).ConfigureAwait(false);
+                    await Task.WhenAll(output, error).WaitAsync(deadline.Token).ConfigureAwait(false);
+                    if (process.ExitCode != 0)
+                    {
+                        static string Tail(string text) => text.Length > 4096 ? text[^4096..] : text;
+                        throw new IOException($"7-Zip extraction failed (exit {process.ExitCode}): {Tail(error.Result)} {Tail(output.Result)}");
+                    }
+                }
+                catch
+                {
+                    if (!process.HasExited) process.Terminate();
+                    throw;
                 }
             }
-
-            // Move dist_staging contents to destination
-            var distStaging = Path.Combine(tempExtractDir, "dist_staging");
-            if (Directory.Exists(distStaging))
+            var payload = Path.Combine(temporary, "dist_staging");
+            if (!host.DirectoryExists(payload))
             {
-                CopyDirectory(distStaging, destinationPath, logger);
-                logger.Log("[OK] MayaFlux extracted successfully");
+                Log("[WARN] Archive has no dist_staging wrapper; checking its top-level payload.");
+                payload = temporary;
             }
-            else
-            {
-                logger.Log("[WARN] dist_staging folder not found, copying all contents");
-                CopyDirectory(tempExtractDir, destinationPath, logger);
-            }
-
-            // Cleanup
-            try { Directory.Delete(tempExtractDir, true); } catch { }
-
+            CopyDirectory(payload, destinationPath, logger, host, deadline.Token);
+            Log("[OK] MayaFlux extracted successfully");
             return true;
         }
-        catch (Exception ex)
+        catch (OperationCanceledException)
         {
-            logger.Log($"[ERROR] Extraction failed: {ex.Message}");
+            Log($"[ERROR] Extraction timed out after {host.Timeout.TotalMinutes:g} minutes. Select Retry to extract the package again.");
             return false;
+        }
+        catch (Exception error)
+        {
+            Log($"[ERROR] Extraction failed: {error.Message}. Correct the reported problem and select Retry.");
+            return false;
+        }
+        finally
+        {
+            if (owned && temporary != null)
+            {
+                try
+                {
+                    WindowsInstallationPaths.EnsureNoReparseAncestors(temporary, host);
+                    host.DeleteDirectory(temporary);
+                }
+                catch (Exception error) { Log($"[WARN] Temporary extraction files remain at {temporary}: {error.Message}"); }
+            }
         }
     }
 
     public static bool VerifyInstallation(string mayaFluxRoot, Logger logger)
+        => VerifyInstallation(mayaFluxRoot, logger, null);
+
+    internal static bool VerifyInstallation(string mayaFluxRoot, Logger logger, Action<string>? report)
     {
+        void Log(string message) { if (report != null) report(message); else logger.Log(message); }
         try
         {
-            var libPath = Path.Combine(mayaFluxRoot, "lib", "MayaFluxLib.lib");
-            if (!File.Exists(libPath))
+            var required = new[] { @"lib\MayaFluxLib.lib", @"bin\MayaFluxLib.dll", @"include\MayaFlux\MayaFlux.hpp", @"lib\cmake\MayaFlux\MayaFluxConfig.cmake", @"lib\cmake\MayaFlux\MayaFluxConfigVersion.cmake" };
+            var valid = true;
+            foreach (var relative in required)
             {
-                logger.Log($"[ERROR] Verification failed - MayaFluxLib.lib not found at {libPath}");
-                return false;
+                var path = Path.Combine(mayaFluxRoot, relative);
+                if (!File.Exists(path) || new FileInfo(path).Length == 0)
+                {
+                    Log($"[ERROR] Required MayaFlux file is missing or empty: {path}. Retry the download to reinstall the complete package.");
+                    valid = false;
+                }
             }
-
-            logger.Log("[OK] MayaFluxLib.lib verified");
-            return true;
+            if (valid) Log("[OK] MayaFlux core runtime, public header and CMake package files verified");
+            return valid;
         }
         catch (Exception ex)
         {
-            logger.Log($"[ERROR] Verification failed: {ex.Message}");
+            Log($"[ERROR] Verification failed: {ex.Message}");
             return false;
         }
     }
 
-    private static string? Find7zPath()
+    private static string? Find7zPath(ArchiveExtractionHost host)
     {
         var possiblePaths = new[]
         {
             "C:\\Program Files\\7-Zip\\7z.exe",
             "C:\\Program Files (x86)\\7-Zip\\7z.exe",
-            Path.Combine(Environment.GetEnvironmentVariable("ProgramFiles") ?? "", "7-Zip", "7z.exe"),
-            Path.Combine(Environment.GetEnvironmentVariable("ProgramFiles(x86)") ?? "", "7-Zip", "7z.exe")
+            Path.Combine(host.GetEnvironmentVariable("ProgramFiles", EnvironmentVariableTarget.Process) ?? "", "7-Zip", "7z.exe"),
+            Path.Combine(host.GetEnvironmentVariable("ProgramFiles(x86)", EnvironmentVariableTarget.Process) ?? "", "7-Zip", "7z.exe")
         };
 
-        return possiblePaths.FirstOrDefault(path => File.Exists(path));
+        return possiblePaths.FirstOrDefault(path => host.FileExists(path));
     }
 
-    private static void CopyDirectory(string source, string destination, Logger logger)
+    private static void CopyDirectory(string source, string destination, Logger logger, ArchiveExtractionHost host, CancellationToken cancellation)
     {
-        var dir = new DirectoryInfo(source);
-        if (!dir.Exists)
-            return;
-
-        Directory.CreateDirectory(destination);
-
-        foreach (var file in dir.GetFiles())
+        cancellation.ThrowIfCancellationRequested();
+        WindowsInstallationPaths.EnsureNoReparseAncestors(source, host);
+        WindowsInstallationPaths.EnsureNoReparseAncestors(destination, host);
+        host.CreateDirectory(destination);
+        foreach (var entry in host.GetFileSystemEntries(source))
         {
-            file.CopyTo(Path.Combine(destination, file.Name), true);
-        }
-
-        foreach (var subdir in dir.GetDirectories())
-        {
-            CopyDirectory(subdir.FullName, Path.Combine(destination, subdir.Name), logger);
+            cancellation.ThrowIfCancellationRequested();
+            if (host.IsReparsePoint(entry)) throw new IOException($"Extracted package contains a linked path: {entry}");
+            var path = Path.Combine(destination, Path.GetFileName(entry));
+            if (host.DirectoryExists(entry)) CopyDirectory(entry, path, logger, host, cancellation);
+            else host.CopyFile(entry, path);
         }
     }
 

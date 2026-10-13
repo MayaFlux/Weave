@@ -16,6 +16,7 @@ internal sealed class FakeSystemCheckHost : SystemCheckHost
     internal bool InstallMsvcFiles { get; set; }
     internal bool SevenZipWaitCompleted { get; set; } = true;
     internal bool MsvcWaitCompleted { get; set; } = true;
+    internal Task? MsvcLifetime { get; set; }
     internal Action? BeforeMsvcStart { get; set; }
     internal bool NullSevenZipProcess { get; set; }
     internal bool NullMsvcProcess { get; set; }
@@ -129,15 +130,16 @@ internal sealed class FakeSystemCheckHost : SystemCheckHost
             if (NullMsvcProcess) return null;
             return new FakeProcess(MsvcExitCode, "", null, MsvcWaitError,
                 () => MsvcPresent = InstallMsvcFiles, MsvcWaitCompleted,
-                milliseconds => Waits.Add((startInfo.FileName, milliseconds)));
+                milliseconds => Waits.Add((startInfo.FileName, milliseconds)), MsvcLifetime);
         }
         throw new InvalidOperationException("Unexpected process request: " + startInfo.FileName);
     }
 
     private sealed class FakeProcess(
         int exitCode, string output, Exception? readError, Exception? waitError,
-        Action waited, bool waitCompleted, Action<int?> waitRequested) : ISystemCheckProcess
+        Action waited, bool waitCompleted, Action<int?> waitRequested, Task? lifetime = null) : ISystemCheckProcess
     {
+        public bool HasExited => lifetime?.IsCompleted ?? waitCompleted;
         public int ExitCode => exitCode;
         public string ReadStandardOutput()
         {
@@ -150,7 +152,7 @@ internal sealed class FakeSystemCheckHost : SystemCheckHost
             if (waitError != null) throw waitError;
             waited();
         }
-        public void WaitForExit() => Wait(null);
+        public void WaitForExit() { lifetime?.GetAwaiter().GetResult(); Wait(null); }
         public bool WaitForExit(int milliseconds)
         {
             Wait(milliseconds);

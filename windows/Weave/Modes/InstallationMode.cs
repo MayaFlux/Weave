@@ -5,11 +5,13 @@ using Weave.Shared.Models;
 using Weave.UI.Pages;
 using Weave.UI.Layout;
 using Weave.Theme;
+using Weave.Utils;
 
 namespace Weave.Modes;
 
 public class InstallationMode : IWeaveMode
 {
+    private readonly Logger logger = new();
     private InstallationConfig config = new();
     private ReleaseType releaseType;
     private Panel? containerPanel;
@@ -65,8 +67,7 @@ public class InstallationMode : IWeaveMode
 
     private void LogCallback(string message)
     {
-        // Log messages are handled by individual steps updating their textboxes
-        // This callback could be used for central logging if needed
+        logger.Log(message);
     }
 
     private void NextStepCallback()

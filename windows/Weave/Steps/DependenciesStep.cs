@@ -17,6 +17,7 @@ public class DependenciesStep : IInstallationStep
     private readonly DependenciesHost host;
     private bool installSuccess = false;
     private TextBox? logBox;
+    private Action<string>? logCallback;
     private Button? nextButton;
     private Button? skipButton;
     private Button? retryButton;
@@ -50,6 +51,7 @@ public class DependenciesStep : IInstallationStep
         Action<string> logCallback,
         Action nextCallback)
     {
+        this.logCallback = logCallback;
         layout.AddTitle("Step 3: Install Dependencies");
 
         var statusLabel = layout.AddStatusLabel("Installing dependencies...");
@@ -81,7 +83,7 @@ public class DependenciesStep : IInstallationStep
             });
         };
 
-        Task.Run(() => InstallDependenciesAsync(config, statusLabel));
+        InstallationStepUi.RunWhenReady(logBox, () => InstallDependenciesAsync(config, statusLabel));
     }
 
     internal void SkipDependencies(InstallationConfig config, Action nextCallback)
@@ -426,6 +428,7 @@ public class DependenciesStep : IInstallationStep
     private Task LogAsync(string message)
     {
         MessageLogged?.Invoke(message);
+        logCallback?.Invoke(message);
         return InstallationStepUi.AppendLogAsync(logBox, message);
     }
 

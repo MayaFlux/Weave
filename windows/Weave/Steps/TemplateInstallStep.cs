@@ -48,7 +48,7 @@ public class TemplatesInstallStep : IInstallationStep
         retryButton.Enabled = false;
         retryButton.Click += (s, e) => Task.Run(() => ExtractResourcesAsync(config, statusLabel, logCallback));
 
-        Task.Run(() => ExtractResourcesAsync(config, statusLabel, logCallback));
+        InstallationStepUi.RunWhenReady(logBox, () => ExtractResourcesAsync(config, statusLabel, logCallback));
     }
 
     internal async Task ExtractResourcesAsync(InstallationConfig config, Label? statusLabel = null, Action<string>? logCallback = null)

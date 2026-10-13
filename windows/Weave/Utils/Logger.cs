@@ -22,7 +22,7 @@ public class Logger
     {
         try
         {
-            File.WriteAllText(logFilePath, $"=== Weave Installation Log ===\nStarted: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n\n");
+            File.AppendAllText(logFilePath, $"=== Weave Installation Log ===\nStarted: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n\n");
         }
         catch { /* Ignore if can't write */ }
     }

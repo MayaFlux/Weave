@@ -30,9 +30,16 @@ public class EnvironmentSetupStepTests
     }
 
     [Test]
-    public async Task HealthySetupPreservesExistingEntriesAndUsesVerifiedCustomRoots()
+    public async Task HealthySetupPrefersVerifiedToolsAndPreservesExistingEntriesAcrossRetries()
     {
         var (host, config) = FakeEnvironmentSetupHost.Healthy();
+        var tools = new[] { ("Kitware.CMake", @"D:\CMake Tools", "cmake.exe"), ("Git.Git", @"D:\Git Tools", "git.exe"), ("Ninja-build.Ninja", @"D:\Ninja Tools", "ninja.exe") };
+        host.Variables["PATH"] = @"E:\Old Tools;D:\CMake Tools;C:\Windows\System32";
+        foreach (var (package, root, executable) in tools)
+        {
+            host.Directories.Add(root);
+            config.DependencyExecutablePaths[package] = Path.Combine(root, executable);
+        }
         host.Variables["CPATH"] = @"E:\Existing Include";
         host.Variables["LIBRARY_PATH"] = @"E:\Existing Lib";
         var step = new EnvironmentSetupStep(host);
@@ -40,13 +47,20 @@ public class EnvironmentSetupStepTests
         var previous = new Dictionary<string, string>(host.Variables);
         await step.SetupEnvironmentAsync(config);
         Assert.That(host.Variables, Is.EquivalentTo(previous));
+        var entries = host.Variables["PATH"].Split(';');
         Assert.Multiple(() =>
         {
+            foreach (var (_, root, _) in tools)
+            {
+                Assert.That(Array.IndexOf(entries, root), Is.GreaterThanOrEqualTo(0));
+                Assert.That(Array.IndexOf(entries, root), Is.LessThan(Array.IndexOf(entries, @"E:\Old Tools")));
+                Assert.That(entries.Count(entry => entry == root), Is.EqualTo(1));
+            }
             Assert.That(host.Variables["MAYAFLUX_ROOT"], Is.EqualTo(@"D:\Maya Flux"));
             Assert.That(host.Variables["LLVM_ROOT"], Is.EqualTo(@"D:\LLVM"));
             Assert.That(host.Variables["VULKAN_SDK"], Is.EqualTo(@"D:\SDK"));
             Assert.That(host.Variables["FFMPEG_ROOT"], Is.EqualTo(@"D:\FFmpeg"));
-            Assert.That(host.Variables["PATH"].Split(';'), Does.Contain(@"C:\Windows\System32"));
+            Assert.That(entries, Does.Contain(@"C:\Windows\System32").And.Contain(@"E:\Old Tools"));
             Assert.That(host.Variables["CPATH"].Split(';'), Does.Contain(@"E:\Existing Include"));
             Assert.That(host.Variables["LIBRARY_PATH"].Split(';'), Does.Contain(@"E:\Existing Lib"));
         });
