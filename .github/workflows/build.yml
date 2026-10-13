@@ -169,21 +169,6 @@ jobs:
           dotnet publish windows/Weave/Weave.csproj -c Release -p:Platform=x64 -p:PublishSingleFile=true -p:SelfContained=true -p:RuntimeIdentifier=win-x64 -p:IncludeNativeLibrariesForSelfExtract=true
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
-      - name: Verify executable size
-        shell: powershell
-        run: |
-          $exePath = "windows/Weave/bin/x64/Release/net8.0-windows/win-x64/publish/Weave.exe"
-          if (-not (Test-Path $exePath)) {
-            Write-Host "FAIL: Executable not found at $exePath"
-            exit 1
-          }
-          $sizeMB = [Math]::Round((Get-Item $exePath).Length / 1MB, 1)
-          Write-Host "INFO: Weave.exe size is $sizeMB MB (need 140+ MB)"
-          if ($sizeMB -lt 100) {
-            Write-Host "FAIL: Executable too small - resources not embedded"
-            exit 1
-          }
-
       - name: Create distribution package
         shell: powershell
         run: |
@@ -232,6 +217,18 @@ jobs:
           $zip.Entries | Select-Object -First 20 | ForEach-Object { Write-Host "  $($_.FullName)" }
           $zip.Dispose()
 
+      - name: Test packaged Windows artifact
+        shell: powershell
+        run: .\.github\scripts\verify-windows-build.ps1
+
+      - name: Upload Windows integration test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weave-windows-integration-results
+          path: build/windows/test-results/windows-integration.trx
+          if-no-files-found: ignore
+
       - name: Generate hash
         id: hash
         shell: powershell
@@ -246,10 +243,6 @@ jobs:
           name: weave-windows
           path: build/windows/Weave.zip
           retention-days: 30
-
-      - name: Verify Windows build (before upload)
-        shell: powershell
-        run: .\.github\scripts\verify-windows-build.ps1
 
   build-linux:
     if: github.event_name != 'workflow_dispatch' || inputs.linux

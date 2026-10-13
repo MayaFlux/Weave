@@ -1,54 +1,23 @@
-#!/usr/bin/env powershell
-# Verify Windows build output
+param(
+    [string]$ZipPath,
+    [string]$ResultsDirectory,
+    [switch]$NoRestore
+)
 
-$ErrorActionPreference = "Stop"
-
-Write-Host ""
-Write-Host "Verifying Windows Build"
-Write-Host ""
-
-$zipPath = "build\windows\Weave.zip"
-if (-not (Test-Path $zipPath)) {
-    Write-Host "ERROR: ZIP not found at $zipPath"
-    exit 1
+$ErrorActionPreference = 'Stop'
+$repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+if (-not $ZipPath) { $ZipPath = Join-Path $repository 'build\windows\Weave.zip' }
+if (-not $ResultsDirectory) { $ResultsDirectory = Join-Path $repository 'build\windows\test-results' }
+if (-not (Test-Path -LiteralPath $ZipPath -PathType Leaf)) { throw "Published Windows ZIP not found: $ZipPath" }
+$previousZip = $env:WEAVE_WINDOWS_ZIP
+try {
+    $env:WEAVE_WINDOWS_ZIP = (Resolve-Path -LiteralPath $ZipPath).Path
+    $project = Join-Path $repository 'tests\windows\integration\Weave.Windows.IntegrationTests.csproj'
+    $arguments = @('test', $project, '-c', 'Release', '--logger', 'trx;LogFileName=windows-integration.trx', '--results-directory', $ResultsDirectory, '--verbosity', 'quiet')
+    if ($NoRestore) { $arguments += '--no-restore' }
+    & dotnet @arguments
+    $testExitCode = $LASTEXITCODE
+} finally {
+    $env:WEAVE_WINDOWS_ZIP = $previousZip
 }
-
-Write-Host "[OK] ZIP found: $zipPath"
-$zipSizeMB = [Math]::Round((Get-Item $zipPath).Length / 1MB, 1)
-Write-Host "[OK] Size: $zipSizeMB MB"
-
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-
-$zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
-
-# Check for flat structure (Weave.exe at root, not in subdirectory)
-$weaveEntry = $zip.Entries | Where-Object { $_.Name -eq "Weave.exe" -and $_.FullName -eq "Weave.exe" }
-if ($null -eq $weaveEntry) {
-    Write-Host "ERROR: Weave.exe not found at ZIP root"
-    Write-Host "Found entries:"
-    $zip.Entries | Where-Object { $_.Name -like "*Weave*" } | ForEach-Object { Write-Host "  $($_.FullName)" }
-    $zip.Dispose()
-    exit 1
-}
-
-Write-Host "[OK] Weave.exe at root (flat structure correct)"
-$sizeMB = [Math]::Round($weaveEntry.Length / 1MB, 1)
-Write-Host "[OK] Weave.exe size: $sizeMB MB"
-
-if ($sizeMB -lt 100) {
-    Write-Host "ERROR: Executable too small - not self-contained"
-    $zip.Dispose()
-    exit 1
-}
-
-$templatesEntries = $zip.Entries | Where-Object { $_.FullName -like "templates/*" }
-if ($templatesEntries.Count -eq 0) {
-    Write-Host "WARNING: templates directory not found in ZIP"
-} else {
-    Write-Host "[OK] templates directory found ($($templatesEntries.Count) files)"
-}
-
-$zip.Dispose()
-Write-Host ""
-Write-Host "[OK] ZIP verification passed - structure is correct"
-exit 0
+exit $testExitCode
