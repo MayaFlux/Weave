@@ -17,6 +17,14 @@ final class CreationOperationsTests: XCTestCase {
             ["new", "Demo", "/tmp"])
     }
 
+    func testProjectArgumentsIncludeShaderCopyOptionWhenRequested() {
+        XCTAssertEqual(
+            ProjectCreation.arguments(
+                name: "Demo", location: "/tmp/My Projects", withLila: false,
+                copyShaderSources: true),
+            ["new", "Demo", "/tmp/My Projects", "--copy-shader-sources"])
+    }
+
     func testBundledCLIIsSelectedWhenInstalledCLIIsMissing() {
         let installed = URL(fileURLWithPath: "/home/user/.local/bin/weave")
         let bundled = URL(fileURLWithPath: "/Applications/Weave.app/Contents/Resources/weave")

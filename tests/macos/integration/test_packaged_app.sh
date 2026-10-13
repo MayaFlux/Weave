@@ -62,6 +62,10 @@ printf 'set(PACKAGE_VERSION "0.5.0")\n' \
 printf 'include(CMakeFindDependencyMacro)\n' \
     >"$fixture_root/lib/cmake/MayaFlux/MayaFluxConfig.cmake"
 printf 'export MAYAFLUX_ROOT=%s\n' "$fixture_root" >"$fixture_root/env.sh"
+shader_source="$fixture_root/share/MayaFlux/src/shaders"
+mkdir -p "$shader_source/includes"
+printf 'vertex shader fixture\n' >"$shader_source/basic.vert"
+printf 'include fixture\n' >"$shader_source/includes/common.glsl"
 
 cat >"$test_root/shims/curl" <<'SH'
 #!/bin/sh
@@ -114,7 +118,7 @@ export HOME="$test_root/home"
 export ZDOTDIR="$test_root/zdotdir"
 tool_bin="$test_root/tools"
 mkdir -p "$tool_bin"
-for utility in zsh cat cp dirname grep head ls mkdir mv pwd sed seq sleep touch tr wc python3; do
+for utility in zsh cat cp dirname find grep head ln ls mkdir mv pwd rm sed seq sleep touch tr wc python3; do
     utility_path="$(command -v "$utility" || true)"
     [ -n "$utility_path" ] && ln -s "$utility_path" "$tool_bin/$utility"
 done
@@ -138,6 +142,7 @@ assert_file "$test_root/preflight-clone/fixture_module.cmake"
 
 help_output="$("$cli" --help)"
 assert_output_contains "$help_output" 'weave new'
+assert_output_contains "$help_output" '--copy-shader-sources'
 
 project_parent="$test_root/Projects With Spaces"
 mkdir -p "$project_parent"
@@ -182,6 +187,34 @@ printf '\n' >"$project/community.cmake"
 mv "$ZDOTDIR/.zshenv" "$ZDOTDIR/.zshenv.saved"
 assert_failure_contains "zsh startup file is missing: $ZDOTDIR/.zshenv" "$project/validate.sh"
 mv "$ZDOTDIR/.zshenv.saved" "$ZDOTDIR/.zshenv"
+
+shader_project_parent="$test_root/Shader Projects"
+mkdir -p "$shader_project_parent"
+shader_project_output="$("$cli" new ShaderProject "$shader_project_parent" --copy-shader-sources --no-vscode 2>&1)" \
+    || fail "Packaged CLI could not create a project with installed shaders: $shader_project_output"
+shader_project="$shader_project_parent/ShaderProject"
+assert_file "$shader_project/data/shaders/basic.vert"
+assert_file "$shader_project/data/shaders/includes/common.glsl"
+assert_output_contains "$(cat "$shader_project/data/shaders/includes/common.glsl")" 'include fixture'
+(cd "$shader_project_parent" && "$cli" new DefaultShaderProject --copy-shader-sources --no-vscode >/dev/null) \
+    || fail "CLI did not accept --copy-shader-sources when destination was omitted"
+assert_file "$shader_project_parent/DefaultShaderProject/data/shaders/basic.vert"
+
+if missing_shaders_output="$(MAYAFLUX_ROOT="$test_root/missing-mayaflux" "$cli" new MissingShaderProject "$shader_project_parent" --copy-shader-sources --no-vscode 2>&1)"; then
+    fail "Project creation unexpectedly succeeded without installed shader sources"
+fi
+assert_output_contains "$missing_shaders_output" 'MayaFlux shader sources were not found'
+[ ! -e "$shader_project_parent/MissingShaderProject" ] \
+    || fail "Missing shader source preflight left a partial project"
+
+ln -s "$shader_source/basic.vert" "$shader_source/linked.vert"
+if linked_shaders_output="$("$cli" new LinkedShaderProject "$shader_project_parent" --copy-shader-sources --no-vscode 2>&1)"; then
+    fail "Project creation unexpectedly accepted a linked shader source"
+fi
+assert_output_contains "$linked_shaders_output" 'MayaFlux shader sources contain a symbolic link'
+[ ! -e "$shader_project_parent/LinkedShaderProject" ] \
+    || fail "Linked shader source preflight left a partial project"
+rm "$shader_source/linked.vert"
 
 unsafe_parent="$test_root/Unsafe Projects"
 mkdir -p "$unsafe_parent"

@@ -1,9 +1,12 @@
 import Foundation
 
 enum ProjectCreation {
-    static func arguments(name: String, location: String, withLila: Bool) -> [String] {
+    static func arguments(
+        name: String, location: String, withLila: Bool, copyShaderSources: Bool = false
+    ) -> [String] {
         var result = ["new", name, location]
         if withLila { result.append("--with-lila") }
+        if copyShaderSources { result.append("--copy-shader-sources") }
         return result
     }
 

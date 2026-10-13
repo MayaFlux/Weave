@@ -64,6 +64,7 @@ Commands:
 Options (new):
   --with-lila    Enable live coding (links against Lila)
   --no-vscode    Skip VS Code configuration
+  --copy-shader-sources  Copy installed MayaFlux shader sources into the project
   --help         Show this help
 
 Environment Variables:
@@ -121,15 +122,25 @@ PYEOF
 
 cmd_new() {
     local PROJECT_NAME="${1:-}"
-    local DEST_DIR="${2:-.}"
+    local DEST_DIR='.'
     local WITH_LILA=false
     local WITH_VSCODE=true
+    local COPY_SHADER_SOURCES=false
+    local SHADER_SOURCE_DIR=''
+    local -a SHADER_SOURCES=()
 
-    shift 2 2>/dev/null || true
+    setopt local_options extendedglob
+
+    shift || true
+    if [ "$#" -gt 0 ] && [[ "$1" != --* ]]; then
+        DEST_DIR="$1"
+        shift
+    fi
     while [ "$#" -gt 0 ]; do
         case "$1" in
         --with-lila) WITH_LILA=true ;;
         --no-vscode) WITH_VSCODE=false ;;
+        --copy-shader-sources) COPY_SHADER_SOURCES=true ;;
         *) error "Unknown option: $1" ;;
         esac
         shift
@@ -164,6 +175,19 @@ cmd_new() {
     [ ! -f "$TEMPLATES_DIR/cmake/mayaflux.cmake" ] && error "Required template missing: cmake/mayaflux.cmake"
     [ ! -f "$TEMPLATES_DIR/cmake/shaders.cmake" ] && error "Required template missing: cmake/shaders.cmake"
     [ ! -f "$TEMPLATES_DIR/cmake/build_community.cmake" ] && error "Required template missing: cmake/build_community.cmake"
+
+    if [ "$COPY_SHADER_SOURCES" = true ]; then
+        SHADER_SOURCE_DIR="$MAYAFLUX_ROOT/share/MayaFlux/src/shaders"
+        [ ! -d "$SHADER_SOURCE_DIR" ] && error "MayaFlux shader sources were not found at $SHADER_SOURCE_DIR. Update MayaFlux or omit --copy-shader-sources."
+        SHADER_SOURCE_DIR="$(cd "$SHADER_SOURCE_DIR" && pwd -P)" \
+            || error "MayaFlux shader sources could not be accessed at $SHADER_SOURCE_DIR."
+        local linked_shader
+        linked_shader="$(find "$SHADER_SOURCE_DIR" -type l -print -quit)" \
+            || error "MayaFlux shader sources could not be checked at $SHADER_SOURCE_DIR."
+        [ -n "$linked_shader" ] && error "MayaFlux shader sources contain a symbolic link: $linked_shader"
+        SHADER_SOURCES=("$SHADER_SOURCE_DIR"/**/(#i)*.(glsl|vert|frag|comp|geom|tesc|tese|mesh|task|rgen|rchit|rahit|rmiss|rint|rcall)(N.))
+        [ "${#SHADER_SOURCES[@]}" -eq 0 ] && error "MayaFlux shader sources are empty at $SHADER_SOURCE_DIR. Update MayaFlux or omit --copy-shader-sources."
+    fi
 
     # ============================================================================
     # CREATE PROJECT STRUCTURE
@@ -251,6 +275,21 @@ cmd_new() {
         echo "  ✓ Copied template shaders"
     else
         echo "  ✓ Created empty data/shaders (no template shaders)"
+    fi
+
+    if [ "$COPY_SHADER_SOURCES" = true ]; then
+        local shader relative destination
+        for shader in "${SHADER_SOURCES[@]}"; do
+            relative="${shader#"$SHADER_SOURCE_DIR"/}"
+            destination="$PROJECT_DIR/data/shaders/$relative"
+            if [ -e "$destination" ]; then
+                echo "  ✓ Preserved project shader: $relative"
+                continue
+            fi
+            mkdir -p "$(dirname "$destination")"
+            cp "$shader" "$destination"
+            echo "  ✓ Copied MayaFlux shader source: $relative"
+        done
     fi
 
     # ============================================================================

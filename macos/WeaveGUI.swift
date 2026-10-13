@@ -710,6 +710,7 @@ struct CreateProjectView: View {
     @State private var projectName: String = "MyFirstProject"
     @State private var projectLocation: String = NSHomeDirectory() + "/Projects"
     @State private var withLila: Bool = false
+    @State private var copyShaderSources: Bool = false
     @State private var isCreating: Bool = false
     @State private var showAlert: Bool = false
     @State private var alertMessage: String = ""
@@ -757,6 +758,9 @@ struct CreateProjectView: View {
                 Toggle("Enable Lila (Live Coding)", isOn: $withLila)
                     .toggleStyle(CheckboxToggleStyle())
 
+                Toggle("Copy MayaFlux shader sources", isOn: $copyShaderSources)
+                    .toggleStyle(CheckboxToggleStyle())
+
                 Divider()
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -784,7 +788,7 @@ struct CreateProjectView: View {
             }
             .padding(24)
         }
-        .frame(width: 550, height: 450)
+        .frame(width: 550, height: 500)
         .alert("Weave", isPresented: $showAlert) {
             Button("OK") {
                 if alertMessage.contains("successfully") {
@@ -823,7 +827,8 @@ struct CreateProjectView: View {
         let task = Process()
         task.executableURL = weaveURL
         task.arguments = ProjectCreation.arguments(
-            name: projectName, location: projectLocation, withLila: withLila)
+            name: projectName, location: projectLocation, withLila: withLila,
+            copyShaderSources: copyShaderSources)
 
         let pipe = Pipe()
         task.standardOutput = pipe
