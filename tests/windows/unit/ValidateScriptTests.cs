@@ -19,6 +19,42 @@ public class ValidateScriptTests
     [TestCase("denied-read", 1)]
     public async Task PackagedValidatorReportsInstallationProblemsWithoutChangingTheHost(string scenario, int exitCode)
     {
+        var (report, errors, actualExitCode) = await RunAsync(scenario);
+        Assert.Multiple(() =>
+        {
+            Assert.That(errors, Is.Empty);
+            Assert.That(actualExitCode, Is.EqualTo(exitCode), report);
+            Assert.That(report, Does.Contain("MayaFlux installation check"));
+            Assert.That(report, Does.Contain("Nothing was changed"));
+            Assert.That(report, Does.Contain("Copy this report"));
+            if (exitCode != 0) Assert.That(report, Does.Contain("[FIX]"));
+            else Assert.That(report, Does.Contain("No problems found"));
+        });
+    }
+
+    [TestCase("project-healthy", 0, "release preset pair")]
+    [TestCase("project-missing-file", 1, "A project build file is missing")]
+    [TestCase("project-bad-presets", 1, "Project presets could not be checked")]
+    [TestCase("project-unresolved", 1, "template substitution is unfinished")]
+    [TestCase("project-missing-module", 1, "listed but its CMake file is missing")]
+    [TestCase("project-unsafe-module", 1, "Unsafe or unsupported community module entry")]
+    [TestCase("project-preset-probe-fails", 1, "CMake could not read the project presets")]
+    [TestCase("project-shader-pending", 0, "shader outputs are missing or older")]
+    public async Task ManualProjectDiagnosticsReportProblemsWithoutBuildingOrChangingFiles(string scenario, int exitCode, string message)
+    {
+        var (report, errors, actualExitCode) = await RunAsync(scenario);
+        Assert.Multiple(() =>
+        {
+            Assert.That(errors, Is.Empty);
+            Assert.That(actualExitCode, Is.EqualTo(exitCode), report);
+            Assert.That(report, Does.Contain("MayaFlux project diagnostics").And.Contain(message));
+            Assert.That(report, Does.Contain("Nothing was changed"));
+            Assert.That(report, Does.Contain("FIXTURE_UNCHANGED"));
+        });
+    }
+
+    private static async Task<(string Report, string Errors, int ExitCode)> RunAsync(string scenario)
+    {
         using var directory = new TestDirectory();
         using var resource = typeof(ResourceExtractor).Assembly.GetManifestResourceStream("Weave.Resources.templates.validate.ps1");
         Assert.That(resource, Is.Not.Null, "validate.ps1 must be embedded in Weave");
@@ -35,16 +71,7 @@ public class ValidateScriptTests
         catch { process.Kill(true); throw; }
         var report = await stdout;
         var errors = await stderr;
-        Assert.Multiple(() =>
-        {
-            Assert.That(errors, Is.Empty);
-            Assert.That(process.ExitCode, Is.EqualTo(exitCode), report);
-            Assert.That(report, Does.Contain("MayaFlux installation check"));
-            Assert.That(report, Does.Contain("Nothing was changed"));
-            Assert.That(report, Does.Contain("Copy this report"));
-            if (exitCode != 0) Assert.That(report, Does.Contain("[FIX]"));
-            else Assert.That(report, Does.Contain("No problems found"));
-        });
+        return (report, errors, process.ExitCode);
     }
 
     private static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
@@ -99,6 +126,12 @@ public class ValidateScriptTests
         function Find-ValidationTool($Name, $Candidates = @()) { return (Join-Path $fixtureRoot "$Name.exe") }
         function Invoke-ValidationTool($Path, $Arguments, $TimeoutSeconds = 15) {
             $name = [IO.Path]::GetFileNameWithoutExtension($Path)
+            if ($Arguments -contains '--list-presets=all') {
+                if ($scenario -eq 'project-preset-probe-fails') { return @{ Code = 1; Text = 'Invalid preset reference' } }
+                return @{ Code = 0; Text = 'release debug' }
+            }
+            $allowed = ($Arguments.Count -eq 1 -and ($Arguments[0] -eq '--version' -or ($name -eq 'ffmpeg' -and $Arguments[0] -eq '-version') -or ($name -eq '7z' -and $Arguments[0] -eq 'i')))
+            if (-not $allowed) { throw 'Unexpected tool operation' }
             $output = switch ($name) {
                 'cmake' { if ($scenario -eq 'old-cmake') { 'cmake version 3.25.0' } else { 'cmake version 3.31.0' } }
                 'git' { 'git version 2.39.5.windows.1' }
@@ -120,6 +153,26 @@ public class ValidateScriptTests
                 if ($LiteralPath -like "$ffmpeg*") { Write-Error 'Access to FFmpeg was denied.'; return $false }
                 Microsoft.PowerShell.Management\Test-Path @PSBoundParameters
             }
+        }
+        if ($scenario.StartsWith('project-')) {
+            $project = Join-Path $fixtureRoot 'User Project'
+            foreach ($relative in @('cmake', 'src\nested', 'data\shaders')) { New-Item -ItemType Directory -Path (Join-Path $project $relative) -Force | Out-Null }
+            foreach ($relative in @('CMakeLists.txt', 'cmake\mayaflux.cmake', 'cmake\shaders.cmake', 'cmake\build_community.cmake', 'src\nested\main.cpp')) { Set-Content -LiteralPath (Join-Path $project $relative) -Value 'fixture content' }
+            $presets = '{"version":6,"configurePresets":[{"name":"release"},{"name":"debug"}],"buildPresets":[{"name":"release","configurePreset":"release"},{"name":"debug","configurePreset":"debug"}]}'
+            if ($scenario -eq 'project-bad-presets') { $presets = '{broken json' }
+            Set-Content -LiteralPath (Join-Path $project 'CMakePresets.json') -Value $presets
+            Set-Content -LiteralPath (Join-Path $project 'community.cmake') -Value ''
+            if ($scenario -eq 'project-missing-file') { Remove-Item -LiteralPath (Join-Path $project 'cmake\shaders.cmake') }
+            if ($scenario -eq 'project-unresolved') { Set-Content -LiteralPath (Join-Path $project 'CMakeLists.txt') -Value 'project(@PROJECT_NAME@)' }
+            if ($scenario -eq 'project-missing-module') { Set-Content -LiteralPath (Join-Path $project 'community.cmake') -Value 'missing_module' }
+            if ($scenario -eq 'project-unsafe-module') { Set-Content -LiteralPath (Join-Path $project 'community.cmake') -Value '../escape' }
+            if ($scenario -eq 'project-shader-pending') { Set-Content -LiteralPath (Join-Path $project 'data\shaders\edit.comp') -Value 'GLSL fixture' }
+            function Get-ProjectSnapshot { return ((Get-ChildItem -LiteralPath $project -Recurse -File | Sort-Object FullName | ForEach-Object { $_.FullName + ':' + [Convert]::ToBase64String([IO.File]::ReadAllBytes($_.FullName)) }) -join "`n") }
+            $before = Get-ProjectSnapshot
+            $code = Invoke-InstallValidation -ProjectDirectory $project
+            if ($before -cne (Get-ProjectSnapshot)) { throw 'Diagnostics changed project files' }
+            Write-Host 'FIXTURE_UNCHANGED'
+            exit $code
         }
         exit (Invoke-InstallValidation)
         """;

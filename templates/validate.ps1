@@ -271,7 +271,7 @@ function Invoke-InstallValidation([string]$Root = $MayaFluxRoot, [string]$Projec
     $script:validationWarnings = 0
     if ($ProjectDirectory) { Write-Host 'MayaFlux project diagnostics' }
     else { Write-Host 'MayaFlux installation check' }
-    Write-Host 'This diagnostic is run manually. It checks files, tools and terminal settings without building or changing anything.'
+    Write-Host 'This diagnostic is run manually. It checks files, tools and terminal settings without building or changing anything. Nothing was changed.'
     Write-Host "Windows: $([Environment]::OSVersion.Version) | PowerShell: $($PSVersionTable.PSVersion) | 64-bit terminal: $([Environment]::Is64BitProcess)"
     if (-not [Environment]::Is64BitProcess) { Write-ValidationResult 'FIX' 'Open the 64-bit version of PowerShell and try again.' }
     if (-not $Root) { $Root = Get-ValidationEnvironment 'MAYAFLUX_ROOT' }
