@@ -1,6 +1,6 @@
 # Weave for macOS
 
-**Platform:** macOS 15.0 (Sequoia) or later, Universal Binary (arm64 + x86_64)
+**Platform:** macOS 26 (Tahoe) or later, Apple silicon (arm64)
 
 ---
 

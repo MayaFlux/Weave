@@ -1,4 +1,4 @@
-**Platform:** macOS 15.0 (Sequoia) or later, Universal Binary (arm64 + x86_64)
+**Platform:** macOS 26 (Tahoe) or later, Apple silicon (arm64)
 
 Open the DMG and double-click **Weave.app**. If macOS shows an "unverified developer" warning, go to **System Settings > Privacy & Security** and click **Open Anyway**, then launch again.
 

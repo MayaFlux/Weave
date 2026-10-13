@@ -6,7 +6,7 @@ MACOS_DIR="$(dirname "$SCRIPT_DIR")"
 ROOT_DIR="$(dirname "$MACOS_DIR")"
 BUILD_DIR="$ROOT_DIR/build/macos/WeaveApp"
 
-echo "Building Weave.app as Universal Binary (x86_64 + arm64)..."
+echo "Building Weave.app..."
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
@@ -40,7 +40,7 @@ cat >"$TEMP_PROJECT/Info.plist" <<EOF
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
-    <string>15.0</string>
+    <string>26.0</string>
     <key>LSUIElement</key>
     <false/>
     <key>NSHumanReadableCopyright</key>
@@ -55,37 +55,18 @@ cat >"$TEMP_PROJECT/Info.plist" <<EOF
 </plist>
 EOF
 
-echo "Compiling Swift code as Universal Binary..."
+echo "Compiling Swift code..."
 cd "$TEMP_PROJECT"
 
 SDK_PATH=$(xcrun --show-sdk-path)
 
-echo "Building for arm64 (Apple Silicon)..."
-swiftc -o Weave-arm64 \
+swiftc -o Weave \
     -parse-as-library \
-    -target arm64-apple-macos15.0 \
+    -target arm64-apple-macos26.0 \
     -sdk "$SDK_PATH" \
     -framework SwiftUI \
     -framework AppKit \
     WeaveGUI.swift CommunityManifest.swift CommunityUpdate.swift
-
-echo "Building for x86_64 (Intel)..."
-swiftc -o Weave-x86_64 \
-    -parse-as-library \
-    -target x86_64-apple-macos15.0 \
-    -sdk "$SDK_PATH" \
-    -framework SwiftUI \
-    -framework AppKit \
-    WeaveGUI.swift CommunityManifest.swift CommunityUpdate.swift
-
-echo "Creating universal binary..."
-lipo -create -output Weave Weave-arm64 Weave-x86_64
-
-echo "Verifying universal binary..."
-file Weave
-lipo -info Weave
-
-rm -f Weave-arm64 Weave-x86_64
 
 APP_BUNDLE="$BUILD_DIR/Weave.app"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
@@ -102,16 +83,14 @@ chmod +x "$APP_BUNDLE/Contents/Resources/weave"
 echo "Copying templates into bundle resources..."
 cp -R "$ROOT_DIR/templates" "$APP_BUNDLE/Contents/Resources/templates"
 
-echo "Code signing universal binary..."
+echo "Code signing app bundle..."
 codesign --force --deep --sign - "$APP_BUNDLE"
 
-echo "✅ Universal Weave.app built successfully"
+echo "✅ Weave.app built successfully"
 echo "Location: $APP_BUNDLE"
 
-lipo -info "$APP_BUNDLE/Contents/MacOS/Weave"
-
 if [ -d "$APP_BUNDLE" ]; then
-    echo "✅ Universal app bundle created successfully"
+    echo "✅ App bundle created successfully"
 else
     echo "❌ Failed to create app bundle"
     exit 1

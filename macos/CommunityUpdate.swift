@@ -70,8 +70,14 @@ enum CommunityUpdate {
         if let explicit = environment["MAYAFLUX_ROOT"], !explicit.isEmpty {
             roots = [explicit]
         } else {
-            let candidates = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"]
-            guard let brew = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+            let pathDirectories = (environment["PATH"] ?? "")
+                .split(separator: ":").map(String.init)
+            let optDirectories = (try? FileManager.default.contentsOfDirectory(atPath: "/opt"))?
+                .map { "/opt/\($0)/bin" } ?? []
+            guard let brew = (pathDirectories + optDirectories)
+                .filter({ !$0.hasPrefix("/usr/local") })
+                .map({ $0 + "/brew" })
+                .first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
                 throw CommunityUpdateError(message: "MAYAFLUX_ROOT is unset and Homebrew was not found")
             }
 

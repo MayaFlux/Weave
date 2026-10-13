@@ -12,7 +12,7 @@ Weave/
 │   ├── WeaveGUI.swift              # SwiftUI installer and project creator
 │   ├── Weave.sh                    # CLI tool (weave new / update / community)
 │   └── scripts/
-│       └── build_weave_app.sh      # Builds universal Weave.app and DMG
+│       └── build_weave_app.sh      # Builds Weave.app and DMG
 │
 ├── windows/
 │   ├── Weave/
@@ -84,7 +84,7 @@ Weave/
 
 ### macOS
 
-Requires Xcode Command Line Tools and Swift 5.9+.
+Requires Xcode 26 or later with the macOS 26 SDK.
 
 ```bash
 git clone https://github.com/MayaFlux/Weave.git
@@ -93,7 +93,7 @@ cd Weave
 # Output: build/macos/Weave.dmg
 ```
 
-Produces a universal binary DMG (arm64 + x86_64). The app is ad-hoc signed. Users will need to allow it via System Settings > Privacy & Security on first launch.
+Produces a DMG for macOS 26 or later. The app is ad-hoc signed. Users will need to allow it via System Settings > Privacy & Security on first launch.
 
 ### Windows
 

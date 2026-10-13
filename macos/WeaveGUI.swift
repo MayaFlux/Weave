@@ -134,8 +134,13 @@ class InstallerState: ObservableObject {
     @Published var createdZshenvPath: String? = nil
 
     var brewCmd: String? {
-        for p in ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"] {
-            if FileManager.default.isExecutableFile(atPath: p) { return p }
+        let pathDirectories = (ProcessInfo.processInfo.environment["PATH"] ?? "")
+            .split(separator: ":").map(String.init)
+        let optDirectories = (try? FileManager.default.contentsOfDirectory(atPath: "/opt"))?
+            .map { "/opt/\($0)/bin" } ?? []
+        for directory in pathDirectories + optDirectories where !directory.hasPrefix("/usr/local") {
+            let candidate = directory + "/brew"
+            if FileManager.default.isExecutableFile(atPath: candidate) { return candidate }
         }
         return nil
     }
@@ -231,7 +236,7 @@ class InstallerState: ObservableObject {
             }
             guard let found = brewCmd else {
                 step = .failed(
-                    "Homebrew installed but executable not found.\nExpected: /opt/homebrew/bin/brew or /usr/local/bin/brew"
+                    "Homebrew installed but executable not found.\nCheck your PATH or Homebrew installation under /opt."
                 )
                 return
             }

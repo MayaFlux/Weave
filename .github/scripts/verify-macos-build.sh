@@ -28,20 +28,23 @@ fi
 echo "✅ Weave CLI resource exists"
 
 echo ""
-echo "=== Checking universal binary ==="
+echo "=== Checking binary architecture ==="
 BINARY="build/macos/WeaveApp/Weave.app/Contents/MacOS/Weave"
-ARCHITECTURES=$(lipo -info "$BINARY")
+ARCHITECTURES=$(lipo -archs "$BINARY")
 echo "Architectures: $ARCHITECTURES"
 
-if [[ "$ARCHITECTURES" != *"x86_64"* ]]; then
-    echo "❌ Missing x86_64 (Intel) architecture"
+if [[ "$ARCHITECTURES" != "arm64" ]]; then
+    echo "❌ Unexpected binary architecture: $ARCHITECTURES"
     exit 1
 fi
-if [[ "$ARCHITECTURES" != *"arm64"* ]]; then
-    echo "❌ Missing arm64 (Apple Silicon) architecture"
+echo "✅ Binary architecture verified"
+
+MINIMUM_VERSION=$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "build/macos/WeaveApp/Weave.app/Contents/Info.plist")
+if [[ "$MINIMUM_VERSION" != "26.0" ]]; then
+    echo "❌ Expected macOS minimum version 26.0, found $MINIMUM_VERSION"
     exit 1
 fi
-echo "✅ Universal binary contains both x86_64 and arm64"
+echo "✅ Minimum macOS version is 26.0"
 
 echo ""
 echo "=== Bundle size ==="

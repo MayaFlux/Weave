@@ -8,16 +8,21 @@ set -euo pipefail
 # CONFIGURATION
 # ============================================================================
 
-BREW_CMD=""
-for brew_path in /opt/homebrew/bin/brew /usr/local/bin/brew; do
-    if [ -f "$brew_path" ] && [ -x "$brew_path" ]; then
-        BREW_CMD="$brew_path"
-        break
-    fi
-done
+BREW_CMD="$(command -v brew 2>/dev/null || true)"
+if [[ "$BREW_CMD" == /usr/local/* || ! -x "$BREW_CMD" ]]; then
+    BREW_CMD=""
+fi
+if [ -z "$BREW_CMD" ]; then
+    for brew_path in /opt/*/bin/brew(N); do
+        if [ -x "$brew_path" ]; then
+            BREW_CMD="$brew_path"
+            break
+        fi
+    done
+fi
 
 if [ -z "${MAYAFLUX_ROOT:-}" ]; then
-    if [ -n "$BREW_CMD" ]; then
+    if [ -x "$BREW_CMD" ]; then
         MAYAFLUX_ROOT=$("$BREW_CMD" --prefix mayaflux-dev)
     else
         echo "[Weave ERROR] MAYAFLUX_ROOT not set and Homebrew not found. Please set MAYAFLUX_ROOT environment variable to your MayaFlux installation location."
