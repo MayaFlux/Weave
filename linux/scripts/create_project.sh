@@ -131,26 +131,33 @@ cmd_new() {
     done
 
     [ -z "$PROJECT_NAME" ] && error "Project name required"
+    [[ "$PROJECT_NAME" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || error "Project name must start with a letter or underscore and contain only letters, digits, or underscores"
+    case "${PROJECT_NAME^^}" in
+        CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]) error "Project name is reserved on Windows: $PROJECT_NAME" ;;
+    esac
 
     DEST_DIR="${DEST_DIR/#\~/$HOME}"
-    mkdir -p "$DEST_DIR" || error "Cannot create destination directory: $DEST_DIR"
-    DEST_DIR="$(cd "$DEST_DIR" && pwd)"
+    [[ "$DEST_DIR" = /* ]] || DEST_DIR="$(pwd -P)/$DEST_DIR"
+    [ -d "$DEST_DIR" ] || error "Project destination must be an existing directory: $DEST_DIR"
+    local current='' component
+    local -a components=()
+    IFS='/' read -r -a components <<< "$DEST_DIR"
+    for component in "${components[@]}"; do
+        [ -z "$component" ] && continue
+        current="$current/$component"
+        [ -L "$current" ] && error "Project destination contains a symbolic link: $current"
+    done
+    DEST_DIR="$(cd -P "$DEST_DIR" && pwd)"
 
     local PROJECT_DIR="$DEST_DIR/$PROJECT_NAME"
 
-    if [ -d "$PROJECT_DIR" ]; then
-        if [ -f "$PROJECT_DIR/CMakeLists.txt" ] && grep -q "MayaFlux" "$PROJECT_DIR/CMakeLists.txt" 2>/dev/null; then
-            log "Project '$PROJECT_NAME' already exists and is a MayaFlux project."
-            log "Nothing to do."
-            exit 0
-        else
-            error "Directory already exists and is not a MayaFlux project: $PROJECT_DIR"
-        fi
+    if [ -e "$PROJECT_DIR" ] || [ -L "$PROJECT_DIR" ]; then
+        error "Project destination already exists: $PROJECT_DIR"
     fi
 
     [ ! -d "$TEMPLATES_DIR" ] && error "Templates not found at $TEMPLATES_DIR"
 
-    for template in CMakeLists.txt main.cpp user_project.hpp validate.sh; do
+    for template in CMakeLists.txt CMakePresets.json main.cpp user_project.hpp validate.sh .gitignore; do
         [ ! -f "$TEMPLATES_DIR/$template" ] && error "Required template missing: $template"
     done
 
@@ -174,18 +181,21 @@ cmd_new() {
         [ -L "$SHADER_SOURCE_DIR" ] && error "MayaFlux shader source directory is a symbolic link: $SHADER_SOURCE_DIR"
         [ -n "$(find "$SHADER_SOURCE_DIR" -type l -print -quit)" ] && error "MayaFlux shader sources contain a symbolic link: $SHADER_SOURCE_DIR"
         mapfile -d '' -t SHADER_SOURCES < <(
-            find "$SHADER_SOURCE_DIR" -type f \(
-                -iname '*.glsl' -o -iname '*.vert' -o -iname '*.frag' -o -iname '*.comp' -o
-                -iname '*.geom' -o -iname '*.tesc' -o -iname '*.tese' -o -iname '*.mesh' -o
-                -iname '*.task' -o -iname '*.rgen' -o -iname '*.rchit' -o -iname '*.rahit' -o
-                -iname '*.rmiss' -o -iname '*.rint' -o -iname '*.rcall'
+            find "$SHADER_SOURCE_DIR" -type f \( \
+                -iname '*.glsl' -o -iname '*.vert' -o -iname '*.frag' -o -iname '*.comp' -o \
+                -iname '*.geom' -o -iname '*.tesc' -o -iname '*.tese' -o -iname '*.mesh' -o \
+                -iname '*.task' -o -iname '*.rgen' -o -iname '*.rchit' -o -iname '*.rahit' -o \
+                -iname '*.rmiss' -o -iname '*.rint' -o -iname '*.rcall' \
             \) -print0
         )
         [ -z "${SHADER_SOURCES[0]-}" ] && error "MayaFlux shader sources are empty at $SHADER_SOURCE_DIR. Update MayaFlux or omit --copy-shader-sources."
     fi
 
     log "Creating project: $PROJECT_NAME"
-    mkdir -p "$PROJECT_DIR/src"
+    mkdir "$PROJECT_DIR"
+    CREATED_PROJECT_DIR="$PROJECT_DIR"
+    trap 'status=$?; if [ "$status" -ne 0 ] && [ -d "$CREATED_PROJECT_DIR" ]; then rm -rf -- "$CREATED_PROJECT_DIR" || printf "[Weave ERROR] Incomplete project could not be removed: %s\n" "$CREATED_PROJECT_DIR" >&2; fi' EXIT
+    mkdir "$PROJECT_DIR/src"
     mkdir -p "$PROJECT_DIR/cmake"
     [ "$WITH_VSCODE" = true ] && mkdir -p "$PROJECT_DIR/.vscode"
 
@@ -294,6 +304,8 @@ EOF
     log "Build from the project directory with the release preset:"
     log "  cmake --preset release"
     log "  cmake --build --preset release --parallel"
+    trap - EXIT
+    unset CREATED_PROJECT_DIR
 }
 
 # ============================================================================
@@ -382,18 +394,34 @@ cmd_community() {
         error "Module name must be snake_case (lowercase letters, digits, underscores, no leading digit)"
 
     DEST_DIR="${DEST_DIR/#\~/$HOME}"
-    mkdir -p "$DEST_DIR" || error "Cannot create destination directory: $DEST_DIR"
-    DEST_DIR="$(cd "$DEST_DIR" && pwd)"
+    [[ "$DEST_DIR" = /* ]] || DEST_DIR="$(pwd -P)/$DEST_DIR"
+    [ -d "$DEST_DIR" ] || error "Module destination must be an existing directory: $DEST_DIR"
+    local current='' component
+    local -a components=()
+    IFS='/' read -r -a components <<< "$DEST_DIR"
+    for component in "${components[@]}"; do
+        [ -z "$component" ] && continue
+        current="$current/$component"
+        [ -L "$current" ] && error "Module destination contains a symbolic link: $current"
+    done
+    DEST_DIR="$(cd -P "$DEST_DIR" && pwd)"
 
     local MODULE_DIR="$DEST_DIR/$MODULE_NAME"
-    [ -d "$MODULE_DIR" ] && error "Directory already exists: $MODULE_DIR"
+    if [ -e "$MODULE_DIR" ] || [ -L "$MODULE_DIR" ]; then
+        error "Module destination already exists: $MODULE_DIR"
+    fi
 
+    [ ! -f "$TEMPLATES_DIR/.gitignore" ] && error "Required template missing: .gitignore"
+    [ ! -f "$TEMPLATES_DIR/community/CMakePresets.json" ] && error "Required template missing: community/CMakePresets.json"
     [ ! -f "$TEMPLATES_DIR/community/module.cmake" ] && error "Required template missing: community/module.cmake"
     [ ! -f "$TEMPLATES_DIR/community/community.json" ] && error "Required template missing: community/community.json"
     [ ! -f "$TEMPLATES_DIR/community/test/CMakeLists.txt" ] && error "Required template missing: community/test/CMakeLists.txt"
 
-    mkdir -p "$MODULE_DIR/src"
-    mkdir -p "$MODULE_DIR/test"
+    mkdir "$MODULE_DIR"
+    CREATED_MODULE_DIR="$MODULE_DIR"
+    trap 'status=$?; if [ "$status" -ne 0 ] && [ -d "$CREATED_MODULE_DIR" ]; then rm -rf -- "$CREATED_MODULE_DIR" || printf "[Weave ERROR] Incomplete module could not be removed: %s\n" "$CREATED_MODULE_DIR" >&2; fi' EXIT
+    mkdir "$MODULE_DIR/src"
+    mkdir "$MODULE_DIR/test"
 
     cp "$TEMPLATES_DIR/.gitignore" "$MODULE_DIR/.gitignore"
     cp "$TEMPLATES_DIR/community/CMakePresets.json" "$MODULE_DIR/CMakePresets.json"
@@ -408,8 +436,17 @@ cmd_community() {
         >"$MODULE_DIR/test/CMakeLists.txt"
 
     touch "$MODULE_DIR/test/test_${MODULE_NAME}.cpp"
-    git -C "$MODULE_DIR" init -q -b main
-    git -C "$MODULE_DIR" add -A
+    trap - EXIT
+    unset CREATED_MODULE_DIR
+    if command -v git >/dev/null 2>&1; then
+        if git -C "$MODULE_DIR" init -q -b main; then
+            git -C "$MODULE_DIR" add -A || log "  WARNING: Git could not stage module files. Run git add -A in $MODULE_DIR when ready."
+        else
+            log "  WARNING: Git could not initialize the module repository. Run git init in $MODULE_DIR when ready."
+        fi
+    else
+        log "  WARNING: Git is unavailable. Initialize a repository in $MODULE_DIR when ready."
+    fi
 
     log ""
     log "[Weave] Community module created: $MODULE_DIR"

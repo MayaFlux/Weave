@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -119,6 +120,8 @@ def clone_module(repo, destination, report):
 
 
 def register(path, names):
+    if path.is_symlink():
+        raise UpdateError(f"Community registration is a symbolic link: {path}")
     current = path.read_text(encoding="utf-8") if path.exists() else ""
     existing = {line.strip() for line in current.splitlines() if line.strip()}
     additions = [name for name in names if name not in existing]
@@ -150,9 +153,18 @@ def register(path, names):
 
 def update(project_path, values, root, report):
     names = parse_names(values)
-    project = Path(project_path).expanduser().resolve()
+    project = Path(project_path).expanduser()
+    if project.is_symlink():
+        raise UpdateError(f"Project path is a symbolic link: {project}")
+    project = project.resolve()
     if not (project / "CMakeLists.txt").is_file():
         raise UpdateError(f"Not a MayaFlux project: {project}")
+
+    community = project / "community"
+    registration = project / "community.cmake"
+    if community.is_symlink() or registration.is_symlink():
+        raise UpdateError(f"Community path is a symbolic link in {project}")
+    community_was_present = community.exists()
 
     report("Fetching registry...")
     try:
@@ -161,7 +173,6 @@ def update(project_path, values, root, report):
     except (OSError, UnicodeError, ValueError) as error:
         raise UpdateError(f"Could not prepare community modules: {error}") from error
 
-    community = project / "community"
     cloned = []
 
     try:
@@ -174,6 +185,9 @@ def update(project_path, values, root, report):
             module = community / name
             report(f"Preparing {name}...")
 
+            if module.is_symlink():
+                raise UpdateError(f"Community module path is a symbolic link: {module}")
+
             if module.exists() and not module.is_dir():
                 raise UpdateError(f"Community path for {name} is not a directory: {module}")
 
@@ -183,7 +197,7 @@ def update(project_path, values, root, report):
                 try:
                     clone_module(repo, module, report)
                 finally:
-                    if module.exists():
+                    if module.exists() or module.is_symlink():
                         cloned.append(name)
             else:
                 report(f"Using existing community/{name}")
@@ -218,10 +232,26 @@ def update(project_path, values, root, report):
                 report(f"{name} has declared requirements pending review")
             report(f"Validated {name}")
 
-        added = register(project / "community.cmake", names)
+        added = register(registration, names)
     except (OSError, UpdateError) as error:
-        remaining = ", ".join(cloned) if cloned else "none"
-        raise UpdateError(f"{error}. Clones left in community/: {remaining}") from error
+        remaining = []
+        for name in reversed(cloned):
+            module = community / name
+            try:
+                if module.is_symlink():
+                    module.unlink()
+                elif module.is_dir():
+                    shutil.rmtree(module)
+            except OSError:
+                remaining.append(name)
+        if not community_was_present and community.is_dir():
+            try:
+                community.rmdir()
+            except OSError:
+                pass
+        if remaining:
+            raise UpdateError(f"{error}. Incomplete clones could not be removed: {', '.join(remaining)}") from error
+        raise UpdateError(str(error)) from error
 
     for name in names:
         report(

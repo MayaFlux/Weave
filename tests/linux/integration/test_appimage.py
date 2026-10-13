@@ -112,6 +112,7 @@ class AppImageIntegrationTests(unittest.TestCase):
             "lib/scripts/create_project.sh",
             "lib/templates/CMakeLists.txt",
             "lib/templates/main.cpp",
+            "lib/templates/validate.sh",
             "lib/templates/community",
             "usr/bin/python3",
             "usr/lib/libEGL.so.1",
@@ -188,6 +189,7 @@ print(json.dumps({
 
     def test_packaged_cli_creates_project_with_packaged_templates(self):
         destination = self.workdir / "projects"
+        destination.mkdir()
         result = self.run_packaged_cli(
             "new", "AudioGarden", destination, "--no-vscode"
         )
@@ -196,10 +198,13 @@ print(json.dumps({
         self.assertIn("project(AudioGarden", (project / "CMakeLists.txt").read_text())
         self.assertTrue((project / "src" / "main.cpp").is_file())
         self.assertTrue((project / "cmake" / "mayaflux.cmake").is_file())
+        self.assertTrue((project / "validate.sh").is_file())
+        self.assertTrue(os.access(project / "validate.sh", os.X_OK))
 
     def test_packaged_cli_creates_community_module_with_packaged_templates(self):
         self.assertIsNotNone(shutil.which("git"), "git is required by the CLI")
         destination = self.workdir / "modules"
+        destination.mkdir()
         result = self.run_packaged_cli("community", "terrain_field", destination)
         self.assertEqual(result.returncode, 0, result.stderr)
         module = destination / "terrain_field"
@@ -294,6 +299,7 @@ print(json.dumps({
         )
         environment.pop("WEAVE_TEMPLATE_DIR")
         project_root = self.workdir / "installed-cli-projects"
+        project_root.mkdir()
         created = subprocess.run(
             [str(launcher), "new", "AudioGarden", str(project_root), "--no-vscode"],
             cwd=self.workdir,
@@ -304,6 +310,7 @@ print(json.dumps({
         )
         self.assertEqual(created.returncode, 0, created.stderr)
         self.assertTrue((project_root / "AudioGarden" / "CMakeLists.txt").is_file())
+        self.assertTrue((project_root / "AudioGarden" / "validate.sh").is_file())
 
     def test_packaged_installer_pty_reports_command_status(self):
         probe = r'''

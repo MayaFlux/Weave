@@ -123,6 +123,67 @@ else
     fix 'Missing project directory: data/shaders/'
 fi
 
+if [ -f "$project_dir/CMakePresets.json" ]; then
+    if command -v python3 >/dev/null 2>&1; then
+        if preset_error="$(python3 - "$project_dir/CMakePresets.json" <<'PY'
+import json
+import sys
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as source:
+        presets = json.load(source)
+    configure = {item["name"] for item in presets["configurePresets"]}
+    builds = {item["name"]: item["configurePreset"] for item in presets["buildPresets"]}
+    if any(name not in configure or builds.get(name) != name for name in ("debug", "release")):
+        raise ValueError("debug and release configure/build preset pairs are required")
+except (OSError, ValueError, KeyError, TypeError) as error:
+    print(error)
+    sys.exit(1)
+PY
+)"; then
+            ok 'Project presets include debug and release configure/build pairs.'
+        else
+            fix "Project presets could not be checked: $preset_error"
+        fi
+    else
+        fix 'Project presets could not be checked because python3 is unavailable.'
+    fi
+fi
+
+for relative in CMakeLists.txt cmake/mayaflux.cmake; do
+    if [ -f "$project_dir/$relative" ] && grep -Eq '@[A-Z][A-Z_]*@' "$project_dir/$relative"; then
+        fix "Project template substitution is unfinished in $relative."
+    fi
+done
+
+if [ -f "$project_dir/community.cmake" ]; then
+    while IFS= read -r module || [ -n "$module" ]; do
+        module="${module#"${module%%[![:space:]]*}"}"
+        module="${module%"${module##*[![:space:]]}"}"
+        [[ -z "$module" || "$module" == \#* ]] && continue
+        if [[ ! "$module" =~ ^[a-z][a-z0-9_]*$ ]]; then
+            fix "Unsafe or unsupported community module entry: $module"
+        elif [ ! -f "$project_dir/community/$module/$module.cmake" ]; then
+            fix "Community module $module is listed but its CMake file is missing."
+        fi
+    done < "$project_dir/community.cmake"
+fi
+
+if [ -d "$project_dir/data/shaders" ]; then
+    mapfile -d '' -t shaders < <(find "$project_dir/data/shaders" -type f \( \
+        -name '*.vert' -o -name '*.frag' -o -name '*.comp' -o -name '*.geom' -o \
+        -name '*.tesc' -o -name '*.tese' -o -name '*.mesh' -o -name '*.task' -o \
+        -name '*.rgen' -o -name '*.rchit' -o -name '*.rahit' -o -name '*.rmiss' -o \
+        -name '*.rint' -o -name '*.rcall' \
+    \) -print0)
+    for shader in "${shaders[@]}"; do
+        if [ ! -f "$shader.spv" ] || [ "$shader" -nt "$shader.spv" ]; then
+            printf '[INFO] Project shader outputs are missing or older than their sources. The project build preset compiles them.\n'
+            break
+        fi
+    done
+fi
+
 printf '\nSummary\n'
 if (( issues == 0 )); then
     printf 'No problems found in these checks.\n'

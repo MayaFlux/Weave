@@ -1,4 +1,5 @@
 import importlib.util
+import os
 import subprocess
 import sys
 import tempfile
@@ -29,11 +30,16 @@ project_mode = load_project_mode()
 def project_view(name, location):
     button = Mock()
     button.get_label.return_value = "Create Project"
+    lila = Mock()
+    lila.get_active.return_value = False
+    shaders = Mock()
+    shaders.get_active.return_value = False
     return types.SimpleNamespace(
         name_entry=Mock(get_text=Mock(return_value=name)),
         loc_entry=Mock(get_text=Mock(return_value=location)),
         create_btn=button,
-        lila_check=Mock(),
+        lila_check=lila,
+        shader_sources_check=shaders,
         script_dir=Path("/weave/scripts"),
         template_dir=Path("/weave/templates"),
         _show_error=Mock(),
@@ -109,7 +115,9 @@ class ProjectCreationTests(unittest.TestCase):
     def test_success_reports_created_project_location(self):
         with tempfile.TemporaryDirectory() as temporary:
             view = project_view("MyProject", temporary)
-            view.lila_check.get_active.return_value = False
+            project = Path(temporary) / "MyProject"
+            project.mkdir()
+            (project / "validate.sh").write_text("#!/bin/bash\n")
             completed = subprocess.CompletedProcess([], 0, stdout="Created", stderr="")
             dialog = Mock()
 
@@ -124,8 +132,67 @@ class ProjectCreationTests(unittest.TestCase):
             ["/weave/scripts/create_project.sh", "new", "MyProject", temporary],
         )
         self.assertIn(str(Path(temporary) / "MyProject"), alert.call_args.kwargs["detail"])
+        self.assertNotIn("cmake", alert.call_args.kwargs["detail"])
+        self.assertNotIn("validate.sh", alert.call_args.kwargs["detail"])
         dialog.choose.assert_called_once()
         view._show_error.assert_not_called()
+
+    def test_shader_copy_choice_reaches_generator_as_an_argument(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            view = project_view("MyProject", temporary)
+            view.shader_sources_check.get_active.return_value = True
+            failed = subprocess.CompletedProcess([], 1, stdout="", stderr="Sources missing")
+            with patch.object(project_mode.subprocess, "run", return_value=failed) as run:
+                project_mode.ProjectCreationMode._create_project_async(
+                    view, "MyProject", temporary, "Create Project"
+                )
+
+        self.assertEqual(
+            run.call_args.args[0],
+            ["/weave/scripts/create_project.sh", "new", "MyProject", temporary, "--copy-shader-sources"],
+        )
+
+    def test_gui_creates_project_with_validator_and_requested_shader_sources(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            prefix = root / "MayaFlux"
+            shader = prefix / "share/MayaFlux/src/shaders/effects/blur.comp"
+            shader.parent.mkdir(parents=True)
+            shader.write_text("shader source\n")
+            view = project_view("MyProject", temporary)
+            view.script_dir = Path(__file__).resolve().parents[2] / "linux/scripts"
+            view.template_dir = Path(__file__).resolve().parents[2] / "templates"
+            view.shader_sources_check.get_active.return_value = True
+            dialog = Mock()
+
+            with patch.dict(os.environ, {"MAYAFLUX_ROOT": str(prefix)}):
+                with patch.object(project_mode.Gtk, "AlertDialog", return_value=dialog, create=True):
+                    project_mode.ProjectCreationMode._create_project_async(
+                        view, "MyProject", temporary, "Create Project"
+                    )
+
+            project = root / "MyProject"
+            self.assertTrue((project / "validate.sh").is_file())
+            self.assertEqual(
+                (project / "data/shaders/effects/blur.comp").read_text(),
+                "shader source\n",
+            )
+            self.assertTrue((project / "CMakePresets.json").is_file())
+            dialog.choose.assert_called_once()
+            view._show_error.assert_not_called()
+
+    def test_missing_deployed_validator_prevents_success_report(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            view = project_view("MyProject", temporary)
+            completed = subprocess.CompletedProcess([], 0, stdout="Created", stderr="")
+            with patch.object(project_mode.subprocess, "run", return_value=completed):
+                with patch.object(project_mode.Gtk, "AlertDialog", create=True) as alert:
+                    project_mode.ProjectCreationMode._create_project_async(
+                        view, "MyProject", temporary, "Create Project"
+                    )
+
+        alert.assert_not_called()
+        self.assertIn("validate.sh was not deployed", view._show_error.call_args.args[0])
 
     def test_generator_timeout_restores_create_button(self):
         with tempfile.TemporaryDirectory() as temporary:

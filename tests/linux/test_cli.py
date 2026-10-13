@@ -45,7 +45,135 @@ class LinuxCliTests(unittest.TestCase):
             self.assertTrue((project / "src" / "main.cpp").is_file())
             self.assertTrue((project / "cmake" / "mayaflux.cmake").is_file())
             self.assertTrue((project / "community.cmake").is_file())
+            self.assertEqual((project / "validate.sh").read_text(), (TEMPLATES / "validate.sh").read_text())
+            self.assertTrue(os.access(project / "validate.sh", os.X_OK))
+            presets = json.loads((project / "CMakePresets.json").read_text())
+            self.assertEqual({entry["name"] for entry in presets["configurePresets"]}, {"debug", "release"})
+            self.assertIn("cmake --preset release", (project / "README.md").read_text())
             self.assertFalse((project / ".vscode").exists())
+
+    def test_shader_copy_preserves_nested_sources_and_template_collisions(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "mayaflux" / "share" / "MayaFlux" / "src" / "shaders"
+            (source / "nested").mkdir(parents=True)
+            (source / "include").mkdir()
+            (source / "nested" / "edit.comp").write_text("editable source")
+            (source / "include" / "common.glsl").write_text("shared include")
+            (source / "nested" / "edit.comp.spv").write_text("binary")
+            (source / "attractor.frag").write_text("installed collision")
+
+            result = run_cli("new", "AudioGarden", root, "--copy-shader-sources", root=root)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            shaders = root / "AudioGarden" / "data" / "shaders"
+            self.assertEqual((shaders / "nested" / "edit.comp").read_text(), "editable source")
+            self.assertEqual((shaders / "include" / "common.glsl").read_text(), "shared include")
+            self.assertEqual((shaders / "attractor.frag").read_text(), (TEMPLATES / "shaders" / "attractor.frag").read_text())
+            self.assertFalse((shaders / "nested" / "edit.comp.spv").exists())
+
+    def test_missing_or_empty_shader_sources_fail_before_project_creation(self):
+        for empty in (False, True):
+            with self.subTest(empty=empty), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                if empty:
+                    (root / "mayaflux" / "share" / "MayaFlux" / "src" / "shaders").mkdir(parents=True)
+                result = run_cli("new", "AudioGarden", root, "--copy-shader-sources", root=root)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse((root / "AudioGarden").exists())
+
+    def test_linked_shader_sources_fail_before_project_creation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "mayaflux" / "share" / "MayaFlux" / "src" / "shaders"
+            source.mkdir(parents=True)
+            (source / "linked").symlink_to(root, target_is_directory=True)
+            result = run_cli("new", "AudioGarden", root, "--copy-shader-sources", root=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse((root / "AudioGarden").exists())
+
+    def test_invalid_project_name_and_missing_parent_fail_without_writes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            invalid = run_cli("new", "bad/name", root, root=root)
+            missing = run_cli("new", "GoodName", root / "missing", root=root)
+            self.assertNotEqual(invalid.returncode, 0)
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertFalse((root / "bad").exists())
+            self.assertFalse((root / "missing").exists())
+
+    def test_existing_project_and_linked_parent_are_preserved(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            existing = root / "AudioGarden"
+            existing.mkdir()
+            (existing / "keep.txt").write_text("user content")
+            linked = root / "linked"
+            linked.symlink_to(root, target_is_directory=True)
+            first = run_cli("new", "AudioGarden", root, root=root)
+            second = run_cli("new", "OtherProject", linked, root=root)
+            self.assertNotEqual(first.returncode, 0)
+            self.assertNotEqual(second.returncode, 0)
+            self.assertEqual((existing / "keep.txt").read_text(), "user content")
+            self.assertFalse((root / "OtherProject").exists())
+
+    def test_failed_template_copy_removes_only_new_project_and_allows_retry(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            other = root / "OtherProject"
+            other.mkdir()
+            (other / "keep.txt").write_text("user content")
+            fake_bin = root / "fake-bin"
+            fake_bin.mkdir()
+            fake_cp = fake_bin / "cp"
+            fake_cp.write_text("#!/bin/sh\nexit 7\n")
+            fake_cp.chmod(0o755)
+            failed = run_cli("new", "AudioGarden", root, root=root, environment={"PATH": f"{fake_bin}:{os.environ['PATH']}"})
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertFalse((root / "AudioGarden").exists(), failed.stderr)
+            self.assertEqual((other / "keep.txt").read_text(), "user content")
+            retry = run_cli("new", "AudioGarden", root, root=root)
+            self.assertEqual(retry.returncode, 0, retry.stderr)
+
+    def test_missing_required_project_template_fails_before_project_creation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            templates = root / "templates"
+            shutil.copytree(TEMPLATES, templates)
+            (templates / ".gitignore").unlink()
+            result = run_cli("new", "AudioGarden", root, root=root, environment={"WEAVE_TEMPLATE_DIR": str(templates)})
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse((root / "AudioGarden").exists())
+
+    @unittest.skipUnless(shutil.which("git"), "git is required for module scaffolding")
+    def test_missing_community_template_fails_before_module_creation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            templates = root / "templates"
+            shutil.copytree(TEMPLATES, templates)
+            (templates / "community" / "CMakePresets.json").unlink()
+            result = run_cli("community", "terrain_field", root, root=root, environment={"WEAVE_TEMPLATE_DIR": str(templates)})
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse((root / "terrain_field").exists())
+
+    @unittest.skipUnless(shutil.which("git"), "git is required for module scaffolding")
+    def test_failed_community_generation_preserves_sibling_and_allows_retry(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sibling = root / "OtherModule"
+            sibling.mkdir()
+            (sibling / "keep.txt").write_text("user content")
+            fake_bin = root / "fake-bin"
+            fake_bin.mkdir()
+            fake_cp = fake_bin / "cp"
+            fake_cp.write_text("#!/bin/sh\nexit 7\n")
+            fake_cp.chmod(0o755)
+            failed = run_cli("community", "terrain_field", root, root=root, environment={"PATH": f"{fake_bin}:{os.environ['PATH']}"})
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertFalse((root / "terrain_field").exists(), failed.stderr)
+            self.assertEqual((sibling / "keep.txt").read_text(), "user content")
+            retry = run_cli("community", "terrain_field", root, root=root)
+            self.assertEqual(retry.returncode, 0, retry.stderr)
 
     def test_new_rejects_unknown_option_without_creating_project(self):
         with tempfile.TemporaryDirectory() as temporary:
