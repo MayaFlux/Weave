@@ -25,6 +25,21 @@ enum CommunityUpdate {
         let minimum: Version
     }
 
+    struct Dependencies {
+        let registry: () async throws -> [String: RegistryEntry]
+        let installedVersion: () throws -> (String, Version)
+        let clone: (String, String, (String) -> Void) throws -> Void
+
+        static var live: Dependencies {
+            Dependencies(
+                registry: { try await CommunityUpdate.registry() },
+                installedVersion: { try CommunityUpdate.installedVersion() },
+                clone: { repo, destination, report in
+                    try CommunityUpdate.clone(repo, to: destination, report: report)
+                })
+        }
+    }
+
     static func names(_ values: [String]) throws -> [String] {
         var result: [String] = []
         var seen = Set<String>()
@@ -70,14 +85,11 @@ enum CommunityUpdate {
         if let explicit = environment["MAYAFLUX_ROOT"], !explicit.isEmpty {
             roots = [explicit]
         } else {
-            let pathDirectories = (environment["PATH"] ?? "")
-                .split(separator: ":").map(String.init)
-            let optDirectories = (try? FileManager.default.contentsOfDirectory(atPath: "/opt"))?
-                .map { "/opt/\($0)/bin" } ?? []
-            guard let brew = (pathDirectories + optDirectories)
-                .filter({ !$0.hasPrefix("/usr/local") })
-                .map({ $0 + "/brew" })
-                .first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+            let optDirectories = (try? FileManager.default.contentsOfDirectory(atPath: "/opt"))
+                ?? []
+            guard let brew = HomebrewLocator.discover(
+                path: environment["PATH"] ?? "", optDirectories: optDirectories,
+                isExecutable: FileManager.default.isExecutableFile(atPath:)) else {
                 throw CommunityUpdateError(message: "MAYAFLUX_ROOT is unset and Homebrew was not found")
             }
 
@@ -188,7 +200,10 @@ enum CommunityUpdate {
         }
     }
 
-    static func run(projectPath: String, values: [String], report: (String) -> Void) async throws {
+    static func run(
+        projectPath: String, values: [String], report: (String) -> Void,
+        dependencies: Dependencies = .live
+    ) async throws {
         let requested = try names(values)
         let project = (projectPath as NSString).expandingTildeInPath
         let manager = FileManager.default
@@ -198,8 +213,8 @@ enum CommunityUpdate {
         }
 
         report("Fetching registry...")
-        let entries = try await registry()
-        let installed = try installedVersion()
+        let entries = try await dependencies.registry()
+        let installed = try dependencies.installedVersion()
         let community = "\(project)/community"
         var cloned: [String] = []
 
@@ -225,7 +240,7 @@ enum CommunityUpdate {
                     defer {
                         if manager.fileExists(atPath: module) { cloned.append(name) }
                     }
-                    try clone(entry.repo, to: module, report: report)
+                    try dependencies.clone(entry.repo, module, report)
                 } else {
                     report("Using existing community/\(name)")
                 }

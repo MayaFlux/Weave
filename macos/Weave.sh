@@ -79,10 +79,9 @@ error() {
 }
 
 _version_gte() {
-    local IFS=.
-    local a=($1) b=($2)
+    local -a a=("${(@s:.:)1}") b=("${(@s:.:)2}")
     local i
-    for i in 0 1 2; do
+    for i in 1 2 3; do
         local av=${a[$i]:-0} bv=${b[$i]:-0}
         if [ "$av" -gt "$bv" ]; then return 0; fi
         if [ "$av" -lt "$bv" ]; then return 1; fi
@@ -137,6 +136,8 @@ cmd_new() {
     done
 
     [ -z "$PROJECT_NAME" ] && error "Project name required"
+    [[ "$PROJECT_NAME" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] ||
+        error "Project name must start with a letter or underscore and contain only letters, digits, and underscores"
 
     local PROJECT_DIR="$DEST_DIR/$PROJECT_NAME"
 

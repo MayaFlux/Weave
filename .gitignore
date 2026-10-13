@@ -14,3 +14,24 @@ linux/**/**/__init__.py
 linux/weave.egg-info/
 
 tests/linux/**/**/__pycache__/
+
+# macOS metadata
+.DS_Store
+._*
+.AppleDouble
+.LSOverride
+.Spotlight-V100/
+.Trashes/
+.TemporaryItems/
+.DocumentRevisions-V100/
+.fseventsd/
+Icon?
+
+# Xcode user and build files
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+*.hmap
+*.dSYM/

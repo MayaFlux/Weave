@@ -17,6 +17,9 @@ mkdir -p "$TEMP_PROJECT"
 cp "$MACOS_DIR/WeaveGUI.swift" "$TEMP_PROJECT/"
 cp "$MACOS_DIR/CommunityManifest.swift" "$TEMP_PROJECT/"
 cp "$MACOS_DIR/CommunityUpdate.swift" "$TEMP_PROJECT/"
+cp "$MACOS_DIR/InstallerWorkflow.swift" "$TEMP_PROJECT/"
+cp "$MACOS_DIR/ShellEnvironment.swift" "$TEMP_PROJECT/"
+cp "$MACOS_DIR/CreationOperations.swift" "$TEMP_PROJECT/"
 
 cat >"$TEMP_PROJECT/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -66,7 +69,8 @@ swiftc -o Weave \
     -sdk "$SDK_PATH" \
     -framework SwiftUI \
     -framework AppKit \
-    WeaveGUI.swift CommunityManifest.swift CommunityUpdate.swift
+    WeaveGUI.swift CommunityManifest.swift CommunityUpdate.swift \
+    InstallerWorkflow.swift ShellEnvironment.swift CreationOperations.swift
 
 APP_BUNDLE="$BUILD_DIR/Weave.app"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"

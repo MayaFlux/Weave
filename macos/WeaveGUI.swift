@@ -113,14 +113,6 @@ struct LandingView: View {
 // MARK: - Install Step
 // ============================================================================
 
-enum InstallStep {
-    case channelSelect
-    case passwordPrompt
-    case running
-    case done
-    case failed(String)
-}
-
 // ============================================================================
 // MARK: - Installer State
 // ============================================================================
@@ -134,15 +126,12 @@ class InstallerState: ObservableObject {
     @Published var createdZshenvPath: String? = nil
 
     var brewCmd: String? {
-        let pathDirectories = (ProcessInfo.processInfo.environment["PATH"] ?? "")
-            .split(separator: ":").map(String.init)
-        let optDirectories = (try? FileManager.default.contentsOfDirectory(atPath: "/opt"))?
-            .map { "/opt/\($0)/bin" } ?? []
-        for directory in pathDirectories + optDirectories where !directory.hasPrefix("/usr/local") {
-            let candidate = directory + "/brew"
-            if FileManager.default.isExecutableFile(atPath: candidate) { return candidate }
-        }
-        return nil
+        let optDirectories = (try? FileManager.default.contentsOfDirectory(atPath: "/opt"))
+            ?? []
+        return HomebrewLocator.discover(
+            path: ProcessInfo.processInfo.environment["PATH"] ?? "",
+            optDirectories: optDirectories,
+            isExecutable: FileManager.default.isExecutableFile(atPath:))
     }
 
     var brewMissing: Bool { brewCmd == nil }
@@ -204,7 +193,8 @@ class InstallerState: ObservableObject {
     }
 
     func checkConflict(brew: String) async -> Bool {
-        let code = await run("\(brew) list --formula | grep -E '^" + conflictingFormula() + "$'")
+        let code = await run(
+            "\(shellEscape(brew)) list --formula | grep -E '^" + conflictingFormula() + "$'")
         return code == 0
     }
 
@@ -216,93 +206,16 @@ class InstallerState: ObservableObject {
         step = .running
         logLines = []
         createdZshenvPath = nil
-
-        // --- Homebrew ---
-        let brew: String
-        if let found = brewCmd {
-            brew = found
-            log("✅ Homebrew found at \(brew)")
-        } else {
-            log("➤ Installing Homebrew...")
-            log("  This may take a few minutes...")
-            let code = await run(
-                "NONINTERACTIVE=1 /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
-            )
-            guard code == 0 else {
-                step = .failed(
-                    "Homebrew installation failed.\n\nCheck your internet connection and try again."
-                )
-                return
-            }
-            guard let found = brewCmd else {
-                step = .failed(
-                    "Homebrew installed but executable not found.\nCheck your PATH or Homebrew installation under /opt."
-                )
-                return
-            }
-            brew = found
-            log("✅ Homebrew installed at \(brew)")
-        }
-
-        // --- Conflict removal (user already confirmed via alert before we got here) ---
-        let conflicting = conflictingFormula()
-        let conflictCode = await run("\(brew) list --formula | grep -E '^" + conflicting + "$'")
-        if conflictCode == 0 {
-            log("➤ Removing \(conflicting)...")
-            let removeCode = await run("\(brew) uninstall \(conflicting)")
-            guard removeCode == 0 else {
-                step = .failed("Failed to remove \(conflicting).")
-                return
-            }
-            log("✅ \(conflicting) removed")
-        }
-
-        // --- Tap ---
-        log("➤ Adding tap mayaflux/mayaflux...")
-        let tapCode = await run("\(brew) tap mayaflux/mayaflux")
-        guard tapCode == 0 else {
-            step = .failed("Failed to add mayaflux tap.\n\nCheck your internet connection.")
-            return
-        }
-        log("✅ Tap added")
-
-        let trustAvailable = await run("\(brew) help trust >/dev/null 2>&1") == 0
-        if trustAvailable {
-            log("➤ Trusting the mayaflux/mayaflux tap...")
-            let trustCode = await run("\(brew) trust --tap mayaflux/mayaflux")
-            guard trustCode == 0 else {
-                step = .failed(
-                    "Failed to trust the mayaflux/mayaflux tap.\n\n"
-                        + "Review the log, then run: \(brew) trust --tap mayaflux/mayaflux"
-                )
-                return
-            }
-            log("✅ Tap trusted")
-        } else {
-            log("  This Homebrew version does not provide tap trust.")
-        }
-
-        // --- Install ---
-        log("➤ Installing \(formula)...")
-        log("  ⏳ This may take several minutes...")
-        let installCode = await run("\(brew) install \(formula)")
-        guard installCode == 0 else {
-            step = .failed("brew install \(formula) failed.\n\nSee log above for details.")
-            return
-        }
-        log("✅ \(formula) installed")
-
-        // --- Verify ---
-        log("➤ Verifying installation...")
-        let verifyCode = await run("\(brew) list --formula | grep -E '^" + formula + "$'")
-        guard verifyCode == 0 else {
-            step = .failed("Installation verification failed — \(formula) not found in brew list.")
-            return
-        }
-        log("✅ Verified")
-
-        // --- Environment (always runs unless install itself failed) ---
-        await configureEnvironment(brew: brew)
+        step = await InstallerWorkflow.run(
+            formula: formula,
+            findBrew: { self.brewCmd },
+            runCommand: { command in await self.run(command) },
+            configureEnvironment: { brew, _ in
+                await self.configureEnvironment(brew: brew)
+                if case .failed(let message) = self.step { return message }
+                return nil
+            },
+            log: { self.log($0) })
     }
 
     func configureEnvironment(brew: String) async {
@@ -314,94 +227,66 @@ class InstallerState: ObservableObject {
         prefixTask.arguments = ["--prefix", formula]
         let prefixPipe = Pipe()
         prefixTask.standardOutput = prefixPipe
-        try? prefixTask.run()
+        do {
+            try prefixTask.run()
+        } catch {
+            step = .failed("Could not determine Homebrew prefix for \(formula).")
+            return
+        }
         prefixTask.waitUntilExit()
         let prefixData = prefixPipe.fileHandleForReading.readDataToEndOfFile()
         let prefixOutput = (String(data: prefixData, encoding: .utf8) ?? "").trimmingCharacters(
             in: .whitespacesAndNewlines)
 
-        guard !prefixOutput.isEmpty else {
+        guard prefixTask.terminationStatus == 0, !prefixOutput.isEmpty else {
             step = .failed("Could not determine Homebrew prefix for \(formula).")
             return
         }
         log("  Prefix: \(prefixOutput)")
 
-        // Ask zsh (login shell) for ZDOTDIR — Swift's environment is bare when launched from Finder
         let zdotdirTask = Process()
         zdotdirTask.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        zdotdirTask.arguments = ["-lc", "echo $ZDOTDIR"]
+        zdotdirTask.arguments = ["-lc", "printf %s \"${ZDOTDIR:-}\""]
         let zdotdirPipe = Pipe()
         zdotdirTask.standardOutput = zdotdirPipe
-        try? zdotdirTask.run()
-        zdotdirTask.waitUntilExit()
-        let zdotdirRaw =
-            (String(data: zdotdirPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-            ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let zdotdirRaw: String
+        do {
+            try zdotdirTask.run()
+            zdotdirTask.waitUntilExit()
+            zdotdirRaw = String(
+                data: zdotdirPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8
+            )?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        } catch {
+            zdotdirRaw = ""
+        }
 
-        let zshenvDir: String
+        let home = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+        let zshenvURL = ShellEnvironmentFile.resolvePath(home: home, zdotdir: zdotdirRaw)
         if zdotdirRaw.isEmpty {
             log("  ZDOTDIR not set, falling back to HOME")
-            zshenvDir = NSHomeDirectory()
-        } else if !FileManager.default.fileExists(atPath: zdotdirRaw) {
+        } else if zshenvURL.deletingLastPathComponent().path == home.path {
             log("  ZDOTDIR='\(zdotdirRaw)' does not exist, falling back to HOME")
-            zshenvDir = NSHomeDirectory()
-        } else {
-            zshenvDir = zdotdirRaw
         }
 
-        let zshenvPath = zshenvDir + "/.zshenv"
-        log("  zshenv: \(zshenvPath)")
-
-        let fileExists = FileManager.default.fileExists(atPath: zshenvPath)
-
-        // Backup only if file exists and has never been touched by us
-        if fileExists {
-            let contents = (try? String(contentsOfFile: zshenvPath, encoding: .utf8)) ?? ""
-            if !contents.contains("# MayaFlux") {
-                let backupPath = zshenvPath + ".weave-backup"
-                _ = await run("cp \(shellEscape(zshenvPath)) \(shellEscape(backupPath))")
-                log("  Backup created: \(backupPath)")
+        log("  zshenv: \(zshenvURL.path)")
+        let existed = FileManager.default.fileExists(atPath: zshenvURL.path)
+        let backupURL = zshenvURL.appendingPathExtension("weave-backup")
+        if existed,
+            let contents = try? String(contentsOf: zshenvURL, encoding: .utf8),
+            !contents.contains("# MayaFlux")
+        {
+            log("  Backup created: \(backupURL.path)")
+        }
+        do {
+            let created = try ShellEnvironmentFile.update(at: zshenvURL, brewPrefix: prefixOutput)
+            if created {
+                createdZshenvPath = zshenvURL.path
+                log("  Created \(zshenvURL.path)")
             }
-        }
-
-        // Strip old entries — BSD sed -i '' verbatim
-        let escaped = shellEscape(zshenvPath)
-        let cleanScript =
-            "[ -f \(escaped) ] && sed -i '' '/# MayaFlux/d' \(escaped);"
-            + "[ -f \(escaped) ] && sed -i '' '/MAYAFLUX_ROOT/d' \(escaped);"
-            + "[ -f \(escaped) ] && sed -i '' '/mayaflux_env\\.sh/d' \(escaped);"
-            + "[ -f \(escaped) ] && sed -i '' '/source.*mayaflux.*\\/env\\.sh/d' \(escaped);"
-            + "[ -f \(escaped) ] && sed -i '' '/\\.local\\/bin.*\\$PATH/d' \(escaped);"
-            + "[ -f \(escaped) ] && sed -i '' '/./,$!d' \(escaped);" + "true"
-
-        let cleanCode = await run(cleanScript)
-        guard cleanCode == 0 else {
-            step = .failed("Failed to clean old MayaFlux config from \(zshenvPath)")
+        } catch {
+            step = .failed("Failed to update \(zshenvURL.path): \(error.localizedDescription)")
             return
         }
-
-        if !fileExists {
-            guard
-                FileManager.default.createFile(
-                    atPath: zshenvPath, contents: Data(), attributes: nil
-                )
-            else {
-                step = .failed("Failed to create \(zshenvPath) for shell configuration.")
-                return
-            }
-            createdZshenvPath = zshenvPath
-            log("  Created \(zshenvPath)")
-        }
-
-        guard let handle = FileHandle(forWritingAtPath: zshenvPath) else {
-            step = .failed("Failed to open \(zshenvPath) for writing.")
-            return
-        }
-        let envBlock =
-            "\n# MayaFlux (installed via Homebrew)\nsource \"\(prefixOutput)/env.sh\"\nexport PATH=\"$HOME/.local/bin:$PATH\"\n"
-        handle.seekToEndOfFile()
-        handle.write(Data(envBlock.utf8))
-        handle.closeFile()
 
         log("✅ Environment configured")
 
@@ -827,10 +712,11 @@ struct CreateProjectView: View {
     @State private var showAlert: Bool = false
     @State private var alertMessage: String = ""
 
-    private var weavePath: String {
-        let localBin = "\(NSHomeDirectory())/.local/bin/weave"
-        if FileManager.default.fileExists(atPath: localBin) { return localBin }
-        return "\(Bundle.main.resourcePath ?? "")/project_creator.sh"
+    private var weaveURL: URL? {
+        ProjectCreation.resolveExecutable(
+            installed: URL(fileURLWithPath: "\(NSHomeDirectory())/.local/bin/weave"),
+            bundled: URL(fileURLWithPath: "\(Bundle.main.resourcePath ?? "")/weave"),
+            fileExists: FileManager.default.fileExists(atPath:))
     }
 
     var body: some View {
@@ -924,20 +810,18 @@ struct CreateProjectView: View {
         guard !projectName.isEmpty else { return }
         isCreating = true
 
-        guard FileManager.default.fileExists(atPath: weavePath) else {
+        guard let weaveURL else {
             alertMessage =
-                "Weave CLI not found at:\n\(weavePath)\n\nPlease run Install MayaFlux first."
+                "Weave CLI was not found in the app bundle or at ~/.local/bin/weave.\n\nPlease run Install MayaFlux first."
             showAlert = true
             isCreating = false
             return
         }
 
-        var args = ["new", projectName, projectLocation]
-        if withLila { args.append("--with-lila") }
-
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: weavePath)
-        task.arguments = args
+        task.executableURL = weaveURL
+        task.arguments = ProjectCreation.arguments(
+            name: projectName, location: projectLocation, withLila: withLila)
 
         let pipe = Pipe()
         task.standardOutput = pipe
@@ -990,10 +874,11 @@ struct CreateCommunityView: View {
     @State private var showAlert: Bool = false
     @State private var alertMessage: String = ""
 
-    private var weavePath: String {
-        let localBin = "\(NSHomeDirectory())/.local/bin/weave"
-        if FileManager.default.fileExists(atPath: localBin) { return localBin }
-        return "\(Bundle.main.resourcePath ?? "")/weave"
+    private var weaveURL: URL? {
+        ProjectCreation.resolveExecutable(
+            installed: URL(fileURLWithPath: "\(NSHomeDirectory())/.local/bin/weave"),
+            bundled: URL(fileURLWithPath: "\(Bundle.main.resourcePath ?? "")/weave"),
+            fileExists: FileManager.default.fileExists(atPath:))
     }
 
     private var preview: String {
@@ -1130,35 +1015,18 @@ struct CreateCommunityView: View {
 
     func createModule() {
         guard !moduleName.isEmpty, nameIsValid else { return }
-        do {
-            let metadata: [String: Any] = [
-                "name": moduleName,
-                "min_version": minVersion.isEmpty ? "0.5.0" : minVersion,
-                "description": description,
-                "needs_lila": needsLila,
-            ]
-
-            let data = try JSONSerialization.data(withJSONObject: metadata)
-            _ = try CommunityManifest.parse(
-                String(decoding: data, as: UTF8.self), expectedName: moduleName)
-        } catch {
-            alertMessage = error.localizedDescription
-            showAlert = true
-            return
-        }
-
         isCreating = true
 
-        guard FileManager.default.fileExists(atPath: weavePath) else {
+        guard let weaveURL else {
             alertMessage =
-                "Weave CLI not found at:\n\(weavePath)\n\nPlease run Install MayaFlux first."
+                "Weave CLI was not found in the app bundle or at ~/.local/bin/weave.\n\nPlease run Install MayaFlux first."
             showAlert = true
             isCreating = false
             return
         }
 
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: weavePath)
+        task.executableURL = weaveURL
         task.arguments = ["community", moduleName, destination]
 
         let pipe = Pipe()
@@ -1166,7 +1034,7 @@ struct CreateCommunityView: View {
         task.standardError = pipe
 
         do {
-            let adjacentTemplates = URL(fileURLWithPath: weavePath)
+            let adjacentTemplates = weaveURL
                 .deletingLastPathComponent().appendingPathComponent("templates")
             let sharedTemplates = URL(fileURLWithPath: NSHomeDirectory())
                 .appendingPathComponent(".local/share/weave/templates")
@@ -1192,40 +1060,15 @@ struct CreateCommunityView: View {
 
             if task.terminationStatus == 0 {
                 let moduleDir = URL(fileURLWithPath: destination).appendingPathComponent(moduleName)
-                let cjPath = moduleDir.appendingPathComponent("community.json")
-                let source = try String(contentsOf: cjPath, encoding: .utf8)
-                var json = try CommunityManifest.parse(source, expectedName: moduleName)
-
-                if !description.isEmpty { json["description"] = description }
-
-                if !minVersion.isEmpty { json["min_version"] = minVersion }
-
-                json["needs_lila"] = needsLila
-                let candidate = try JSONSerialization.data(withJSONObject: json)
-                let validated = try CommunityManifest.parse(
-                    String(decoding: candidate, as: UTF8.self), expectedName: moduleName)
-
-                guard let minimumVersion = validated["min_version"] as? String else {
-                    throw ManifestError(path: "$.min_version", reason: "Expected string")
-                }
-
-                let cmakePath = moduleDir.appendingPathComponent("\(moduleName).cmake")
-                var cmake = try String(contentsOf: cmakePath, encoding: .utf8)
-
-                cmake = cmake.replacingOccurrences(
-                    of: "set\\(MF_MIN_VERSION \"[^\"\\n]+\"\\)",
-                    with: "set(MF_MIN_VERSION \"\(minimumVersion)\")",
-                    options: .regularExpression)
-
-                cmake = cmake.replacingOccurrences(
-                    of: "set\\(MF_NEEDS_LILA (?:ON|OFF)\\)",
-                    with: "set(MF_NEEDS_LILA \(needsLila ? "ON" : "OFF"))",
-                    options: .regularExpression)
-
-                try cmake.write(to: cmakePath, atomically: true, encoding: .utf8)
-                let patched = try JSONSerialization.data(
-                    withJSONObject: validated, options: .prettyPrinted)
-                try patched.write(to: cjPath, options: .atomic)
+                let generatedManifest = try String(
+                    contentsOf: moduleDir.appendingPathComponent("community.json"), encoding: .utf8)
+                try CommunityModuleCreation.apply(
+                    source: generatedManifest,
+                    expectedName: moduleName,
+                    description: description,
+                    minVersion: minVersion,
+                    needsLila: needsLila,
+                    moduleDirectory: moduleDir)
                 alertMessage =
                     "Module '\(moduleName)' created successfully!\n\nLocation: \(moduleDir.path)"
             } else {

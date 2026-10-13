@@ -58,6 +58,15 @@ jobs:
         run: |
           chmod +x .github/scripts/verify-macos-build.sh
           chmod +x .github/scripts/generate-release-body.sh
+          chmod +x tests/macos/integration/test_packaged_app.sh
+
+      - name: Test macOS unit suite
+        run: |
+          xcodebuild test \
+            -project macos/Weave.xcodeproj \
+            -scheme Weave \
+            -destination 'platform=macOS,arch=arm64' \
+            CODE_SIGNING_ALLOWED=NO
 
       - name: Build Weave.app
         run: |
@@ -67,6 +76,11 @@ jobs:
       - name: Sign Weave.app (ad-hoc)
         run: |
           codesign --sign - --deep --force --options runtime \
+            build/macos/WeaveApp/Weave.app
+
+      - name: Test packaged macOS artifact
+        run: |
+          ./tests/macos/integration/test_packaged_app.sh \
             build/macos/WeaveApp/Weave.app
 
       - name: Verify build outputs
