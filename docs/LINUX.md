@@ -51,7 +51,7 @@ Only one channel can be installed at a time. If a conflicting package is already
 
 ## Creating a Project
 
-Open Weave and choose **Create Project**. Enter a name, pick a destination, optionally enable **Live Coding (Lila)** and **VS Code configuration**, then click **Create Project**.
+Open Weave and choose **Create Project**. Enter a name, pick a destination, optionally enable **Live Coding (Lila)** and **Copy MayaFlux shader sources**, then click **Create Project**. Shader source copying preserves nested paths and existing template shaders.
 
 The generated project includes a `CMakePresets.json` with `debug` and `release` presets. Any CMake-aware IDE (VS Code, CLion) will pick these up automatically when you open the project folder.
 

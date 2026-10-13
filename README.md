@@ -51,7 +51,7 @@ MyProject/
 - `settings()` runs before the engine starts. Configure sample rate, buffer size, graphics API, logging, and so on.
 - `compose()` is where you build your audio/visual processing graph.
 
-On Windows, **Copy MayaFlux shader sources** optionally copies the installed `share/MayaFlux/src/shaders` tree into `data/shaders`, preserving nested paths and GLSL include files. It copies source files only; installed runtime SPIR-V remains in the MayaFlux installation.
+On Windows and Linux, **Copy MayaFlux shader sources** optionally copies the installed `share/MayaFlux/src/shaders` tree into `data/shaders`, preserving nested paths and GLSL include files. It copies source files only; installed runtime SPIR-V remains in the MayaFlux installation.
 
 Each new Windows project includes `validate.ps1`. Run it manually from the project folder when you need diagnostics:
 

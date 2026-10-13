@@ -7,6 +7,7 @@ set -euo pipefail
 # CONFIGURATION
 # ============================================================================
 
+MAYAFLUX_ROOT_OVERRIDE="${MAYAFLUX_ROOT:-}"
 MAYAFLUX_ROOT="${MAYAFLUX_ROOT:-/usr/local}"
 REGISTRY_URL="https://raw.githubusercontent.com/MayaFlux/community-sources-registry/main/registry.json"
 
@@ -41,6 +42,7 @@ Commands:
 Options (new):
   --with-lila    Enable live coding (links against Lila)
   --no-vscode    Skip VS Code configuration
+  --copy-shader-sources  Copy installed MayaFlux shader sources into the project
 
 Environment Variables:
   MAYAFLUX_ROOT  Override MayaFlux installation location (default: /usr/local)
@@ -105,16 +107,24 @@ print(entry["repo"], entry["min_version"])
 
 cmd_new() {
     local PROJECT_NAME="${1:-}"
-    local DEST_DIR="${2:-.}"
+    local DEST_DIR='.'
     local WITH_LILA=false
     local WITH_VSCODE=true
+    local COPY_SHADER_SOURCES=false
+    local SHADER_SOURCE_DIR=''
+    local -a SHADER_SOURCES=()
 
-    shift 2 2>/dev/null || true
+    shift || true
+    if [ "$#" -gt 0 ] && [[ "$1" != --* ]]; then
+        DEST_DIR="$1"
+        shift
+    fi
 
     while [ "$#" -gt 0 ]; do
         case "$1" in
         --with-lila) WITH_LILA=true ;;
         --no-vscode) WITH_VSCODE=false ;;
+        --copy-shader-sources) COPY_SHADER_SOURCES=true ;;
         *) error "Unknown option: $1" ;;
         esac
         shift
@@ -140,13 +150,39 @@ cmd_new() {
 
     [ ! -d "$TEMPLATES_DIR" ] && error "Templates not found at $TEMPLATES_DIR"
 
-    for template in CMakeLists.txt main.cpp user_project.hpp; do
+    for template in CMakeLists.txt main.cpp user_project.hpp validate.sh; do
         [ ! -f "$TEMPLATES_DIR/$template" ] && error "Required template missing: $template"
     done
 
     [ ! -f "$TEMPLATES_DIR/cmake/mayaflux.cmake" ] && error "Required template missing: cmake/mayaflux.cmake"
     [ ! -f "$TEMPLATES_DIR/cmake/shaders.cmake" ] && error "Required template missing: cmake/shaders.cmake"
     [ ! -f "$TEMPLATES_DIR/cmake/build_community.cmake" ] && error "Required template missing: cmake/build_community.cmake"
+
+    if [ "$COPY_SHADER_SOURCES" = true ]; then
+        if [ -n "$MAYAFLUX_ROOT_OVERRIDE" ]; then
+            SHADER_SOURCE_DIR="$MAYAFLUX_ROOT_OVERRIDE/share/MayaFlux/src/shaders"
+        else
+            for candidate in /usr/share/MayaFlux/src/shaders /usr/local/share/MayaFlux/src/shaders; do
+                if [ -d "$candidate" ]; then
+                    SHADER_SOURCE_DIR="$candidate"
+                    break
+                fi
+            done
+        fi
+        [ -z "$SHADER_SOURCE_DIR" ] && error 'MayaFlux shader sources were not found under /usr or /usr/local. Set MAYAFLUX_ROOT to the installation prefix, or omit --copy-shader-sources.'
+        [ ! -d "$SHADER_SOURCE_DIR" ] && error "MayaFlux shader sources were not found at $SHADER_SOURCE_DIR. Update MayaFlux or omit --copy-shader-sources."
+        [ -L "$SHADER_SOURCE_DIR" ] && error "MayaFlux shader source directory is a symbolic link: $SHADER_SOURCE_DIR"
+        [ -n "$(find "$SHADER_SOURCE_DIR" -type l -print -quit)" ] && error "MayaFlux shader sources contain a symbolic link: $SHADER_SOURCE_DIR"
+        mapfile -d '' -t SHADER_SOURCES < <(
+            find "$SHADER_SOURCE_DIR" -type f \(
+                -iname '*.glsl' -o -iname '*.vert' -o -iname '*.frag' -o -iname '*.comp' -o
+                -iname '*.geom' -o -iname '*.tesc' -o -iname '*.tese' -o -iname '*.mesh' -o
+                -iname '*.task' -o -iname '*.rgen' -o -iname '*.rchit' -o -iname '*.rahit' -o
+                -iname '*.rmiss' -o -iname '*.rint' -o -iname '*.rcall'
+            \) -print0
+        )
+        [ -z "${SHADER_SOURCES[0]-}" ] && error "MayaFlux shader sources are empty at $SHADER_SOURCE_DIR. Update MayaFlux or omit --copy-shader-sources."
+    fi
 
     log "Creating project: $PROJECT_NAME"
     mkdir -p "$PROJECT_DIR/src"
@@ -187,6 +223,10 @@ cmd_new() {
     cp "$TEMPLATES_DIR/CMakePresets.json" "$PROJECT_DIR/CMakePresets.json"
     log "  ✓ Copied CMakePresets.json"
 
+    cp "$TEMPLATES_DIR/validate.sh" "$PROJECT_DIR/validate.sh"
+    chmod +x "$PROJECT_DIR/validate.sh"
+    log "  ✓ Copied validate.sh"
+
     cp "$TEMPLATES_DIR/main.cpp" "$PROJECT_DIR/src/main.cpp"
     log "  ✓ Generated main.cpp"
 
@@ -197,6 +237,21 @@ cmd_new() {
     if [ -d "$TEMPLATES_DIR/shaders" ] && [ -n "$(ls -A "$TEMPLATES_DIR/shaders" 2>/dev/null)" ]; then
         cp "$TEMPLATES_DIR/shaders/"* "$PROJECT_DIR/data/shaders/"
         log "  ✓ Copied template shaders"
+    fi
+
+    if [ "$COPY_SHADER_SOURCES" = true ]; then
+        local shader relative destination
+        for shader in "${SHADER_SOURCES[@]}"; do
+            relative="${shader#"$SHADER_SOURCE_DIR"/}"
+            destination="$PROJECT_DIR/data/shaders/$relative"
+            if [ -e "$destination" ]; then
+                log "  ✓ Preserved project shader: $relative"
+                continue
+            fi
+            mkdir -p "$(dirname "$destination")"
+            cp "$shader" "$destination"
+            log "  ✓ Copied MayaFlux shader source: $relative"
+        done
     fi
 
     touch "$PROJECT_DIR/community.cmake"
@@ -221,21 +276,24 @@ cmd_new() {
 
 A MayaFlux multimedia DSP project.
 
+## Troubleshooting
+
+If setup or a build fails, run \`./validate.sh\` from this project folder to check the installed MayaFlux package, its dependencies, and project files. Copy its report when requesting help.
+
 ## Building
 
 \`\`\`bash
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build . --parallel
+cmake --preset release
+cmake --build --preset release --parallel
 \`\`\`
 EOF
     log "  ✓ Generated README.md"
 
     log ""
     log "Project created: $PROJECT_DIR"
-    log "Build with:"
-    log "  cd $PROJECT_DIR && mkdir build && cd build"
-    log "  cmake .. -DCMAKE_BUILD_TYPE=Release && cmake --build . --parallel"
+    log "Build from the project directory with the release preset:"
+    log "  cmake --preset release"
+    log "  cmake --build --preset release --parallel"
 }
 
 # ============================================================================

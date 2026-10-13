@@ -75,6 +75,11 @@ class ProjectCreationMode(Gtk.ApplicationWindow):
         self.lila_check = Gtk.CheckButton(label="Enable Lila (live coding)")
         content.append(self.lila_check)
 
+        self.shader_sources_check = Gtk.CheckButton(
+            label="Copy MayaFlux shader sources"
+        )
+        content.append(self.shader_sources_check)
+
         preview_label = Gtk.Label(label="Project will be created at:")
         preview_label.set_halign(Gtk.Align.START)
         preview_label.add_css_class("dim-label")
@@ -199,6 +204,8 @@ class ProjectCreationMode(Gtk.ApplicationWindow):
             cmd = [str(script_path), "new", name, loc]
             if self.lila_check.get_active():
                 cmd.append("--with-lila")
+            if self.shader_sources_check.get_active():
+                cmd.append("--copy-shader-sources")
 
             result = subprocess.run(
                 cmd, capture_output=True, text=True, timeout=30, env=env
@@ -206,9 +213,16 @@ class ProjectCreationMode(Gtk.ApplicationWindow):
 
             if result.returncode == 0:
                 project_path = Path(loc) / name
+                if not (project_path / "validate.sh").is_file():
+                    self._show_error(
+                        f"Project was created at {project_path}, but validate.sh was not deployed. Check the Weave templates."
+                    )
+                    self.create_btn.set_sensitive(True)
+                    self.create_btn.set_label(original_label)
+                    return
                 dialog = Gtk.AlertDialog(
                     message="Project Created Successfully!",
-                    detail=f"Location:\n{project_path}\n\nNext steps:\ncd {project_path}\nmkdir build && cd build\ncmake .. && make",
+                    detail=f"Project '{name}' created at:\n{project_path}",
                 )
                 dialog.choose(self, None, self._on_creation_complete, None)
             else:
