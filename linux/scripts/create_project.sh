@@ -86,16 +86,16 @@ _registry_lookup() {
     else
         local py
         py="$(command -v python3)"
-        PYTHONHOME="" PYTHONPATH="" "$py" - "$module" <<<"$registry" <<'PYEOF'
+        PYTHONHOME="" PYTHONPATH="" "$py" -c '
 import json, sys
 name = sys.argv[1]
 reg = json.load(sys.stdin)
-entry = next((e for e in reg if e['name'] == name), None)
+entry = next((e for e in reg if e["name"] == name), None)
 if not entry:
-    sys.stderr.write(f"[Weave ERROR] Module '{name}' not found in registry\n")
+    sys.stderr.write(f"[Weave ERROR] Module {name} not found in registry\n")
     sys.exit(1)
-print(entry['repo'], entry['min_version'])
-PYEOF
+print(entry["repo"], entry["min_version"])
+' "$module" <<<"$registry"
     fi
 }
 

@@ -12,3 +12,5 @@ windows/**/**.csproj.user
 linux/**/**/__pycache__/
 linux/**/**/__init__.py
 linux/weave.egg-info/
+
+tests/linux/**/**/__pycache__/
