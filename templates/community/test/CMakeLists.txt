@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.25)
 project(@MODULE_NAME@_test LANGUAGES C CXX)
 
+enable_testing()
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -59,6 +61,8 @@ add_executable(test_@MODULE_NAME@
 
 target_precompile_headers(test_@MODULE_NAME@ REUSE_FROM @MODULE_NAME@)
 target_link_libraries(test_@MODULE_NAME@ PRIVATE @MODULE_NAME@ MayaFlux::MayaFluxLib)
+
+add_test(NAME @MODULE_NAME@ COMMAND test_@MODULE_NAME@)
 
 if(UNIX)
     execute_process(

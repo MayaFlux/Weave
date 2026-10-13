@@ -6,7 +6,6 @@
       "displayName": "Debug",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/test/build",
-      "sourceDir": "${sourceDir}/test",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
@@ -17,7 +16,6 @@
       "displayName": "Release",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/test/build",
-      "sourceDir": "${sourceDir}/test",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
@@ -32,6 +30,11 @@
     {
       "name": "debug",
       "configurePreset": "debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
       "output": { "outputOnFailure": true }
     }
   ]

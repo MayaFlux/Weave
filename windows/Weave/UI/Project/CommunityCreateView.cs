@@ -1,13 +1,11 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
-using System.Diagnostics;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using Weave.Theme;
 using Weave.UI.Layout;
 using Weave.Shared;
+using Weave.UI.Pages;
 
 namespace Weave.UI.Project;
 
@@ -25,12 +23,23 @@ public partial class CommunityCreatorView : UserControl
     private Label nameErrorLabel;
     private string templatesDir;
     private LayoutManager layoutManager;
+    private readonly Action<string, string, MessageBoxIcon> notify;
+    private readonly ProjectCreationHost creationHost = new();
+    private readonly DependenciesHost gitHost = new();
 
-    public CommunityCreatorView(string templatesDirectory)
+    public CommunityCreatorView(string templatesDirectory, Action<string, string, MessageBoxIcon>? notify = null)
     {
+        this.notify = notify ?? ((message, title, icon) => MessageBox.Show(message, title, MessageBoxButtons.OK, icon));
         templatesDir = templatesDirectory;
         InitializeComponent();
         InitializeUI();
+    }
+
+    internal CommunityCreatorView(string templatesDirectory, ProjectCreationHost creationHost, DependenciesHost gitHost, Action<string, string, MessageBoxIcon>? notify = null)
+        : this(templatesDirectory, notify)
+    {
+        this.creationHost = creationHost;
+        this.gitHost = gitHost;
     }
 
     private void InitializeComponent()
@@ -148,7 +157,7 @@ public partial class CommunityCreatorView : UserControl
             nameErrorLabel.Text = "";
             return;
         }
-        nameErrorLabel.Text = Regex.IsMatch(name, @"^[a-z][a-z0-9_]*$")
+        nameErrorLabel.Text = Regex.IsMatch(name, @"\A[a-z][a-z0-9_]*\z") && !Regex.IsMatch(name, @"\A(?:con|prn|aux|nul|com[1-9]|lpt[1-9])\z")
             ? ""
             : "Must be snake_case: lowercase letters, digits, underscores, no leading digit";
     }
@@ -164,164 +173,33 @@ public partial class CommunityCreatorView : UserControl
             modulePathInput.Text = dialog.SelectedPath;
     }
 
-    private void CreateButton_Click(object sender, EventArgs e)
+    private async void CreateButton_Click(object sender, EventArgs e)
     {
-        var moduleName = moduleNameInput.Text.Trim();
-        var destPath = modulePathInput.Text.Trim();
-        var description = descriptionInput.Text.Trim();
-        var minVersion = minVersionInput.Text.Trim();
-        var needsLila = needsLilaCheckbox.Checked;
-
-        if (string.IsNullOrWhiteSpace(moduleName))
-        {
-            MessageBox.Show("Please enter a module name.", "Validation Error",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        if (!Regex.IsMatch(moduleName, @"^[a-z][a-z0-9_]*$"))
-        {
-            MessageBox.Show("Module name must be snake_case (lowercase letters, digits, underscores, no leading digit).",
-                "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        if (string.IsNullOrWhiteSpace(destPath) || !Directory.Exists(destPath))
-        {
-            MessageBox.Show($"Destination directory does not exist:\n{destPath}", "Path Error",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return;
-        }
-
         SetFormEnabled(false);
         outputLog.Clear();
-        Log("Creating community module...\n");
-
+        var warnings = new List<string>();
         try
         {
-            CreateModule(moduleName, destPath, description, minVersion, needsLila);
-            Log("\nModule created successfully!");
-            MessageBox.Show($"Community module '{moduleName}' created at:\n{Path.Combine(destPath, moduleName)}",
-                "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            var service = new CommunityCreationService(templatesDir, creationHost, gitHost, message =>
+            {
+                Log(message);
+                if (message.StartsWith("WARNING:", StringComparison.Ordinal)) warnings.Add(message);
+            });
+            var module = await service.CreateAsync(moduleNameInput.Text.Trim(), modulePathInput.Text.Trim(), descriptionInput.Text.Trim(), minVersionInput.Text.Trim(), needsLilaCheckbox.Checked);
+            if (IsDisposed || Disposing) return;
+            notify($"Community module created at:\n{module}" + (warnings.Count == 0 ? "" : "\n\n" + string.Join("\n", warnings)), "Success", MessageBoxIcon.Information);
             ParentForm?.Close();
         }
-        catch (Exception ex)
+        catch (Exception error)
         {
-            Log($"\nError: {ex.Message}");
-            MessageBox.Show($"Failed to create module:\n{ex.Message}", "Error",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Log($"Error: {error.Message}");
+            if (!IsDisposed && !Disposing) notify($"Failed to create module:\n{error.Message}", "Error", MessageBoxIcon.Error);
         }
         finally
         {
-            SetFormEnabled(true);
+            if (!IsDisposed && !Disposing) SetFormEnabled(true);
         }
     }
-
-    private void CreateModule(string moduleName, string destPath, string description, string minVersion, bool needsLila)
-    {
-        var communityJsonSrc = Path.Combine(templatesDir, "community", "community.json");
-
-        if (!File.Exists(communityJsonSrc))
-            throw new FileNotFoundException("Required template missing: community/community.json");
-
-        var rawJson = File.ReadAllText(communityJsonSrc).Replace("@MODULE_NAME@", moduleName);
-        CommunityManifest.Parse(rawJson, moduleName);
-        var json = JObject.Parse(rawJson);
-
-        if (!string.IsNullOrEmpty(description))
-            json["description"] = description;
-
-        if (!string.IsNullOrEmpty(minVersion))
-            json["min_version"] = minVersion;
-
-        json["needs_lila"] = needsLila;
-        var manifest = CommunityManifest.Parse(json.ToString(Formatting.None), moduleName);
-
-        var moduleDir = Path.Combine(destPath, moduleName);
-        var srcDir = Path.Combine(moduleDir, "src");
-        var testDir = Path.Combine(moduleDir, "test");
-
-        Log($"Creating module structure at: {moduleDir}");
-
-        if (Directory.Exists(moduleDir))
-            throw new Exception($"Directory already exists: {moduleDir}");
-
-        Directory.CreateDirectory(srcDir);
-        Log("  Created src/");
-
-        Directory.CreateDirectory(testDir);
-        Log("  Created test/");
-
-        var gitignoreSrc = Path.Combine(templatesDir, ".gitignore");
-        if (!File.Exists(gitignoreSrc))
-            throw new FileNotFoundException("Required template missing: .gitignore");
-        File.Copy(gitignoreSrc, Path.Combine(moduleDir, ".gitignore"));
-        Log("  Copied .gitignore");
-
-        var communityPresetsSrc = Path.Combine(templatesDir, "community", "CMakePresets.json");
-        if (!File.Exists(communityPresetsSrc))
-            throw new FileNotFoundException("Required template missing: community/CMakePresets.json");
-        File.Copy(communityPresetsSrc, Path.Combine(moduleDir, "CMakePresets.json"));
-        Log("  Copied CMakePresets.json");
-
-        var moduleCmakeSrc = Path.Combine(templatesDir, "community", "module.cmake");
-        if (!File.Exists(moduleCmakeSrc))
-            throw new FileNotFoundException("Required template missing: community/module.cmake");
-        var moduleCmake = File.ReadAllText(moduleCmakeSrc)
-            .Replace("@MODULE_NAME@", moduleName);
-
-        moduleCmake = Regex.Replace(moduleCmake, "set\\(MF_NEEDS_LILA (?:ON|OFF)\\)",
-            $"set(MF_NEEDS_LILA {(needsLila ? "ON" : "OFF")})");
-
-        moduleCmake = Regex.Replace(moduleCmake, "set\\(MF_MIN_VERSION \"[^\"\\n]+\"\\)",
-            $"set(MF_MIN_VERSION \"{manifest.GetProperty("min_version").GetString()}\")");
-
-        File.WriteAllText(Path.Combine(moduleDir, $"{moduleName}.cmake"), moduleCmake);
-        Log($"  Generated {moduleName}.cmake");
-
-        File.WriteAllText(Path.Combine(moduleDir, "community.json"), json.ToString(Formatting.Indented).Replace("\r\n", "\n") + "\n");
-        Log("  Generated community.json");
-
-        var testCmakeSrc = Path.Combine(templatesDir, "community", "test", "CMakeLists.txt");
-        if (!File.Exists(testCmakeSrc))
-            throw new FileNotFoundException("Required template missing: community/test/CMakeLists.txt");
-        var testCmake = File.ReadAllText(testCmakeSrc).Replace("@MODULE_NAME@", moduleName);
-        File.WriteAllText(Path.Combine(testDir, "CMakeLists.txt"), testCmake);
-        Log("  Generated test/CMakeLists.txt");
-
-        var testFilePath = Path.Combine(testDir, $"test_{moduleName}.cpp");
-        File.WriteAllText(testFilePath, "");
-        Log($"  Created test/test_{moduleName}.cpp");
-
-        RunGit(moduleDir, "init", "-b", "main");
-        RunGit(moduleDir, "add", "-A");
-        Log("  Initialized git repository");
-
-        Log("");
-        Log("  src/              <- put your sources here");
-        Log("  test/CMakeLists.txt");
-        Log($"  test/test_{moduleName}.cpp");
-        Log($"  {moduleName}.cmake");
-        Log("  community.json");
-        Log("");
-        Log("Build test:");
-        Log($"  cmake -G Ninja -B test/build -S test/");
-        Log($"  cmake --build test/build --parallel");
-    }
-
-    private void RunGit(string workingDir, params string[] args)
-    {
-        var psi = new ProcessStartInfo("git")
-        {
-            WorkingDirectory = workingDir,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        foreach (var a in args) psi.ArgumentList.Add(a);
-        using var p = Process.Start(psi)!;
-        p.WaitForExit();
-    }
-
     private void SetFormEnabled(bool enabled)
     {
         createButton.Enabled = enabled;
@@ -336,6 +214,7 @@ public partial class CommunityCreatorView : UserControl
 
     private void Log(string message)
     {
+        if (IsDisposed || Disposing) return;
         if (outputLog.InvokeRequired)
         {
             outputLog.Invoke(new Action(() => Log(message)));
