@@ -26,6 +26,7 @@ public class ValidateScriptTests
             Assert.That(actualExitCode, Is.EqualTo(exitCode), report);
             Assert.That(report, Does.Contain("MayaFlux installation check"));
             Assert.That(report, Does.Contain("Nothing was changed"));
+            Assert.That(report, Does.Contain("Fixture Graphics Adapter | driver 1.0.0").And.Contain("[OK] vulkaninfo").And.Contain("deviceName = Fixture Vulkan Device"));
             Assert.That(report, Does.Contain("Copy this report"));
             if (exitCode != 0) Assert.That(report, Does.Contain("[FIX]"));
             else Assert.That(report, Does.Contain("No problems found"));
@@ -49,6 +50,7 @@ public class ValidateScriptTests
             Assert.That(actualExitCode, Is.EqualTo(exitCode), report);
             Assert.That(report, Does.Contain("MayaFlux project diagnostics").And.Contain(message));
             Assert.That(report, Does.Contain("Nothing was changed"));
+            Assert.That(report, Does.Contain("Fixture Graphics Adapter | driver 1.0.0").And.Contain("[OK] vulkaninfo").And.Contain("deviceName = Fixture Vulkan Device"));
             Assert.That(report, Does.Contain("FIXTURE_UNCHANGED"));
         });
     }
@@ -124,8 +126,17 @@ public class ValidateScriptTests
             return $variables[$Name]
         }
         function Find-ValidationTool($Name, $Candidates = @()) { return (Join-Path $fixtureRoot "$Name.exe") }
+        function Get-CimInstance {
+            [CmdletBinding()]
+            param($ClassName)
+            if ($ClassName -ne 'Win32_VideoController') { throw 'Unexpected CIM query' }
+            return [PSCustomObject]@{ Name = 'Fixture Graphics Adapter'; DriverVersion = '1.0.0' }
+        }
         function Invoke-ValidationTool($Path, $Arguments, $TimeoutSeconds = 15) {
             $name = [IO.Path]::GetFileNameWithoutExtension($Path)
+            if ($name -eq 'vulkaninfo' -and $Arguments.Count -eq 1 -and $Arguments[0] -eq '--summary') {
+                return @{ Code = 0; Text = 'deviceName = Fixture Vulkan Device' }
+            }
             if ($Arguments -contains '--list-presets=all') {
                 if ($scenario -eq 'project-preset-probe-fails') { return @{ Code = 1; Text = 'Invalid preset reference' } }
                 return @{ Code = 0; Text = 'release debug' }
