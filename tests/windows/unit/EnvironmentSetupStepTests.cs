@@ -42,6 +42,8 @@ public class EnvironmentSetupStepTests
         }
         host.Variables["CPATH"] = @"E:\Existing Include";
         host.Variables["LIBRARY_PATH"] = @"E:\Existing Lib";
+        host.Variables["LIB"] = @"E:\Existing Lib; e:\existing lib;" + "\r\n" + @" E:\Other Lib;";
+        host.Variables["INCLUDE"] = @"E:\Existing Include;E:\Existing Include";
         var step = new EnvironmentSetupStep(host);
         await step.SetupEnvironmentAsync(config);
         var previous = new Dictionary<string, string>(host.Variables);
@@ -61,12 +63,18 @@ public class EnvironmentSetupStepTests
             Assert.That(host.Variables["VULKAN_SDK"], Is.EqualTo(@"D:\SDK"));
             Assert.That(host.Variables["FFMPEG_ROOT"], Is.EqualTo(@"D:\FFmpeg"));
             Assert.That(entries, Does.Contain(@"C:\Windows\System32").And.Contain(@"E:\Old Tools"));
-            Assert.That(host.Variables["CPATH"].Split(';'), Does.Contain(@"E:\Existing Include"));
+            Assert.That(host.Variables["CPATH"].Split(';'), Does.Contain(@"E:\Existing Include").And.Contain(@"D:\FFmpeg\include"));
+            Assert.That(host.Variables["CPATH"].Split(';').Count(entry => entry == @"D:\FFmpeg\include"), Is.EqualTo(1));
             Assert.That(host.Variables["LIBRARY_PATH"].Split(';'), Does.Contain(@"E:\Existing Lib"));
+            Assert.That(host.Variables["LIB"].Split(';'), Is.EqualTo(new[] { @"E:\Existing Lib", @"E:\Other Lib" }.Concat(host.CompilerPaths.Libraries).Append(@"D:\FFmpeg\lib")));
+            Assert.That(host.Variables["INCLUDE"].Split(';'), Is.EqualTo(new[] { @"E:\Existing Include" }.Concat(host.CompilerPaths.Includes)));
+            Assert.That(host.Writes, Has.None.EqualTo("CC").And.None.EqualTo("CXX").And.None.EqualTo("LIBPATH"));
         });
     }
 
     [TestCase("MAYAFLUX_ROOT")]
+    [TestCase("LIB")]
+    [TestCase("INCLUDE")]
     [TestCase("PATH")]
     [TestCase("CPATH")]
     [TestCase("LIBRARY_PATH")]
@@ -191,6 +199,11 @@ public class EnvironmentSetupStepTests
     [TestCase(@"D:\LLVM")]
     [TestCase(@"D:\SDK")]
     [TestCase(@"D:\FFmpeg")]
+    [TestCase(@"D:\FFmpeg\include")]
+    [TestCase(@"D:\FFmpeg\lib")]
+    [TestCase(@"D:\Microsoft Tools\include")]
+    [TestCase(@"D:\Microsoft Tools\lib\x64")]
+    [TestCase(@"D:\Windows SDK\Lib\10.0.26100.0\um\x64")]
     public async Task MissingRequiredDirectoryBlocksNext(string path)
     {
         var (host, config) = FakeEnvironmentSetupHost.Healthy();

@@ -300,6 +300,7 @@ function Invoke-InstallValidation([string]$Root = $MayaFluxRoot, [string]$Projec
     $llvm = $roots.LLVM_ROOT
     $vulkan = $roots.VULKAN_SDK
     $ffmpeg = $roots.FFMPEG_ROOT
+    $microsoftEnvironment = @{ LIB = @(); INCLUDE = @() }
 
     Invoke-ValidationSection 'MayaFlux installation' {
         if (-not $Root) { return }
@@ -395,6 +396,10 @@ function Invoke-InstallValidation([string]$Root = $MayaFluxRoot, [string]$Projec
         $state = Get-ValidationMicrosoftState
         if ($state.Compiler -and (Test-Path -LiteralPath $state.Compiler -PathType Leaf)) {
             Write-ValidationResult 'OK' 'Microsoft C++ build tools' $state.Compiler
+            $toolset = $state.Compiler
+            foreach ($level in 1..4) { $toolset = Split-Path -Parent $toolset }
+            $microsoftEnvironment.LIB += (Join-Path $toolset 'lib\x64')
+            $microsoftEnvironment.INCLUDE += (Join-Path $toolset 'include')
         }
         else { Write-ValidationResult 'FIX' 'Microsoft C++ build tools were not found.' 'Run prerequisite setup in Weave. LLVM still needs Microsoft C++ libraries and SDK files on Windows.' }
         if ($state.RuntimeInstalled) { Write-ValidationResult 'OK' 'Microsoft x64 C++ runtime' $state.RuntimeVersion }
@@ -410,9 +415,16 @@ function Invoke-InstallValidation([string]$Root = $MayaFluxRoot, [string]$Projec
                     (Test-Path -LiteralPath (Join-Path $state.SdkRoot "Lib\$($version.Name)\ucrt\x64\ucrt.lib") -PathType Leaf)) { $usableSdk = $version.Name; break }
             }
         }
-        if ($usableSdk) { Write-ValidationResult 'OK' 'Windows SDK headers and x64 libraries' "$usableSdk at $($state.SdkRoot)" }
+        if ($usableSdk) {
+            Write-ValidationResult 'OK' 'Windows SDK headers and x64 libraries' "$usableSdk at $($state.SdkRoot)"
+            foreach ($folder in @('ucrt', 'um')) { $microsoftEnvironment.LIB += (Join-Path $state.SdkRoot "Lib\$usableSdk\$folder\x64") }
+            foreach ($folder in @('ucrt', 'shared', 'um', 'winrt', 'cppwinrt')) {
+                $include = Join-Path $state.SdkRoot "Include\$usableSdk\$folder"
+                if (Test-Path -LiteralPath $include -PathType Container) { $microsoftEnvironment.INCLUDE += $include }
+            }
+        }
         else { Write-ValidationResult 'FIX' 'Windows SDK headers or x64 libraries are missing.' 'Run prerequisite setup in Weave.' }
-        Write-Host '      To build projects, use an x64 Visual Studio developer shell. Its INCLUDE and LIB settings belong to that shell.'
+        Write-Host '      Weave configures x64 compiler paths for ordinary terminals. Reopen the terminal after environment setup. Developer shells may select another toolset.'
     }
 
     Invoke-ValidationSection 'Environment settings in this terminal' {
@@ -431,6 +443,17 @@ function Invoke-InstallValidation([string]$Root = $MayaFluxRoot, [string]$Projec
             Test-ValidationEnvironment 'Clang_DIR' (Join-Path $llvm 'lib\cmake\clang') -OptionalFolder
         }
         if ($vulkan) { Test-ValidationEnvironment 'CPATH' (Join-Path $vulkan 'Include') -List }
+        foreach ($name in @('cmake', 'git', 'ninja')) {
+            $tool = Find-ValidationTool $name
+            if ($tool) { Test-ValidationEnvironment 'PATH' (Split-Path -Parent $tool) -List }
+        }
+        if ($ffmpeg) {
+            Test-ValidationEnvironment 'CPATH' (Join-Path $ffmpeg 'include') -List
+            Test-ValidationEnvironment 'LIB' (Join-Path $ffmpeg 'lib') -List
+        }
+        foreach ($name in @('LIB', 'INCLUDE')) {
+            foreach ($path in $microsoftEnvironment[$name]) { Test-ValidationEnvironment $name $path -List }
+        }
     }
 
     if ($ProjectDirectory) { Test-ValidationProject $ProjectDirectory }

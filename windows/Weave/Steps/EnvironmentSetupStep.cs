@@ -70,6 +70,8 @@ public class EnvironmentSetupStep : IInstallationStep
             RequireDirectory(config.BinDirectory);
             RequireDirectory(Path.Combine(config.MayaFluxRoot, "include"));
             RequireDirectory(config.LibDirectory);
+            var compilerPaths = await host.GetMicrosoftCompilerPathsAsync();
+            foreach (var directory in compilerPaths.Includes.Concat(compilerPaths.Libraries)) RequireDirectory(directory);
             await LogAsync("=== Environment Setup ===");
             await LogAsync("");
 
@@ -97,6 +99,12 @@ public class EnvironmentSetupStep : IInstallationStep
             await LogAsync("");
             await LogAsync("=== Dependency Configuration ===");
             await LogAsync("");
+
+            await LogAsync("Configuring Microsoft x64 compiler search paths...");
+            RequireWrite(ProcessRunner.MergeEnvironmentPaths("LIB", compilerPaths.Libraries, logger, host), "LIB");
+            foreach (var directory in compilerPaths.Libraries) await LogAsync($"  [OK] LIB: {directory}");
+            RequireWrite(ProcessRunner.MergeEnvironmentPaths("INCLUDE", compilerPaths.Includes, logger, host), "INCLUDE");
+            foreach (var directory in compilerPaths.Includes) await LogAsync($"  [OK] INCLUDE: {directory}");
 
             await SetupVulkan(config);
             await SetupLLVM(config);
@@ -199,11 +207,19 @@ public class EnvironmentSetupStep : IInstallationStep
 
         RequireDirectory(ffmpegRoot);
         RequireDirectory(Path.Combine(ffmpegRoot, "bin"));
+        var include = Path.Combine(ffmpegRoot, "include");
+        var lib = Path.Combine(ffmpegRoot, "lib");
+        RequireDirectory(include);
+        RequireDirectory(lib);
         if (!ProcessRunner.SetEnvironmentVariable("FFMPEG_ROOT", ffmpegRoot, logger, host))
             throw new InvalidOperationException("Failed to set FFMPEG_ROOT. Run Weave as administrator and retry environment setup.");
         if (!ProcessRunner.AddToPath(Path.Combine(ffmpegRoot, "bin"), logger, host))
             throw new InvalidOperationException("Failed to add FFmpeg Shared to PATH. Retry environment setup.");
+        RequireWrite(ProcessRunner.AddIncludeDirectory(include, logger, host), "CPATH");
+        RequireWrite(ProcessRunner.AppendToEnvironmentVariable("LIB", lib, logger, host), "LIB");
         await LogAsync($"  [OK] FFMPEG_ROOT={ffmpegRoot}");
+        await LogAsync($"  [OK] Added to CPATH: {include}");
+        await LogAsync($"  [OK] Added to LIB: {lib}");
     }
 
     internal static string? SelectedDependencyRoot(InstallationConfig config, string package)

@@ -8,6 +8,11 @@ namespace Weave.Windows.UnitTests;
 public class ValidateScriptTests
 {
     [TestCase("healthy", 0)]
+    [TestCase("missing-ffmpeg-cpath", 1)]
+    [TestCase("missing-ffmpeg-lib", 1)]
+    [TestCase("missing-msvc-lib", 1)]
+    [TestCase("missing-sdk-include", 1)]
+    [TestCase("missing-tool-path", 1)]
     [TestCase("bad-version", 1)]
     [TestCase("missing-ffmpeg-library", 1)]
     [TestCase("stale-shell", 1)]
@@ -30,7 +35,32 @@ public class ValidateScriptTests
             Assert.That(report, Does.Contain("Copy this report"));
             if (exitCode != 0) Assert.That(report, Does.Contain("[FIX]"));
             else Assert.That(report, Does.Contain("No problems found"));
+            var failedVariable = scenario switch {
+                "missing-ffmpeg-cpath" => "CPATH", "missing-ffmpeg-lib" or "missing-msvc-lib" => "LIB",
+                "missing-sdk-include" => "INCLUDE", "missing-tool-path" => "PATH", _ => null
+            };
+            if (failedVariable != null) Assert.That(report, Does.Contain("[FIX] " + failedVariable + " does not point to the expected location."));
         });
+    }
+
+    [TestCase("MAYAFLUX_ROOT")]
+    [TestCase("LLVM_ROOT")]
+    [TestCase("LLVM_DIR")]
+    [TestCase("Clang_DIR")]
+    [TestCase("VULKAN_SDK")]
+    [TestCase("VK_SDK_PATH")]
+    [TestCase("FFMPEG_ROOT")]
+    [TestCase("PATH")]
+    [TestCase("CPATH")]
+    [TestCase("LIBRARY_PATH")]
+    [TestCase("LIB")]
+    [TestCase("INCLUDE")]
+    public async Task EveryConfiguredVariableIsCheckedInTheCurrentTerminal(string variable)
+    {
+        var (report, errors, exitCode) = await RunAsync("missing-env-" + variable);
+        Assert.That(errors, Is.Empty);
+        Assert.That(exitCode, Is.EqualTo(1), report);
+        Assert.That(report, Does.Contain("[FIX] " + variable + " is not available in this terminal."));
     }
 
     [TestCase("project-healthy", 0, "release preset pair")]
@@ -86,17 +116,26 @@ public class ValidateScriptTests
         $ffmpeg = Join-Path $fixtureRoot 'FFmpeg'
         $kits = Join-Path $fixtureRoot 'Windows Kits'
         $compiler = Join-Path $fixtureRoot 'MSVC\bin\Hostx64\x64\cl.exe'
+        $toolset = Join-Path $fixtureRoot 'MSVC'
         $variables = @{
             MAYAFLUX_ROOT = $root; LLVM_ROOT = $llvm; FFMPEG_ROOT = $ffmpeg
             VULKAN_SDK = $sdk; VK_SDK_PATH = $sdk
             LLVM_DIR = (Join-Path $llvm 'lib\cmake\llvm'); Clang_DIR = (Join-Path $llvm 'lib\cmake\clang')
-            CPATH = ((Join-Path $root 'include') + ';' + (Join-Path $sdk 'Include'))
+            CPATH = ((Join-Path $root 'include') + ';' + (Join-Path $sdk 'Include') + ';' + (Join-Path $ffmpeg 'include'))
+            LIB = (@((Join-Path $toolset 'lib\x64'), (Join-Path $kits 'Lib\10.0.22621.0\ucrt\x64'), (Join-Path $kits 'Lib\10.0.22621.0\um\x64'), (Join-Path $ffmpeg 'lib')) -join ';')
+            INCLUDE = (@((Join-Path $toolset 'include')) + @('ucrt', 'shared', 'um', 'winrt', 'cppwinrt').ForEach({ Join-Path $kits "Include\10.0.22621.0\$_" }) -join ';')
             LIBRARY_PATH = (Join-Path $root 'lib')
-            PATH = ((Join-Path $root 'bin') + ';' + (Join-Path $llvm 'bin') + ';' + (Join-Path $sdk 'Bin') + ';' + (Join-Path $ffmpeg 'bin'))
+            PATH = ((Join-Path $root 'bin') + ';' + (Join-Path $llvm 'bin') + ';' + (Join-Path $sdk 'Bin') + ';' + (Join-Path $ffmpeg 'bin') + ';' + $fixtureRoot)
         }
         foreach ($path in @($variables.LLVM_DIR, $variables.Clang_DIR, (Join-Path $root 'include'), (Join-Path $sdk 'Include'))) {
             New-Item -ItemType Directory -Path $path -Force | Out-Null
         }
+        foreach ($path in @($variables.LIB -split ';') + @($variables.INCLUDE -split ';')) { New-Item -ItemType Directory -Path $path -Force | Out-Null }
+        if ($scenario -eq 'missing-ffmpeg-cpath') { $variables.CPATH = (Join-Path $root 'include') + ';' + (Join-Path $sdk 'Include') }
+        if ($scenario -eq 'missing-ffmpeg-lib') { $variables.LIB = (($variables.LIB -split ';' | Where-Object { $_ -ne (Join-Path $ffmpeg 'lib') }) -join ';') }
+        if ($scenario -eq 'missing-msvc-lib') { $variables.LIB = (($variables.LIB -split ';' | Where-Object { $_ -ne (Join-Path $toolset 'lib\x64') }) -join ';') }
+        if ($scenario -eq 'missing-sdk-include') { $variables.INCLUDE = Join-Path $toolset 'include' }
+        if ($scenario -eq 'missing-tool-path') { $variables.PATH = (($variables.PATH -split ';' | Where-Object { $_ -ne $fixtureRoot }) -join ';') }
         $files = @(
             (Join-Path $root 'share\MayaFlux\.version'), (Join-Path $root 'lib\MayaFluxLib.lib'),
             (Join-Path $root 'bin\MayaFluxLib.dll'), (Join-Path $root 'lib\cmake\MayaFlux\MayaFluxConfig.cmake'),
@@ -122,6 +161,7 @@ public class ValidateScriptTests
         if ($scenario -eq 'missing-ffmpeg-library') { Remove-Item -LiteralPath (Join-Path $ffmpeg 'lib\avcodec.lib') }
         if ($scenario -eq 'missing-sdk') { Remove-Item -LiteralPath (Join-Path $kits 'Include\10.0.22621.0\um\Windows.h') }
         function Get-ValidationEnvironment($Name, $Target = 'Process') {
+            if ($scenario -eq ('missing-env-' + $Name) -and $Target -eq 'Process') { return $null }
             if ($scenario -eq 'stale-shell' -and $Target -eq 'Process' -and $Name -eq 'MAYAFLUX_ROOT') { return $null }
             return $variables[$Name]
         }

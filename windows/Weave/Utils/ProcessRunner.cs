@@ -151,6 +151,27 @@ public static class ProcessRunner
         }
     }
 
+    internal static bool MergeEnvironmentPaths(string name, IEnumerable<string> paths, Logger logger, WindowsInstallationHost host)
+    {
+        try
+        {
+            var additions = paths.ToArray();
+            if (additions.Any(path => !WindowsInstallationPaths.IsSafeEnvironmentPath(path) || !host.DirectoryExists(path)))
+                throw new ArgumentException($"Required {name} directories are missing or unsafe.");
+            var existing = host.GetEnvironmentVariable(name, EnvironmentVariableTarget.Machine) ?? "";
+            var entries = new List<string>();
+            foreach (var entry in existing.Split(';').Select(entry => entry.Trim()).Where(entry => entry.Length > 0).Concat(additions))
+                if (!ContainsPath(string.Join(';', entries), entry, host)) entries.Add(entry);
+            var value = string.Join(';', entries);
+            return value == existing || SetEnvironmentVariable(name, value, logger, host);
+        }
+        catch (Exception error)
+        {
+            logger.Log($"[ERROR] Failed to update {name}: {error.Message}");
+            return false;
+        }
+    }
+
     public static void AddIncludeDirectory(string path, Logger logger) => AddIncludeDirectory(path, logger, new WindowsInstallationHost());
 
     internal static bool AddIncludeDirectory(string path, Logger logger, WindowsInstallationHost host)

@@ -11,6 +11,10 @@ internal sealed class FakeEnvironmentSetupHost : EnvironmentSetupHost
     internal string? FailedWrite;
     internal string? FailedRead;
     internal string[] VulkanVersions = [];
+    internal WindowsCompilerPaths CompilerPaths = new(
+        [@"D:\Microsoft Tools\include", @"D:\Windows SDK\Include\10.0.26100.0\ucrt", @"D:\Windows SDK\Include\10.0.26100.0\shared", @"D:\Windows SDK\Include\10.0.26100.0\um", @"D:\Windows SDK\Include\10.0.26100.0\winrt", @"D:\Windows SDK\Include\10.0.26100.0\cppwinrt"],
+        [@"D:\Microsoft Tools\lib\x64", @"D:\Windows SDK\Lib\10.0.26100.0\ucrt\x64", @"D:\Windows SDK\Lib\10.0.26100.0\um\x64"]);
+    internal override Task<WindowsCompilerPaths> GetMicrosoftCompilerPathsAsync() => Task.FromResult(CompilerPaths);
     internal override Logger CreateLogger() => new("NUL");
     internal override string? GetEnvironmentVariable(string name, EnvironmentVariableTarget target)
     {
@@ -38,6 +42,9 @@ internal sealed class FakeEnvironmentSetupHost : EnvironmentSetupHost
         config.DependencyExecutablePaths["KhronosGroup.VulkanSDK"] = @"D:\SDK\Bin\glslc.exe";
         config.DependencyExecutablePaths["Gyan.FFmpeg.Shared"] = @"D:\FFmpeg\bin\ffmpeg.exe";
         host.Variables["PATH"] = @"C:\Windows\System32";
+        foreach (var path in host.CompilerPaths.Includes.Concat(host.CompilerPaths.Libraries)) host.Directories.Add(path);
+        host.Directories.Add(@"D:\FFmpeg\include");
+        host.Directories.Add(@"D:\FFmpeg\lib");
         return (host, config);
     }
 }
