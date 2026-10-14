@@ -205,6 +205,19 @@ function Test-ValidationProject([string]$Directory) {
         }
     }
 
+    Invoke-ValidationSection 'Project configuration' {
+        $path = Join-Path $Directory 'mayaflux.json'
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            Write-ValidationResult 'OK' 'No mayaflux.json in the project.' 'Engine defaults apply.'
+            return
+        }
+        $config = Get-Content -LiteralPath $path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        $known = @('stream', 'graphics', 'input', 'network', 'journal')
+        $unknown = @($config.PSObject.Properties.Name | Where-Object { $known -notcontains $_ })
+        if ($unknown.Count) { Write-ValidationResult 'FIX' 'mayaflux.json has unknown top-level sections.' ($unknown -join ', ') }
+        else { Write-ValidationResult 'OK' 'mayaflux.json is valid JSON with known sections.' }
+    }
+
     Invoke-ValidationSection 'Project community modules' {
         $list = Join-Path $Directory 'community.cmake'
         if (-not (Test-Path -LiteralPath $list -PathType Leaf)) {
@@ -317,6 +330,39 @@ function Invoke-InstallValidation([string]$Root = $MayaFluxRoot, [string]$Projec
             if ($resources.Count) { Write-ValidationResult 'OK' $entry[0] "$($resources.Count) file(s) at $path" }
             else { Write-ValidationResult 'WARN' "$($entry[0]) folder contains no shader files." "Location: $path. Update MayaFlux if you need these resources." }
         }
+    }
+
+    Invoke-ValidationSection 'Bug report configuration' {
+        if (-not $Root) { return }
+        $path = Join-Path $Root 'share\MayaFlux\report\mayaflux.report.json'
+        if (Test-Path -LiteralPath $path -PathType Leaf) { Write-ValidationResult 'OK' 'Report configuration' $path }
+        else { Write-ValidationResult 'WARN' 'The report configuration is missing.' "Expected: $path. It ships with MayaFlux 0.5 and later. Update MayaFlux to follow the bug report instructions." }
+    }
+
+    Invoke-ValidationSection 'Graphics' {
+        foreach ($adapter in @(Get-CimInstance -ClassName Win32_VideoController -ErrorAction Stop)) {
+            Write-Host "      $($adapter.Name) | driver $($adapter.DriverVersion)"
+        }
+        foreach ($name in @('MAYAFLUX_GPU', 'VK_ICD_FILENAMES', 'VK_DRIVER_FILES', 'VK_LAYER_PATH')) {
+            $value = [Environment]::GetEnvironmentVariable($name)
+            if ($value) { Write-Host "      $name=$value" }
+        }
+        $vulkaninfo = Find-ValidationTool 'vulkaninfo' $(if ($vulkan) { @((Join-Path $vulkan 'Bin\vulkaninfo.exe'), (Join-Path $vulkan 'Bin\vulkaninfoSDK.exe')) })
+        if ($vulkaninfo) {
+            $result = Invoke-ValidationTool $vulkaninfo @('--summary') 20
+            if ($result.Code -eq 0) {
+                foreach ($line in @($result.Text -split '\r?\n' | Where-Object { $_ -match 'deviceName|deviceType|driverName|driverInfo|apiVersion' } | ForEach-Object { $_.Trim() })) {
+                    Write-Host "      $line"
+                }
+                Write-ValidationResult 'OK' 'vulkaninfo'
+            }
+            else { Write-ValidationResult 'WARN' 'vulkaninfo could not list devices.' $result.Text }
+        }
+        else { Write-ValidationResult 'WARN' 'vulkaninfo was not found.' 'It is part of the Vulkan SDK. Include its output when reporting graphics problems.' }
+        if ($vulkan -and @(Get-ChildItem -LiteralPath (Join-Path $vulkan 'Bin') -Filter 'VkLayer_khronos_validation*' -File -ErrorAction SilentlyContinue).Count) {
+            Write-ValidationResult 'OK' 'Vulkan validation layer'
+        }
+        else { Write-ValidationResult 'WARN' 'The Vulkan validation layer was not found.' 'The Vulkan SDK provides it. The bug report configuration turns validation on.' }
     }
 
     Invoke-ValidationSection 'Tools used by MayaFlux and Weave' {

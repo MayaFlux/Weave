@@ -7,7 +7,7 @@
 # Each module lives in ${CMAKE_SOURCE_DIR}/community/<name>/
 # and must provide <name>.cmake and src/.
 #
-# Modules are acquired via: weave community add <name>
+# Modules are added with Weave: Add Community Module, or weave update <project-dir> <name>
 
 function(add_community name)
 
@@ -18,7 +18,7 @@ function(add_community name)
         message(FATAL_ERROR
             "Community module '${name}' not found.\n"
             "Expected: ${_mod_cmake}\n"
-            "Run: weave community add ${name}"
+            "Add it with Weave: Add Community Module, or run: weave update \"${CMAKE_SOURCE_DIR}\" ${name}"
         )
     endif()
 

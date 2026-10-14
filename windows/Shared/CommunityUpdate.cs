@@ -303,7 +303,7 @@ public sealed class CommunityUpdate
                     manifest.GetProperty("manual_installs").GetArrayLength() > 0 ||
                     manifest.GetProperty("assets").GetArrayLength() > 0)
                 {
-                    report($"{name} has declared requirements pending review");
+                    report($"{name} declares requirements in community/{name}/community.json. Weave does not install them; install them with your package manager.");
                 }
 
                 report($"Validated {name}");

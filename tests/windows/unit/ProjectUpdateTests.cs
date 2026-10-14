@@ -46,7 +46,7 @@ public class ProjectUpdateTests
         {
             Assert.That(File.ReadAllText(fixture.Registration), Is.EqualTo(expected));
             Assert.That(File.ReadAllText(Path.Combine(fixture.Project, "src", "user.cpp")), Is.EqualTo("user content"));
-            Assert.That(fixture.Messages, Has.Some.Contains("pending review").And.Some.Contains("already registered"));
+            Assert.That(fixture.Messages, Has.Some.Contains("declares requirements").And.Some.Contains("already registered"));
         });
     }
 

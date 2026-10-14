@@ -9,8 +9,11 @@ using JSON Schema Draft 2020-12. Native parsers also check declaration rules
 that the schema cannot express. Module creation uses those parsers to validate
 metadata.
 
-Module installation and acquisition execution are later phases. Passing
-validation does not mean requirements have been installed.
+Module installation and acquisition execution are later phases. Weave reads and
+validates these declarations and reports that a module declares them, but it does
+not install packages, run installers or download assets in this release. Module
+users install the requirements themselves. Passing validation does not mean
+requirements have been installed.
 
 The parser entry points are:
 

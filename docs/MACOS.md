@@ -61,13 +61,23 @@ cmake --build build --parallel
 ./build/MyProject
 ```
 
+### Diagnostics
+
+Each new project includes `validate.sh`. Run it from the project folder when something does not work:
+
+```bash
+./validate.sh
+```
+
+It checks project files, presets, community module references, `mayaflux.json`, local shaders and the MayaFlux installation, and lists your OS, GPU and Vulkan driver details. It does not configure, build or change anything. Include its output when reporting a problem. See the [Weave README](../README.md#reporting-a-problem) for the report steps.
+
 ---
 
 ## Community Modules
 
 ### Adding a module
 
-Open Weave.app, choose **Add Community Module**, select your project directory, and enter the module name. Weave fetches the registry, checks version compatibility, clones the module into `community/<name>/`, and registers it in `community.cmake`. Rebuild your project after adding modules.
+Open Weave.app, choose **Add Community Module**, select your project directory, and enter the module name. Weave fetches the registry, checks version compatibility, clones the module into `community/<name>/`, and registers it in `community.cmake`. Rebuild your project after adding modules. If the module declares dependencies in its `community.json`, Weave tells you but does not install them. Install them with your package manager.
 
 ### Creating a module
 

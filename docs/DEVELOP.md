@@ -11,6 +11,8 @@ Weave/
 ├── macos/
 │   ├── WeaveGUI.swift              # SwiftUI installer and project creator
 │   ├── Weave.sh                    # CLI tool (weave new / update / community)
+│   ├── CommunityManifest.swift     # community.json parser and validator
+│   ├── CommunityUpdate.swift       # Batch module preparation and registration
 │   └── scripts/
 │       └── build_weave_app.sh      # Builds Weave.app and DMG
 │
@@ -24,7 +26,7 @@ Weave/
 │   │   │   ├── Layout/             # Layout manager
 │   │   │   └── Project/            # Project creator, community module views
 │   │   └── Weave.csproj
-│   ├── Shared/                     # Shared models and utilities
+│   ├── Shared/                     # Shared models and utilities, community manifest and update logic
 │   └── Weave.sln
 │
 ├── linux/
@@ -32,6 +34,8 @@ Weave/
 │   │   ├── main.py                 # GUI entry point
 │   │   ├── cli.py                  # CLI tool
 │   │   ├── config.py               # Configuration loader
+│   │   ├── community_manifest.py   # community.json parser and validator
+│   │   ├── community_update.py     # Batch module preparation and registration
 │   │   ├── modes/                  # Installation, project, community modes
 │   │   └── ui/                     # GTK4 theme and CSS
 │   ├── scripts/
@@ -46,6 +50,9 @@ Weave/
 │   ├── CMakePresets.json
 │   ├── main.cpp
 │   ├── user_project.hpp
+│   ├── validate.sh                 # Project diagnostics (Linux)
+│   ├── validate-macos.sh           # Project diagnostics (macOS)
+│   ├── validate.ps1                # Project diagnostics (Windows)
 │   ├── .gitignore
 │   ├── cmake/
 │   │   ├── mayaflux.cmake

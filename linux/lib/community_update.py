@@ -229,7 +229,7 @@ def update(project_path, values, root, report):
                 )
 
             if any(manifest[key] for key in ("packages", "manual_installs", "assets")):
-                report(f"{name} has declared requirements pending review")
+                report(f"{name} declares requirements in community/{name}/community.json. Weave does not install them; install them with your package manager.")
             report(f"Validated {name}")
 
         added = register(registration, names)

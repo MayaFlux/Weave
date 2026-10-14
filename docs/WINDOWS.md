@@ -85,13 +85,23 @@ cmake --build build --config Release --parallel
 
 On Windows, the CMake build copies all required MayaFlux DLLs next to your executable automatically as a post-build step. If you move the executable, copy the DLLs alongside it.
 
+### Diagnostics
+
+Each new project includes `validate.ps1`. Run it from the project folder when something does not work:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\validate.ps1
+```
+
+It checks project files, presets, community module references, `mayaflux.json`, local shaders and the MayaFlux installation, and lists your OS, GPU and Vulkan driver details. It does not configure, build or change anything. Include its output when reporting a problem. See the [Weave README](../README.md#reporting-a-problem) for the report steps.
+
 ---
 
 ## Community Modules
 
 ### Adding a module
 
-Open Weave and choose **Add Community Module**, select your project directory, and enter the module name. Weave fetches the registry, checks version compatibility, clones the module into `community/<name>/`, and registers it in `community.cmake`. Rebuild your project after adding modules.
+Open Weave and choose **Add Community Module**, select your project directory, and enter the module name. Weave fetches the registry, checks version compatibility, clones the module into `community/<name>/`, and registers it in `community.cmake`. Rebuild your project after adding modules. If the module declares dependencies in its `community.json`, Weave tells you but does not install them. Install them with your package manager.
 
 ### Creating a module
 

@@ -184,6 +184,97 @@ if [ -d "$project_dir/data/shaders" ]; then
     done
 fi
 
+printf '\nProject configuration\n'
+if [ -f "$project_dir/mayaflux.json" ]; then
+    if command -v python3 >/dev/null 2>&1; then
+        if config_error="$(python3 - "$project_dir/mayaflux.json" <<'PY'
+import json
+import sys
+
+known = {"stream", "graphics", "input", "network", "journal"}
+try:
+    with open(sys.argv[1], encoding="utf-8") as source:
+        data = json.load(source)
+    if not isinstance(data, dict):
+        raise ValueError("the top level must be a JSON object")
+    unknown = sorted(set(data) - known)
+    if unknown:
+        raise ValueError("unknown top-level section(s): " + ", ".join(unknown))
+except (OSError, ValueError) as error:
+    print(error)
+    sys.exit(1)
+PY
+)"; then
+            ok 'mayaflux.json is valid JSON with known sections.'
+        else
+            fix "mayaflux.json could not be validated: $config_error"
+        fi
+    else
+        fix 'mayaflux.json could not be checked because python3 is unavailable.'
+    fi
+else
+    printf '[INFO] No mayaflux.json in the project. Engine defaults apply.\n'
+fi
+
+printf '\nSystem\n'
+printf '[INFO] OS: %s\n' "$(uname -sr 2>/dev/null || echo unknown)"
+printf '[INFO] Session: %s\n' "${XDG_SESSION_TYPE:-unknown}"
+if [ -n "$config" ]; then
+    version_file="$(dirname "$config")/MayaFluxConfigVersion.cmake"
+    if [ -f "$version_file" ]; then
+        installed_version="$(sed -n 's/^set(PACKAGE_VERSION "\(.*\)")/\1/p' "$version_file" | head -n 1)"
+        [ -n "$installed_version" ] && printf '[INFO] MayaFlux version: %s\n' "$installed_version"
+    fi
+    report_config="$(dirname "$(dirname "$(dirname "$(dirname "$config")")")")/share/MayaFlux/report/mayaflux.report.json"
+    if [ -f "$report_config" ]; then
+        ok "Report configuration: $report_config"
+    else
+        printf '[INFO] Report configuration not found at %s. It ships with MayaFlux 0.5 and later.\n' "$report_config"
+    fi
+fi
+if [ -f "$project_dir/build/CMakeCache.txt" ]; then
+    build_type="$(sed -n 's/^CMAKE_BUILD_TYPE:[A-Z]*=//p' "$project_dir/build/CMakeCache.txt" | head -n 1)"
+    printf '[INFO] Project build type: %s\n' "${build_type:-unset}"
+fi
+for variable in MAYAFLUX_ROOT MAYAFLUX_GPU VK_ICD_FILENAMES VK_DRIVER_FILES VK_LAYER_PATH MESA_VK_DEVICE_SELECT DRI_PRIME __NV_PRIME_RENDER_OFFLOAD; do
+    if [ -n "${!variable:-}" ]; then
+        printf '[INFO] %s=%s\n' "$variable" "${!variable}"
+    fi
+done
+if command -v vulkaninfo >/dev/null 2>&1; then
+    if command -v timeout >/dev/null 2>&1; then
+        vulkan_summary="$(timeout 20 vulkaninfo --summary 2>/dev/null)"
+    else
+        vulkan_summary="$(vulkaninfo --summary 2>/dev/null)"
+    fi
+    if [ -n "$vulkan_summary" ]; then
+        while IFS= read -r line; do
+            printf '[INFO] Vulkan: %s\n' "$line"
+        done < <(printf '%s\n' "$vulkan_summary" | grep -E 'deviceName|deviceType|driverName|driverInfo|apiVersion' | sed 's/^[[:space:]]*//')
+    else
+        printf '[INFO] vulkaninfo produced no device summary.\n'
+    fi
+else
+    printf '[INFO] vulkaninfo was not found. Install vulkan-tools to include GPU and driver details.\n'
+fi
+layer_manifest=''
+for directory in /usr/share/vulkan/explicit_layer.d /usr/local/share/vulkan/explicit_layer.d /etc/vulkan/explicit_layer.d "${XDG_DATA_HOME:-$HOME/.local/share}/vulkan/explicit_layer.d"; do
+    if [ -f "$directory/VkLayer_khronos_validation.json" ]; then
+        layer_manifest="$directory/VkLayer_khronos_validation.json"
+        break
+    fi
+done
+if [ -n "$layer_manifest" ]; then
+    printf '[INFO] Vulkan validation layer: %s\n' "$layer_manifest"
+else
+    printf '[INFO] Vulkan validation layer not found. Install the validation layers package to use the report configuration.\n'
+fi
+if command -v pgrep >/dev/null 2>&1 && pgrep -x pipewire >/dev/null 2>&1; then
+    printf '[INFO] Audio server: PipeWire is running.\n'
+else
+    printf '[INFO] Audio server: PipeWire was not detected.\n'
+fi
+
 printf '\nSummary\n'
 if (( issues == 0 )); then
     printf 'No problems found in these checks.\n'

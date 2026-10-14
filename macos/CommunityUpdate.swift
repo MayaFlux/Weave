@@ -276,7 +276,7 @@ enum CommunityUpdate {
                 let manuals = manifest["manual_installs"] as? [Any] ?? []
                 let assets = manifest["assets"] as? [Any] ?? []
                 if !packages.isEmpty || !manuals.isEmpty || !assets.isEmpty {
-                    report("\(name) has declared requirements pending review")
+                    report("\(name) declares requirements in community/\(name)/community.json. Weave does not install them; install them with your package manager.")
                 }
 
                 report("Validated \(name)")
