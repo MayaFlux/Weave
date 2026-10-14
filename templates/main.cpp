@@ -37,6 +37,10 @@ int main(int argc, char* argv[])
             "Version: {}.{}.{}", MAYAFLUX_VERSION_MAJOR, MAYAFLUX_VERSION_MINOR, MAYAFLUX_VERSION_PATCH);
         MF_LOG(MayaFlux::Journal::Component::USER, MayaFlux::Journal::Context::Init, "");
 
+#ifdef MAYAFLUX_PROJECT_ROOT
+        MayaFlux::Config::set_project_root(MAYAFLUX_PROJECT_ROOT);
+#endif
+
         bool config_override = false;
 #ifdef MAYAFLUX_CONFIG_OVERRIDE
         config_override = true;
@@ -53,7 +57,7 @@ int main(int argc, char* argv[])
 
         if (config_path.empty()) {
             namespace fs = std::filesystem;
-            auto candidate = fs::path(Config::SOURCE_DIR) / "mayaflux.json";
+            auto candidate = fs::path(MayaFlux::Config::project_root()) / "mayaflux.json";
             if (fs::exists(candidate))
                 config_path = candidate.string();
         }

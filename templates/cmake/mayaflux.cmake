@@ -130,6 +130,7 @@ include(cmake/shaders)
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     MAYAFLUX_PROJECT_SHADER_DIR="${CMAKE_SOURCE_DIR}/data/shaders"
+    MAYAFLUX_PROJECT_ROOT="${CMAKE_SOURCE_DIR}"
 )
 
 if(TARGET compile_project_shaders)
