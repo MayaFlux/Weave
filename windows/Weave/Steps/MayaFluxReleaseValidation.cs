@@ -19,7 +19,7 @@ internal static class MayaFluxReleaseValidation
         if (!Path.IsPathFullyQualified(path) || path.StartsWith(@"\\"))
             throw new IOException("Installation and temporary paths must be local absolute directories");
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
-        if (full == Path.GetPathRoot(full))
+        if (full.Equals(Path.TrimEndingDirectorySeparator(Path.GetPathRoot(full)!), StringComparison.OrdinalIgnoreCase))
             throw new IOException("A drive root cannot be an installation or temporary directory");
         foreach (var segment in path[3..].Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries))
             if (segment.EndsWith('.') || segment.EndsWith(' ') || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)

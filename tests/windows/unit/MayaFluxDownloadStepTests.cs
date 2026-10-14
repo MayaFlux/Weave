@@ -3,6 +3,7 @@ using NUnit.Framework;
 using Weave;
 using Weave.Shared.Models;
 using Weave.UI.Pages;
+using Weave.Utils;
 
 namespace Weave.Windows.UnitTests;
 
@@ -25,9 +26,10 @@ public sealed class MayaFluxDownloadStepTests
         var extraction = host.Extractions.Single();
         Assert.That(Path.GetDirectoryName(extraction.Archive), Is.EqualTo(FakeMayaFluxDownloadHost.TemporaryRoot));
         Assert.That(Path.GetExtension(extraction.Archive), Is.EqualTo(".7z"));
-        Assert.That(extraction.Destination, Does.StartWith(FakeMayaFluxDownloadHost.InstallRoot + ".weave-staging-"));
-        Assert.That(host.Verifications, Is.EqualTo(new[] { extraction.Destination }));
-        Assert.That(host.Moves.Single().Destination, Is.EqualTo(FakeMayaFluxDownloadHost.InstallRoot));
+        Assert.That(extraction.Destination, Does.StartWith(Path.Combine(FakeMayaFluxDownloadHost.TemporaryRoot, "mayaflux-staging-")));
+        Assert.That(host.Verifications, Is.EqualTo(new[] { extraction.Destination, FakeMayaFluxDownloadHost.InstallRoot }));
+        Assert.That(host.Moves, Is.Empty);
+        Assert.That(host.Files[Path.Combine(FakeMayaFluxDownloadHost.InstallRoot, "new-installation.txt")], Is.EqualTo("replacement"u8.ToArray()));
         Assert.That(result.Progress.Last(), Is.EqualTo(100));
     }
 
@@ -252,51 +254,76 @@ public sealed class MayaFluxDownloadStepTests
         result.AssertBlocked();
         Assert.That(host.Files.ContainsKey(Path.Combine(FakeMayaFluxDownloadHost.InstallRoot, "keep.txt")), Is.True);
         Assert.That(host.Verifications, Has.Count.EqualTo(extract ? 1 : 0));
-        Assert.That(host.Files.Keys.Any(path => path.Contains(".weave-staging-") || path.EndsWith(".7z")), Is.False);
+        Assert.That(host.Files.Keys.Any(path => path.Contains("mayaflux-staging-") || path.EndsWith(".7z")), Is.False);
     }
 
     [Test]
-    public async Task FailedInstallationMoveRestoresThePreviousDirectory()
+    public async Task FailedFileReplacementReportsThePathAndCanBeRetried()
     {
         var host = new FakeMayaFluxDownloadHost
         {
-            MoveError = (source, destination) => source.Contains(".weave-staging-") ? new IOException("Replacement move denied") : null
+            CopyError = new IOException("Replacement copy denied")
         };
         host.ExistingInstallation();
         var result = await RunAsync(host);
         result.AssertBlocked();
-        Assert.That(host.Files.ContainsKey(Path.Combine(FakeMayaFluxDownloadHost.InstallRoot, "keep.txt")), Is.True);
-        Assert.That(result.Messages.Any(message => message.Contains("Replacement move denied")), Is.True);
+        Assert.That(host.Files.ContainsKey(Path.Combine(FakeMayaFluxDownloadHost.InstallRoot, "keep.txt")), Is.False);
+        Assert.That(result.Messages.Any(message => message.Contains("Replacement copy denied") && message.Contains("new-installation.txt")), Is.True);
+        host.CopyError = null;
+        result = await RunAsync(host);
+        Assert.That(result.Passed, Is.True);
     }
 
     [Test]
-    public async Task FailedRollbackPreservesAndReportsTheBackupLocation()
+    public async Task UpdateRemovesStaleFilesWithoutMovingTheInstallationOrCreatingBackups()
     {
         var host = new FakeMayaFluxDownloadHost
         {
-            MoveError = (source, destination) => source.Contains(".weave-staging-") || source.Contains(".weave-backup-")
-                ? new IOException("Move denied") : null
+            MoveError = (source, destination) => new UnauthorizedAccessException("Directory rename denied")
         };
         host.ExistingInstallation();
+        host.Files[Path.Combine(FakeMayaFluxDownloadHost.InstallRoot, "new-installation.txt")] = "old package file"u8.ToArray();
         var result = await RunAsync(host);
-        result.AssertBlocked();
-        var backup = host.Files.Keys.Single(path => path.Contains(".weave-backup-") && path.EndsWith("keep.txt"));
-        Assert.That(result.Messages.Any(message => message.Contains(Path.GetDirectoryName(backup)!)), Is.True);
+        Assert.That(result.Passed, Is.True);
+        Assert.That(host.Files[Path.Combine(FakeMayaFluxDownloadHost.InstallRoot, "new-installation.txt")], Is.EqualTo("replacement"u8.ToArray()));
+        Assert.That(host.Files.ContainsKey(Path.Combine(FakeMayaFluxDownloadHost.InstallRoot, "keep.txt")), Is.False);
+        Assert.That(host.DeletedDirectories, Does.Contain(FakeMayaFluxDownloadHost.InstallRoot));
+        Assert.That(host.Moves, Is.Empty);
+        Assert.That(host.CreatedDirectories.Any(path => path.Contains(".weave-backup-")), Is.False);
     }
 
     [Test]
-    public async Task BackupCleanupFailureLeavesTheVerifiedReplacementUsable()
+    public void NativeInstallationReplacesNestedFilesAndRemovesStaleFiles()
+    {
+        using var directory = new TestDirectory();
+        var staging = Path.Combine(directory.PathName, "temp package");
+        var installation = Path.Combine(directory.PathName, "Maya Flux");
+        Directory.CreateDirectory(Path.Combine(staging, "lib", "nested"));
+        Directory.CreateDirectory(Path.Combine(installation, "lib", "nested"));
+        var installedFile = Path.Combine(installation, "lib", "nested", "engine.lib");
+        var unrelatedFile = Path.Combine(installation, "keep.txt");
+        File.WriteAllText(Path.Combine(staging, "lib", "nested", "engine.lib"), "new package");
+        File.WriteAllText(installedFile, "old package");
+        File.WriteAllText(unrelatedFile, "user file");
+        new MayaFluxDownloadHost().InstallFiles(staging, installation);
+        Assert.That(File.ReadAllText(installedFile), Is.EqualTo("new package"));
+        Assert.That(File.Exists(unrelatedFile), Is.False);
+        Assert.That(Directory.GetDirectories(directory.PathName).Select(Path.GetFileName), Is.EquivalentTo(new[] { "temp package", "Maya Flux" }));
+    }
+
+    [Test]
+    public async Task StagingCleanupFailureReportsTheTemporaryLocationAfterASuccessfulUpdate()
     {
         var host = new FakeMayaFluxDownloadHost
         {
-            DeleteDirectoryError = path => path.Contains(".weave-backup-") ? new IOException("Backup cleanup denied") : null
+            DeleteDirectoryError = path => path.Contains("mayaflux-staging-") ? new IOException("Staging cleanup denied") : null
         };
         host.ExistingInstallation();
         var result = await RunAsync(host);
         Assert.That(result.Passed, Is.True);
         Assert.That(host.Files.ContainsKey(Path.Combine(FakeMayaFluxDownloadHost.InstallRoot, "new-installation.txt")), Is.True);
-        Assert.That(host.Files.Keys.Any(path => path.Contains(".weave-backup-") && path.EndsWith("keep.txt")), Is.True);
-        Assert.That(result.Messages.Any(message => message.StartsWith("[WARN]") && message.Contains("Backup cleanup denied")), Is.True);
+        Assert.That(host.Files.Keys.Any(path => path.Contains(".weave-backup-")), Is.False);
+        Assert.That(result.Messages.Any(message => message.StartsWith("[WARN]") && message.Contains("Staging cleanup denied")), Is.True);
     }
 
     [TestCase(false)]

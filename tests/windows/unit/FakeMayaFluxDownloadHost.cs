@@ -26,6 +26,13 @@ internal sealed class FakeMayaFluxDownloadHost : MayaFluxDownloadHost
     internal Exception? WriteError { get; set; }
     internal Exception? DirectoryError { get; set; }
     internal Exception? VersionReadError { get; set; }
+    internal Exception? CopyError { get; set; }
+    internal override string[] GetFileSystemEntries(string path) => Files.Keys.Concat(Directories).Where(entry => Path.GetDirectoryName(entry)?.Equals(path, StringComparison.OrdinalIgnoreCase) == true).ToArray();
+    internal override void CopyFile(string source, string destination)
+    {
+        if (CopyError != null) throw CopyError;
+        Files[destination] = Files[source].ToArray();
+    }
     internal Func<string, string, Exception?>? MoveError { get; set; }
     internal Func<string, Exception?>? DeleteDirectoryError { get; set; }
     internal List<(string Source, string Destination)> Moves { get; } = [];

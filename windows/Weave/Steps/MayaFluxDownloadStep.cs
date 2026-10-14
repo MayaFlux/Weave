@@ -199,7 +199,7 @@ public class MayaFluxDownloadStep : IInstallationStep
                     throw new InvalidDataException("Downloaded archive is invalid or incomplete");
             }
             await LogAsync($"Downloaded: {archivePath}");
-            stagingRoot = installRoot + $".weave-staging-{Guid.NewGuid():N}";
+            stagingRoot = Path.Combine(tempRoot, $"mayaflux-staging-{Guid.NewGuid():N}");
             if (host.DirectoryExists(stagingRoot)) throw new IOException("Installation staging directory already exists");
             host.CreateDirectory(stagingRoot);
             ownsStaging = true;
@@ -208,35 +208,9 @@ public class MayaFluxDownloadStep : IInstallationStep
             await LogAsync("Verifying staged installation...");
             if (!host.VerifyInstallation(stagingRoot, logger)) throw new IOException("Installation verification failed");
 
-            string? backupRoot = null;
-            if (host.DirectoryExists(installRoot))
-            {
-                backupRoot = installRoot + $".weave-backup-{Guid.NewGuid():N}";
-                await LogAsync($"Preserving existing installation at {backupRoot}");
-                host.MoveDirectory(installRoot, backupRoot);
-            }
-            try
-            {
-                host.MoveDirectory(stagingRoot, installRoot);
-                stagingRoot = null;
-            }
-            catch
-            {
-                if (backupRoot != null)
-                {
-                    try { host.MoveDirectory(backupRoot, installRoot); }
-                    catch (Exception rollbackError)
-                    {
-                        await LogAsync($"[ERROR] Could not restore the previous installation: {rollbackError.Message}. It is preserved at {backupRoot}");
-                    }
-                }
-                throw;
-            }
-            if (backupRoot != null)
-            {
-                try { host.DeleteDirectory(backupRoot); }
-                catch (Exception cleanupError) { await LogAsync($"[WARN] Previous installation remains at {backupRoot}: {cleanupError.Message}"); }
-            }
+            await LogAsync($"Installing package files into {installRoot}...");
+            host.InstallFiles(stagingRoot, installRoot);
+            if (!host.VerifyInstallation(installRoot, logger)) throw new IOException("Installed MayaFlux verification failed");
             await LogAsync("=== Download Complete ===");
             UpdateStatus(statusLabel, "Download successful", ThemeColors.Success);
             downloadReady = true;
