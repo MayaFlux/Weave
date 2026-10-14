@@ -54,49 +54,63 @@ class InstallationTests(unittest.TestCase):
                 ):
                     self.assertEqual(self.step._detect_distro(), expected)
 
-    def test_conflicting_package_depends_on_distro_and_release(self):
+    def test_conflicting_packages_depend_on_distro_and_release(self):
         expected = {
-            ("arch", "stable"): "mayaflux-dev-bin",
-            ("arch", "dev"): "mayaflux",
-            ("fedora", "stable"): "mayaflux-dev",
-            ("fedora", "dev"): "mayaflux",
-            ("ubuntu", "stable"): "mayaflux-edge",
-            ("ubuntu", "dev"): "mayaflux",
+            ("arch", "stable"): ("mayaflux-dev-bin",),
+            ("arch", "dev"): ("mayaflux", "mayaflux-bin"),
+            ("fedora", "stable"): ("mayaflux-dev",),
+            ("fedora", "dev"): ("mayaflux",),
+            ("ubuntu", "stable"): ("mayaflux-edge",),
+            ("ubuntu", "dev"): ("mayaflux",),
         }
-        for (distro, release), conflict in expected.items():
+        for (distro, release), conflicts in expected.items():
             with self.subTest(distro=distro, release=release):
                 self.step.release_type = release
-                self.assertEqual(self.step._conflicting_pkg(distro), conflict)
+                self.assertEqual(self.step._conflicting_pkgs(distro), conflicts)
 
-    def test_arch_uses_available_aur_helper(self):
-        for available, helper in (({"yay", "paru"}, "yay"), ({"paru"}, "paru")):
-            with self.subTest(available=available):
+    def test_arch_clones_fresh_package_even_with_aur_helper(self):
+        for release, available, pkg in (
+            ("stable", {"yay", "paru"}, "mayaflux"),
+            ("dev", {"paru"}, "mayaflux-dev-bin"),
+        ):
+            with self.subTest(release=release):
+                self.step.release_type = release
                 with patch.object(
                     installation_mode.shutil,
                     "which",
                     side_effect=lambda name: f"/bin/{name}" if name in available else None,
                 ):
                     self.assertEqual(
-                        self.step._build_commands("arch"),
-                        [[helper, "-S", "--noconfirm", "mayaflux"]],
+                        self.step._build_commands("arch", "/tmp/aur-build"),
+                        [
+                            ["git", "clone", f"https://aur.archlinux.org/{pkg}.git", "/tmp/aur-build"],
+                            ["makepkg", "--dir", "/tmp/aur-build", "-si", "--noconfirm"],
+                        ],
                     )
 
-    def test_arch_without_helper_prepares_clone_and_build(self):
+    def test_arch_removes_temporary_checkout_after_install_or_failure(self):
         self.step.release_type = "dev"
-        with patch.object(installation_mode.shutil, "which", return_value=None):
-            with patch.object(installation_mode.tempfile, "mkdtemp", return_value="/tmp/aur-build"):
-                self.assertEqual(
-                    self.step._build_commands("arch"),
-                    [
-                        [
-                            "git",
-                            "clone",
-                            "https://aur.archlinux.org/mayaflux-dev-bin.git",
-                            "/tmp/aur-build",
-                        ],
-                        ["bash", "-c", "cd /tmp/aur-build && makepkg -si --noconfirm"],
-                    ],
-                )
+        for build_succeeds in (True, False):
+            with self.subTest(build_succeeds=build_succeeds):
+                checkout = None
+
+                async def run_command(command):
+                    nonlocal checkout
+                    if command[0] == "git":
+                        checkout = Path(command[-1])
+                        self.assertTrue(checkout.is_dir())
+                    else:
+                        self.assertEqual(command[:3], ["makepkg", "--dir", str(checkout)])
+                        self.assertTrue(checkout.is_dir())
+                    return command[0] == "git" or build_succeeds
+
+                with patch.object(self.step, "_detect_distro", return_value="arch"):
+                    with patch.object(self.step, "_is_pkg_installed", return_value=False):
+                        with patch.object(self.step, "_run_pty", side_effect=run_command):
+                            self.assertEqual(asyncio.run(self.step._install()), build_succeeds)
+
+                self.assertIsNotNone(checkout)
+                self.assertFalse(checkout.exists())
 
     def test_ubuntu_and_fedora_commands_select_release_package(self):
         for distro, release, expected in (
@@ -111,7 +125,7 @@ class InstallationTests(unittest.TestCase):
 
     def test_package_presence_queries_are_read_only(self):
         for distro, output, installed in (
-            ("arch", "", True),
+            ("arch", "mayaflux\n", True),
             ("fedora", "", True),
             ("ubuntu", "install ok installed", True),
             ("ubuntu", "deinstall ok config-files", False),
@@ -121,6 +135,39 @@ class InstallationTests(unittest.TestCase):
                 with patch.object(installation_mode.subprocess, "run", return_value=result) as run:
                     self.assertEqual(self.step._is_pkg_installed(distro, "mayaflux"), installed)
                     self.assertIn(run.call_args.args[0][0], ("pacman", "rpm", "dpkg-query"))
+
+    def test_arch_provider_does_not_count_as_exact_package(self):
+        for actual in ("mayaflux-dev-bin", "mayaflux-bin"):
+            with self.subTest(actual=actual):
+                result = types.SimpleNamespace(returncode=0, stdout=f"{actual}\n")
+                with patch.object(installation_mode.subprocess, "run", return_value=result):
+                    self.assertFalse(self.step._is_pkg_installed("arch", "mayaflux"))
+                    self.assertTrue(self.step._is_pkg_installed("arch", actual))
+
+    def test_reinstalling_arch_stable_bin_keeps_stable_variant(self):
+        self.step.release_type = "stable"
+        result = types.SimpleNamespace(returncode=0, stdout="mayaflux-bin\n")
+        with patch.object(self.step, "_detect_distro", return_value="arch"):
+            with patch.object(installation_mode.subprocess, "run", return_value=result):
+                with patch.object(self.step, "_show_conflict_dialog", side_effect=AssertionError("Unexpected conflict dialog")) as dialog:
+                    with patch.object(self.step, "_run_pty", new_callable=AsyncMock, return_value=True) as runner:
+                        self.assertTrue(asyncio.run(self.step._install()))
+        dialog.assert_not_called()
+        self.assertEqual(
+            runner.await_args_list[0].args[0][:3],
+            ["git", "clone", "https://aur.archlinux.org/mayaflux-bin.git"],
+        )
+
+    def test_reinstalling_arch_dev_does_not_offer_to_remove_stable(self):
+        self.step.release_type = "dev"
+        result = types.SimpleNamespace(returncode=0, stdout="mayaflux-dev-bin\n")
+        with patch.object(self.step, "_detect_distro", return_value="arch"):
+            with patch.object(installation_mode.subprocess, "run", return_value=result):
+                with patch.object(self.step, "_show_conflict_dialog", side_effect=AssertionError("Unexpected conflict dialog")) as dialog:
+                    with patch.object(self.step, "_run_pty", new_callable=AsyncMock, return_value=True) as runner:
+                        self.assertTrue(asyncio.run(self.step._install()))
+        dialog.assert_not_called()
+        self.assertEqual(runner.await_count, 2)
 
     def test_unsupported_distro_stops_before_process_launch(self):
         with patch.object(self.step, "_detect_distro", return_value="unknown"):
@@ -186,6 +233,72 @@ class InstallationTests(unittest.TestCase):
         ]
         with patch.object(installation_mode.DependenciesStep, "_STALL_TIMEOUT", 0.2):
             self.assertTrue(asyncio.run(self.step._run_pty(command)))
+
+    def test_stalled_aria_transfer_ends_despite_status_messages(self):
+        command = [
+            sys.executable,
+            "-c",
+            "import sys,time\n"
+            "for index in range(20):\n"
+            " sys.stdout.write('[#2089b0 1.0MiB/84.0MiB(1%) CN:4 DL:0B ETA:0s]\\r')\n"
+            " if index % 4 == 0: sys.stdout.write('Download Progress Summary\\n')\n"
+            " sys.stdout.flush()\n"
+            " time.sleep(0.05)\n",
+        ]
+        with patch.object(installation_mode.DependenciesStep, "_STALL_TIMEOUT", 0.2):
+            started = time.monotonic()
+            result = asyncio.run(self.step._run_pty(command))
+        self.assertFalse(result)
+        self.assertLess(time.monotonic() - started, 0.8)
+        self.assertTrue(any("no download progress" in call.args[0].lower() for call in self.step._log.call_args_list))
+
+    def test_aria_unknown_size_stall_logs_once_and_times_out(self):
+        command = [
+            sys.executable,
+            "-c",
+            "import sys,time\n"
+            "for _ in range(20):\n"
+            " sys.stdout.write('[#bcac73 0B/0B CN:1 DL:0B]\\r')\n"
+            " sys.stdout.flush()\n"
+            " time.sleep(0.05)\n",
+        ]
+        with patch.object(installation_mode.DependenciesStep, "_STALL_TIMEOUT", 0.2):
+            started = time.monotonic()
+            result = asyncio.run(self.step._run_pty(command))
+        self.assertFalse(result)
+        self.assertLess(time.monotonic() - started, 0.8)
+        messages = [entry.args[0] for entry in self.step._log.call_args_list]
+        self.assertEqual(messages.count("[#bcac73 0B/0B CN:1 DL:0B]"), 1)
+        self.assertTrue(any("no download progress" in message.lower() for message in messages))
+
+    def test_aria_transfer_with_new_bytes_continues(self):
+        command = [
+            sys.executable,
+            "-c",
+            "import sys,time\n"
+            "for amount in range(1, 7):\n"
+            " sys.stdout.write(f'[#2089b0 {amount}.0MiB/84.0MiB(1%) CN:4 DL:1MiB ETA:1m]\\r')\n"
+            " sys.stdout.flush()\n"
+            " time.sleep(0.08)\n",
+        ]
+        with patch.object(installation_mode.DependenciesStep, "_STALL_TIMEOUT", 0.2):
+            self.assertTrue(asyncio.run(self.step._run_pty(command)))
+
+    def test_pty_has_columns_for_aria_console_readout(self):
+        command = [sys.executable, "-c", "import os; print(os.get_terminal_size(1).columns)"]
+        self.assertTrue(asyncio.run(self.step._run_pty(command)))
+        self.assertIn(call("80"), self.step._log.call_args_list)
+
+    def test_aria_readout_does_not_log_blank_repaint_lines(self):
+        command = [
+            sys.executable,
+            "-c",
+            "import sys; sys.stdout.write('\\r   \\r\\x1b[35m[#2089b0 1.0MiB/8.0MiB(12%) CN:1]\\x1b[0m\\r')",
+        ]
+        self.assertTrue(asyncio.run(self.step._run_pty(command)))
+        messages = [entry.args[0] for entry in self.step._log.call_args_list]
+        self.assertTrue(any("1.0MiB/8.0MiB" in message for message in messages))
+        self.assertTrue(all(message.strip() for message in messages))
 
     def test_failed_install_keeps_next_step_disabled(self):
         view = types.SimpleNamespace(next_btn=Mock())

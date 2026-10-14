@@ -18,6 +18,8 @@ import errno
 import pty
 import re
 import signal
+import struct
+from contextlib import nullcontext
 from pathlib import Path
 
 
@@ -255,21 +257,27 @@ class DependenciesStep:
 
         GLib.idle_add(self._log, f"Detected distribution: {distro}")
 
-        conflict = self._conflicting_pkg(distro)
-        if conflict and self._is_pkg_installed(distro, conflict):
-            target = (
-                "mayaflux-dev-bin"
-                if distro == "arch" and self.release_type == "dev"
-                else (
-                    "mayaflux-dev"
-                    if distro == "fedora" and self.release_type == "dev"
-                    else (
-                        "mayaflux-edge"
-                        if distro == "ubuntu" and self.release_type == "dev"
-                        else "mayaflux"
-                    )
-                )
-            )
+        if distro == "arch":
+            if self.release_type == "dev":
+                target = "mayaflux-dev-bin"
+            elif self._is_pkg_installed("arch", "mayaflux-bin"):
+                target = "mayaflux-bin"
+            else:
+                target = "mayaflux"
+        elif distro == "fedora":
+            target = "mayaflux-dev" if self.release_type == "dev" else "mayaflux"
+        else:
+            target = "mayaflux-edge" if self.release_type == "dev" else "mayaflux"
+
+        conflict = next(
+            (
+                pkg
+                for pkg in self._conflicting_pkgs(distro)
+                if self._is_pkg_installed(distro, pkg)
+            ),
+            None,
+        )
+        if conflict:
             event = threading.Event()
             GLib.idle_add(self._show_conflict_dialog, conflict, target, event)
             await asyncio.get_event_loop().run_in_executor(None, event.wait)
@@ -289,26 +297,33 @@ class DependenciesStep:
                 return False
             GLib.idle_add(self._log, f"✅ {conflict} removed")
 
-        cmds = self._build_commands(distro)
+        checkout = (
+            tempfile.TemporaryDirectory(prefix="weave-aur-")
+            if distro == "arch"
+            else nullcontext(None)
+        )
+        with checkout as build_dir:
+            cmds = self._build_commands(distro, build_dir, target)
 
-        try:
-            for cmd in cmds:
-                GLib.idle_add(self._log, f"Running: {' '.join(cmd)}")
-                ok = await self._run_pty(cmd)
-                if not ok:
-                    GLib.idle_add(self._log, f"ERROR: Command failed: {' '.join(cmd)}")
-                    GLib.idle_add(self.status.set_text, "ERROR: Installation failed.")
-                    GLib.idle_add(self._install_btn.set_sensitive, True)
-                    GLib.idle_add(self._pw_entry.set_sensitive, True)
-                    return False
-        finally:
-            self._zero_password()
+            try:
+                for cmd in cmds:
+                    GLib.idle_add(self._log, f"Running: {' '.join(cmd)}")
+                    ok = await self._run_pty(cmd)
+                    if not ok:
+                        GLib.idle_add(self._log, f"ERROR: Command failed: {' '.join(cmd)}")
+                        GLib.idle_add(self.status.set_text, "ERROR: Installation failed.")
+                        GLib.idle_add(self._install_btn.set_sensitive, True)
+                        GLib.idle_add(self._pw_entry.set_sensitive, True)
+                        return False
+            finally:
+                self._zero_password()
 
         GLib.idle_add(self.status.set_text, "MayaFlux installed successfully.")
         return True
 
     async def _run_pty(self, cmd):
         master_fd, slave_fd = pty.openpty()
+        fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
 
         attrs = termios.tcgetattr(slave_fd)
         attrs[3] &= ~termios.ECHO
@@ -352,9 +367,11 @@ class DependenciesStep:
                 buf = lines[-1]
                 for line in lines[:-1]:
                     text = line.decode(errors="replace").rstrip("\r")
-                    if text:
-                        text = self._strip_ansi(text)
+                    text = self._strip_ansi(text)
+                    if text.strip():
                         transfer = re.match(r"^\s*\d{1,3}\s+\S+\s+\d{1,3}\s+(\S+)\s+", text)
+                        if not transfer:
+                            transfer = re.match(r"^\[#[0-9a-fA-F]+\s+([^/\s]+)/[^\s\]]+", text)
                         if transfer:
                             downloading = True
                             amount = transfer.group(1)
@@ -362,10 +379,12 @@ class DependenciesStep:
                                 received_amount = amount
                                 last_progress = loop.time()
                                 GLib.idle_add(self._log, text)
-                        else:
+                        elif not downloading or text.startswith(("==>", "  ->", "::")):
                             downloading = False
                             received_amount = None
                             last_progress = loop.time()
+                            GLib.idle_add(self._log, text)
+                        else:
                             GLib.idle_add(self._log, text)
             except OSError as e:
                 if e.errno not in (errno.EAGAIN, errno.EIO):
@@ -427,7 +446,8 @@ class DependenciesStep:
                     break
                 for line in data.split(b"\n"):
                     text = line.decode(errors="replace").rstrip("\r")
-                    if text:
+                    text = self._strip_ansi(text)
+                    if text.strip():
                         GLib.idle_add(self._log, text)
         except OSError:
             pass
@@ -444,24 +464,24 @@ class DependenciesStep:
             return "ubuntu"
         return "unknown"
 
-    def _conflicting_pkg(self, distro):
+    def _conflicting_pkgs(self, distro):
         if distro == "arch":
-            return "mayaflux" if self.release_type == "dev" else "mayaflux-dev-bin"
+            if self.release_type == "dev":
+                return ("mayaflux", "mayaflux-bin")
+            return ("mayaflux-dev-bin",)
         if distro == "fedora":
-            return "mayaflux" if self.release_type == "dev" else "mayaflux-dev"
+            return ("mayaflux",) if self.release_type == "dev" else ("mayaflux-dev",)
         if distro == "ubuntu":
-            return "mayaflux" if self.release_type == "dev" else "mayaflux-edge"
-        return None
+            return ("mayaflux",) if self.release_type == "dev" else ("mayaflux-edge",)
+        return ()
 
     def _is_pkg_installed(self, distro, pkg):
         try:
             if distro == "arch":
-                return (
-                    subprocess.run(
-                        ["pacman", "-Q", pkg], capture_output=True
-                    ).returncode
-                    == 0
+                result = subprocess.run(
+                    ["pacman", "-Qq", pkg], capture_output=True, text=True
                 )
+                return result.returncode == 0 and pkg in result.stdout.splitlines()
             if distro == "fedora":
                 return (
                     subprocess.run(["rpm", "-q", pkg], capture_output=True).returncode
@@ -508,17 +528,14 @@ class DependenciesStep:
         if distro == "ubuntu":
             return ["sudo", "apt-get", "remove", "-y", pkg]
 
-    def _build_commands(self, distro):
+    def _build_commands(self, distro, build_dir=None, package=None):
         if distro == "arch":
-            pkg = "mayaflux-dev-bin" if self.release_type == "dev" else "mayaflux"
-            if shutil.which("yay"):
-                return [["yay", "-S", "--noconfirm", pkg]]
-            if shutil.which("paru"):
-                return [["paru", "-S", "--noconfirm", pkg]]
-            build_dir = tempfile.mkdtemp()
+            pkg = package or ("mayaflux-dev-bin" if self.release_type == "dev" else "mayaflux")
+            if build_dir is None:
+                raise ValueError("Arch package build directory is required")
             return [
                 ["git", "clone", f"https://aur.archlinux.org/{pkg}.git", build_dir],
-                ["bash", "-c", f"cd {build_dir} && makepkg -si --noconfirm"],
+                ["makepkg", "--dir", build_dir, "-si", "--noconfirm"],
             ]
 
         if distro == "fedora":
