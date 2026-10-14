@@ -43,7 +43,6 @@ $templates = @(
     "templates\cmake\mayaflux.cmake",
     "templates\cmake\shaders.cmake",
     "templates\cmake\build_community.cmake",
-    "templates\shaders\",
     "templates\vscode\settings.json",
     "templates\vscode\tasks.json",
     "templates\vscode\launch.json"

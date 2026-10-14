@@ -154,13 +154,13 @@ public class ProjectCreationTests
         host.AddFile(shaderRoot + @"\nested\edit.comp", "editable GLSL");
         host.AddFile(shaderRoot + @"\include\common.glsl", "shared GLSL");
         host.AddFile(shaderRoot + @"\nested\edit.comp.spv", "binary");
-        host.AddFile(shaderRoot + @"\attractor.frag", "library collision");
+        host.AddFile(shaderRoot + @"\attractor.frag", "library shader");
         service.Create("MyProject", Parent, copyShaderSources: true);
         Assert.Multiple(() =>
         {
             Assert.That(host.Files[Project + @"\data\shaders\nested\edit.comp"], Is.EqualTo("editable GLSL"));
             Assert.That(host.Files[Project + @"\data\shaders\include\common.glsl"], Is.EqualTo("shared GLSL"));
-            Assert.That(host.Files[Project + @"\data\shaders\attractor.frag"], Is.EqualTo(host.Files[Templates + @"\shaders\attractor.frag"]));
+            Assert.That(host.Files[Project + @"\data\shaders\attractor.frag"], Is.EqualTo("library shader"));
             Assert.That(host.Files.Keys.Where(path => path.StartsWith(Project + "\\")), Has.None.EndsWith(".spv"));
         });
     }
@@ -195,14 +195,6 @@ public class ProjectCreationTests
         host.AddFile(@"C:\MayaFlux\share\MayaFlux\src\shaders\edit.comp", "default installation");
         service.Create("MyProject", Parent, copyShaderSources: true);
         Assert.That(host.Files[Project + @"\data\shaders\edit.comp"], Is.EqualTo("default installation"));
-    }
-
-    [Test]
-    public void LinkedTemplateShaderFailsBeforeWrites()
-    {
-        host.LinkedPaths.Add(Templates + @"\shaders\attractor.frag");
-        Assert.That(() => service.Create("MyProject", Parent), Throws.Exception);
-        Assert.That(host.Mutations, Is.Empty);
     }
 
     [TestCase(Parent)]

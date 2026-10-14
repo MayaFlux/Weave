@@ -301,18 +301,11 @@ cmd_new() {
     echo "✅ user_project.hpp created"
 
     # ============================================================================
-    # CREATE data/shaders AND COPY TEMPLATE SHADERS
+    # CREATE data/shaders
     # ============================================================================
 
     mkdir -p "$PROJECT_DIR/data/shaders" || error "Could not create data/shaders"
-
-    if [ -d "$TEMPLATES_DIR/shaders" ] && [ -n "$(ls -A "$TEMPLATES_DIR/shaders" 2>/dev/null)" ]; then
-        cp "$TEMPLATES_DIR/shaders/"* "$PROJECT_DIR/data/shaders/" \
-            || error "Failed to copy project shader templates"
-        echo "  ✓ Copied template shaders"
-    else
-        echo "  ✓ Created empty data/shaders (no template shaders)"
-    fi
+    echo "  ✓ Created data/shaders"
 
     if [ "$COPY_SHADER_SOURCES" = true ]; then
         local shader relative destination

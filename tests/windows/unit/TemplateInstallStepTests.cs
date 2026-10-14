@@ -135,7 +135,6 @@ public class TemplateInstallStepTests
         await step.ExtractResourcesAsync(new InstallationConfig { MayaFluxRoot = Root });
         Assert.That(ready, Is.True);
         foreach (var relative in Required) Assert.That(host.Files[Templates + "\\" + relative], Is.Not.Empty, relative);
-        Assert.That(host.Files[Templates + @"\shaders\attractor.frag"], Is.EqualTo(host.Resources["Weave.Resources.templates.shaders.attractor.frag"]));
     }
 
     [TestCase("")]

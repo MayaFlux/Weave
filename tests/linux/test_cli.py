@@ -57,7 +57,7 @@ class LinuxCliTests(unittest.TestCase):
             self.assertIn("cmake --preset release", (project / "README.md").read_text())
             self.assertFalse((project / ".vscode").exists())
 
-    def test_shader_copy_preserves_nested_sources_and_template_collisions(self):
+    def test_shader_copy_preserves_nested_sources(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / "mayaflux" / "share" / "MayaFlux" / "src" / "shaders"
@@ -66,7 +66,6 @@ class LinuxCliTests(unittest.TestCase):
             (source / "nested" / "edit.comp").write_text("editable source")
             (source / "include" / "common.glsl").write_text("shared include")
             (source / "nested" / "edit.comp.spv").write_text("binary")
-            (source / "attractor.frag").write_text("installed collision")
 
             result = run_cli("new", "AudioGarden", root, "--copy-shader-sources", root=root)
 
@@ -74,7 +73,6 @@ class LinuxCliTests(unittest.TestCase):
             shaders = root / "AudioGarden" / "data" / "shaders"
             self.assertEqual((shaders / "nested" / "edit.comp").read_text(), "editable source")
             self.assertEqual((shaders / "include" / "common.glsl").read_text(), "shared include")
-            self.assertEqual((shaders / "attractor.frag").read_text(), (TEMPLATES / "shaders" / "attractor.frag").read_text())
             self.assertFalse((shaders / "nested" / "edit.comp.spv").exists())
 
     def test_missing_or_empty_shader_sources_fail_before_project_creation(self):

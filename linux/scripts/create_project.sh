@@ -248,10 +248,6 @@ cmd_new() {
     log "  ✓ Generated user_project.hpp"
 
     mkdir -p "$PROJECT_DIR/data/shaders"
-    if [ -d "$TEMPLATES_DIR/shaders" ] && [ -n "$(ls -A "$TEMPLATES_DIR/shaders" 2>/dev/null)" ]; then
-        cp "$TEMPLATES_DIR/shaders/"* "$PROJECT_DIR/data/shaders/"
-        log "  ✓ Copied template shaders"
-    fi
 
     if [ "$COPY_SHADER_SOURCES" = true ]; then
         local shader relative destination

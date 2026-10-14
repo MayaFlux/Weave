@@ -69,7 +69,7 @@ mkdir -p "$shader_source/includes"
 printf 'vertex shader fixture\n' >"$shader_source/basic.vert"
 printf 'include fixture\n' >"$shader_source/includes/common.glsl"
 printf 'compiled shader fixture\n' >"$shader_source/includes/compiled.comp.spv"
-printf 'installed collision\n' >"$shader_source/attractor.frag"
+printf 'fragment shader fixture\n' >"$shader_source/basic.frag"
 
 cat >"$test_root/shims/curl" <<'SH'
 #!/bin/sh
@@ -319,11 +319,9 @@ shader_project_output="$("$cli" new ShaderProject "$shader_project_parent" --cop
 shader_project="$shader_project_parent/ShaderProject"
 assert_file "$shader_project/data/shaders/basic.vert"
 assert_file "$shader_project/data/shaders/includes/common.glsl"
-assert_file "$shader_project/data/shaders/attractor.frag"
+assert_file "$shader_project/data/shaders/basic.frag"
 assert_output_contains "$(cat "$shader_project/data/shaders/includes/common.glsl")" 'include fixture'
-assert_output_contains "$(cat "$shader_project/data/shaders/attractor.frag")" '#version 450'
-[ "$(cat "$shader_project/data/shaders/attractor.frag")" != 'installed collision' ] \
-    || fail "Installed shader sources overwrote a template shader"
+assert_output_contains "$(cat "$shader_project/data/shaders/basic.frag")" 'fragment shader fixture'
 [ ! -e "$shader_project/data/shaders/includes/compiled.comp.spv" ] \
     || fail "Shader copy included an unsupported compiled shader"
 (cd "$shader_project_parent" && "$cli" new DefaultShaderProject --copy-shader-sources --no-vscode >/dev/null) \

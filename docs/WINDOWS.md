@@ -87,13 +87,25 @@ On Windows, the CMake build copies all required MayaFlux DLLs next to your execu
 
 ### Diagnostics
 
-Each new project includes `validate.ps1`. Run it from the project folder when something does not work:
+Each new project includes `validate.bat`, which starts `validate.ps1`. Run it from the project folder when something does not work:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\validate.ps1
+.\validate.bat
 ```
 
-It checks project files, presets, community module references, `mayaflux.json`, local shaders and the MayaFlux installation, and lists your OS, GPU and Vulkan driver details. It does not configure, build or change anything. Include its output when reporting a problem. See the [Weave README](../README.md#reporting-a-problem) for the report steps.
+It checks project files, presets, community module references, `mayaflux.json`, local shaders, the MayaFlux installation, tools and terminal settings, and lists your GPU and Vulkan driver details. It does not configure, build or change anything. To check another folder, add `-ProjectRoot "C:\Path\To\Project"`. Include its output when reporting a problem.
+
+### Reporting a problem
+
+Each new project also includes `run-report.bat`. Build the project, then run it from the project folder:
+
+```powershell
+.\run-report.bat
+```
+
+It runs the project with the report configuration that MayaFlux installs, so Vulkan validation is enabled and a complete log is written to `data/log/mayaflux_report.log`. Reproduce the problem, then close the application. The console output is saved to `mayaflux_run.txt`, and the script exits with the application's exit code. Attach both files, and the output of `.\validate.bat`, to the issue. Existing logs are kept with a `.previous-` suffix.
+
+The script reads `MAYAFLUX_ROOT` from the process, user or machine environment. Use `-MayaFluxRoot "C:\Your MayaFlux Folder"` for another installation, `-Configuration Debug` when more than one build configuration exists, `-Executable "path\to\MyProject.exe"` for a custom output location, or `-ProjectName` when the executable name differs from the project. The `.bat` launchers keep the terminal's environment, and the `.ps1` scripts also run directly when your execution policy allows it. Projects created before these scripts existed do not have them; create a new project or copy `run-report.ps1` from the Weave templates folder into the project.
 
 ---
 

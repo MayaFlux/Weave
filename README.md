@@ -38,6 +38,8 @@ MyProject/
 │   └── user_project.hpp
 ├── data/
 │   └── shaders/
+├── validate.sh          # validate.bat and validate.ps1 on Windows
+├── run-report.sh        # run-report.bat and run-report.ps1 on Windows
 ├── .vscode/             # if VS Code configuration was enabled
 │   ├── settings.json
 │   ├── tasks.json
@@ -53,52 +55,32 @@ MyProject/
 
 On Windows and Linux, **Copy MayaFlux shader sources** optionally copies the installed `share/MayaFlux/src/shaders` tree into `data/shaders`, preserving nested paths and GLSL include files. It copies source files only; installed runtime SPIR-V remains in the MayaFlux installation.
 
-Each new project includes a diagnostic script: `validate.sh` on Linux and macOS, `validate.ps1` on Windows. Run it manually from the project folder when you need diagnostics.
-
-Linux and macOS:
-
-```sh
-./validate.sh
-```
-
-Windows:
-
-```powershell
-.\validate.bat
-```
-
-The report checks project files, presets, community module references, `mayaflux.json`, local shaders and the MayaFlux installation. It also lists the system details that bug reports need: the OS, the GPU and Vulkan driver, and whether the Vulkan validation layer is installed. On Windows it also checks tools and terminal settings. It does not configure, build, launch or modify the project. To check a project elsewhere, pass its folder as the first argument on Linux and macOS, or add `-ProjectRoot "C:\Path\To\Project"` on Windows. Weave does not run the diagnostic automatically.
-
-If you report a problem with a project, include the output of this script.
-
 ### Engine configuration
 
-A project loads `mayaflux.json` from its folder at startup when the file exists, or from the path given with `--config path/to/file.json`. The file sets audio, graphics, input, network and journal options. MayaFlux installs the Settings guide at `share/MayaFlux/guides/Settings.md`. Values set in `settings()` take precedence over the file. Pass `--config-override` to reverse that. Relative file names in the journal and the project's file readers resolve against the project folder. Projects created with earlier versions of Weave keep their old `main.cpp`, so pass `--config` explicitly or copy the new template's `main.cpp`.
+A project loads `mayaflux.json` from its folder at startup when the file exists, or from the path given with `--config path/to/file.json`. The file sets audio, graphics, input, network and journal options; MayaFlux installs the Settings guide at `share/MayaFlux/guides/Settings.md`. Values set in `settings()` take precedence over the file, and `--config-override` reverses that. Relative file names in the journal and the project's file readers resolve against the project folder. Projects created with earlier versions of Weave keep their old `main.cpp`, so pass `--config` explicitly or copy the new template's `main.cpp`.
 
-### Reporting a problem
+### Diagnostics and bug reports
 
-Run `validate`, then run the project with the report configuration that MayaFlux installs at `share/MayaFlux/report/mayaflux.report.json`. It turns on the Vulkan validation layers and writes a complete log to `data/log/`. Open an issue with the [Weave project template](https://github.com/MayaFlux/MayaFlux/issues/new/choose) and follow its steps.
+Each new project includes two scripts. Run them from the project folder:
 
-New Windows projects include both PowerShell scripts and batch launchers. From the project folder, run:
+| | Linux and macOS | Windows |
+|---|---|---|
+| Check the project | `./validate.sh` | `.\validate.bat` |
+| Collect a report | `./run-report.sh` | `.\run-report.bat` |
 
-```powershell
-.\validate.bat
-.\run-report.bat
-```
+**`validate`** checks project files, presets, community module references, `mayaflux.json`, local shaders and the MayaFlux installation. It also lists the OS, the GPU and Vulkan driver, and whether the Vulkan validation layer is installed. On Windows it also checks tools and terminal settings. It does not configure, build, launch or modify anything, and Weave never runs it automatically. To check another folder, pass it as the first argument on Linux and macOS, or add `-ProjectRoot "C:\Path\To\Project"` on Windows.
 
-Build the project first, reproduce the problem during the report run, then close the application. Attach `mayaflux_run.txt` and `data/log/mayaflux_report.log` to the issue. Previous logs are preserved with a `.previous-` suffix. If the application stops before creating its report, attach the console log and mention that the report was not created.
+**`run-report`** runs the built project with the report configuration that MayaFlux installs at `share/MayaFlux/report/mayaflux.report.json`, which turns on the Vulkan validation layers and writes a complete log. Build the project first, reproduce the problem, then close the application. The script saves the console output to `mayaflux_run.txt` and the application writes `data/log/mayaflux_report.log`. Earlier logs are kept with a `.previous-` suffix, and the script returns the application's exit code. If the application stops before creating its report, attach the console log and say so.
 
-On Linux and macOS, new projects include `run-report.sh`. Build the project, then run it from the project folder:
+| Need | Linux and macOS | Windows |
+|---|---|---|
+| Several build configurations | `--configuration Debug` | `-Configuration Debug` |
+| Custom output location | `--executable path/to/binary` | `-Executable "path\to\MyProject.exe"` |
+| Custom MayaFlux installation | `--mayaflux-root PATH` | `-MayaFluxRoot "C:\Your MayaFlux Folder"` |
 
-```sh
-./run-report.sh
-```
+Without an explicit installation, the scripts use `MAYAFLUX_ROOT`, then `/usr` and `/usr/local` on Linux or the installed Homebrew formula on macOS. On Windows they read `MAYAFLUX_ROOT` from the process, user or machine environment. The `.bat` launchers start the PowerShell scripts, keep the terminal's environment and pass the exit codes through. The `.ps1` scripts also run directly when your execution policy allows it. Existing projects keep their files; the scripts are generated when a project is created.
 
-It runs the project with MayaFlux's report configuration, writes the console output to `mayaflux_run.txt`, and returns the application's exit code. The MayaFlux installation comes from `--mayaflux-root`, `MAYAFLUX_ROOT`, or the installed Homebrew formula. Use `--configuration Debug` when several build configurations exist, or `--executable path/to/binary` for another layout. Previous logs are preserved with a `.previous-` suffix. Existing projects retain their files; the script is generated when creating a new project.
-
-On Linux the MayaFlux installation comes from `--mayaflux-root`, `MAYAFLUX_ROOT`, `/usr` or `/usr/local`.
-
-Use `run-report.bat -Configuration Debug` when multiple build configurations exist, or `run-report.bat -Executable "custom output\MyProject.exe"` for another layout. Add `-MayaFluxRoot "C:\Your MayaFlux Folder"` for a custom installation. The launchers preserve the terminal's environment and return the scripts' exit codes. The `.ps1` scripts remain directly usable when PowerShell permits script execution. Existing projects retain their files; these launchers are generated when creating a new project.
+To report a problem, run both scripts and open an issue with the [Weave project template](https://github.com/MayaFlux/MayaFlux/issues/new/choose).
 
 `CMakeLists.txt` is yours to edit. Add source files, link libraries, and set compiler flags as needed. The MayaFlux integration lives in `cmake/mayaflux.cmake` and is included automatically at the end of `CMakeLists.txt`.
 

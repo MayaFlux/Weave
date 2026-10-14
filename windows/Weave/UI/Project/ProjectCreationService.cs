@@ -39,12 +39,6 @@ internal sealed class ProjectCreationService(string templatesDir, ProjectCreatio
                 catch (UnauthorizedAccessException error) { Log($"  WARNING: Optional VS Code file unavailable: {relative}. {error.Message} Configure this file manually when needed."); }
             }
         }
-        var shaderTemplates = Path.Combine(templatesDir, "shaders");
-        if (host.DirectoryExists(shaderTemplates))
-        {
-            WindowsInstallationPaths.EnsureNoReparseAncestors(shaderTemplates, host);
-            foreach (var shader in host.GetFiles(shaderTemplates)) WindowsInstallationPaths.EnsureNoReparseAncestors(shader, host);
-        }
         var mayaFluxRoot = host.GetEnvironmentVariable("MAYAFLUX_ROOT", EnvironmentVariableTarget.Process) ?? "C:\\MayaFlux";
         var installedShaderDir = Path.Combine(mayaFluxRoot, "share", "MayaFlux", "src", "shaders");
         var installedShaders = copyShaderSources ? GetShaderSourceFiles(installedShaderDir) : Array.Empty<string>();
@@ -175,16 +169,6 @@ internal sealed class ProjectCreationService(string templatesDir, ProjectCreatio
         var dataShadersDir = Path.Combine(projectDir, "data", "shaders");
         host.CreateDirectory(dataShadersDir);
         Log("  Created data/shaders/");
-
-        var templateShadersDir = Path.Combine(templatesDir, "shaders");
-        if (host.DirectoryExists(templateShadersDir))
-        {
-            foreach (var shader in host.GetFiles(templateShadersDir))
-            {
-                host.CopyFile(shader, Path.Combine(dataShadersDir, Path.GetFileName(shader)));
-                Log($"  Copied {Path.GetFileName(shader)}");
-            }
-        }
 
         foreach (var shader in installedShaders)
         {

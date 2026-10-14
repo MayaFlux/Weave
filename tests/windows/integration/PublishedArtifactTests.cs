@@ -99,7 +99,6 @@ public class PublishedArtifactTests
                 if (File.Exists(path)) Assert.That(new FileInfo(path).Length, Is.GreaterThan(0), relative);
             }
             Assert.That(bundle.ApplicationAssembly.GetManifestResourceNames(), Does.Contain("Weave.Resources.weave.ico"));
-            Assert.That(Directory.GetFiles(Path.Combine(templates, "shaders"), "*", SearchOption.AllDirectories), Is.Not.Empty);
         });
     }
 
