@@ -71,6 +71,18 @@ Each new project includes `validate.sh`. Run it from the project folder when som
 
 It checks project files, presets, community module references, `mayaflux.json`, local shaders and the MayaFlux installation, and lists your OS, GPU and Vulkan driver details. It does not configure, build or change anything. Include its output when reporting a problem. See the [Weave README](../README.md#reporting-a-problem) for the report steps.
 
+### Reporting a problem
+
+Each new project also includes `run-report.sh`. Build the project, then run it from the project folder:
+
+```bash
+./run-report.sh
+```
+
+It runs the project with the report configuration that MayaFlux installs, so Vulkan validation is enabled and a complete log is written to `data/log/mayaflux_report.log`. Reproduce the problem, then close the application. The console output is saved to `mayaflux_run.txt`, and the script exits with the application's exit code. Attach both files, and the output of `./validate.sh`, to the issue. Existing logs are kept with a `.previous-` suffix.
+
+The script finds MayaFlux through `--mayaflux-root`, then `MAYAFLUX_ROOT`, then the installed Homebrew formula. Use `--configuration Debug` when more than one build configuration exists, `--executable path/to/binary` for a custom layout, or `--project-name` when the executable name differs from the project. Projects created before this script existed do not have it; create a new project or copy `run-report-macos.sh` from `~/.local/share/weave/templates/` into the project as `run-report.sh`.
+
 ---
 
 ## Community Modules

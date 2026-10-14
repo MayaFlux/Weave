@@ -46,6 +46,7 @@ assert_directory "$resources/templates"
 assert_file "$resources/templates/CMakeLists.txt"
 assert_file "$resources/templates/community/community.json"
 assert_file "$resources/templates/validate-macos.sh"
+assert_file "$resources/templates/run-report-macos.sh"
 
 architectures="$(lipo -archs "$app/Contents/MacOS/Weave")"
 [ "$architectures" = arm64 ] || fail "Expected arm64 app binary, found: $architectures"
@@ -121,7 +122,7 @@ export HOME="$test_root/home"
 export ZDOTDIR="$test_root/zdotdir"
 tool_bin="$test_root/tools"
 mkdir -p "$tool_bin"
-for utility in zsh cat chmod cp dirname find grep head ln ls mkdir mv pwd rm sed seq sleep touch tr wc python3; do
+for utility in zsh cat chmod cp date dirname basename find grep head ln ls mkdir mv od pwd rm sed seq sleep tee touch tr wc python3; do
     utility_path="$(command -v "$utility" || true)"
     [ -n "$utility_path" ] && ln -s "$utility_path" "$tool_bin/$utility"
 done
@@ -161,6 +162,9 @@ assert_file "$project/src/main.cpp"
 assert_file "$project/cmake/build_community.cmake"
 assert_file "$project/validate.sh"
 [ -x "$project/validate.sh" ] || fail "Project validator is not executable"
+assert_file "$project/run-report.sh"
+[ -x "$project/run-report.sh" ] || fail "Project report runner is not executable"
+assert_output_contains "$(cat "$project/run-report.sh")" "project_name='DemoProject'"
 assert_file "$project/community.cmake"
 assert_file "$project/.vscode/settings.json"
 assert_output_contains "$(cat "$project/CMakeLists.txt")" DemoProject
@@ -209,6 +213,104 @@ printf '\n' >"$project/community.cmake"
 mv "$ZDOTDIR/.zshenv" "$ZDOTDIR/.zshenv.saved"
 assert_failure_contains "zsh startup file is missing: $ZDOTDIR/.zshenv" "$project/validate.sh"
 mv "$ZDOTDIR/.zshenv.saved" "$ZDOTDIR/.zshenv"
+
+report_config="$fixture_root/share/MayaFlux/report/mayaflux.report.json"
+physical_project="$(cd "$project" && pwd -P)"
+physical_report_config="$(cd "$test_root" && pwd -P)/mayaflux/share/MayaFlux/report/mayaflux.report.json"
+mkdir -p "$(dirname "$report_config")" "$project/build" "$test_root/no-report-root"
+printf '{"journal":{}}\n' >"$report_config"
+cat >"$project/build/DemoProject" <<'SH'
+#!/bin/bash
+echo "cwd=$(pwd -P)"
+echo "config=${2:-INVALID} flag=${1:-INVALID}"
+echo "environment=${WEAVE_TEST_REPORT_VALUE:-unset}"
+echo "stdout: diagnostic output"
+echo "stderr: crash details" >&2
+if [ "${WEAVE_TEST_REPORT_NO_LOG:-0}" != 1 ]; then
+    mkdir -p data/log
+    printf 'fresh application report' >data/log/mayaflux_report.log
+fi
+exit "${WEAVE_TEST_REPORT_EXIT:-0}"
+SH
+chmod +x "$project/build/DemoProject"
+export WEAVE_TEST_REPORT_VALUE='terminal value'
+report_output="$("$project/run-report.sh" 2>&1)" \
+    || fail "Report runner failed with a controlled application: $report_output"
+console_capture="$(cat "$project/mayaflux_run.txt")"
+assert_output_contains "$console_capture" "cwd=$physical_project"
+assert_output_contains "$console_capture" "config=$physical_report_config flag=--config"
+assert_output_contains "$console_capture" 'environment=terminal value'
+assert_output_contains "$console_capture" 'stdout: diagnostic output'
+assert_output_contains "$console_capture" 'stderr: crash details'
+assert_output_contains "$console_capture" 'Application exit code: 0'
+assert_output_contains "$report_output" "$physical_project/mayaflux_run.txt"
+assert_output_contains "$report_output" "$physical_project/data/log/mayaflux_report.log"
+[ "$(cat "$project/data/log/mayaflux_report.log")" = 'fresh application report' ] \
+    || fail "Report runner did not leave the application report in place"
+
+export WEAVE_TEST_REPORT_EXIT=37
+set +e
+report_output="$("$project/run-report.sh" 2>&1)"
+report_status=$?
+set -e
+[ "$report_status" -eq 37 ] || fail "Report runner returned $report_status instead of the application's exit code"
+assert_output_contains "$report_output" 'Application exit code: 37'
+[ "$(ls "$project"/mayaflux_run.txt.previous-* | wc -l | tr -d ' ')" = 1 ] \
+    || fail "Report runner did not preserve exactly one previous console log"
+[ "$(ls "$project"/data/log/mayaflux_report.log.previous-* | wc -l | tr -d ' ')" = 1 ] \
+    || fail "Report runner did not preserve exactly one previous application report"
+unset WEAVE_TEST_REPORT_EXIT
+
+export WEAVE_TEST_REPORT_EXIT=23 WEAVE_TEST_REPORT_NO_LOG=1
+rm -f "$project/data/log/mayaflux_report.log"
+set +e
+report_output="$("$project/run-report.sh" 2>&1)"
+report_status=$?
+set -e
+[ "$report_status" -eq 23 ] || fail "Early crash returned $report_status instead of 23"
+assert_output_contains "$report_output" 'Application report was not created'
+assert_output_contains "$report_output" 'mayaflux_run.txt'
+unset WEAVE_TEST_REPORT_EXIT WEAVE_TEST_REPORT_NO_LOG
+
+printf 'previous console\n' >"$project/mayaflux_run.txt"
+assert_failure_contains 'Unknown option' "$project/run-report.sh" --unsupported
+assert_failure_contains 'requires a value' "$project/run-report.sh" --executable
+assert_failure_contains 'Choose Debug, Release' "$project/run-report.sh" --configuration Fast
+assert_failure_contains 'project name is unsafe' "$project/run-report.sh" --project-name '../outside'
+assert_failure_contains 'missing or is not executable' "$project/run-report.sh" --executable missing
+assert_failure_contains 'MayaFlux installation folder does not exist' "$project/run-report.sh" --mayaflux-root "$test_root/absent"
+assert_failure_contains 'report configuration is missing' "$project/run-report.sh" --mayaflux-root "$test_root/no-report-root"
+assert_failure_contains 'project folder does not exist' "$project/run-report.sh" --project-root "$test_root/absent"
+printf '{broken\n' >"$report_config"
+assert_failure_contains 'not a readable JSON object' "$project/run-report.sh"
+printf '[1]\n' >"$report_config"
+assert_failure_contains 'not a readable JSON object' "$project/run-report.sh"
+printf '{"journal":{}}\n' >"$report_config"
+[ "$(cat "$project/mayaflux_run.txt")" = 'previous console' ] \
+    || fail "A rejected report run altered the previous console log"
+
+mkdir -p "$project/build/Release"
+cp "$project/build/DemoProject" "$project/build/Release/DemoProject"
+assert_failure_contains 'multiple project executables' "$project/run-report.sh"
+mv "$project/build/DemoProject" "$test_root/DemoProject.saved"
+"$project/run-report.sh" --configuration Release >/dev/null 2>&1 \
+    || fail "Report runner rejected an explicit configuration"
+mv "$test_root/DemoProject.saved" "$project/build/DemoProject"
+rm -rf "$project/build/Release"
+
+mkdir -p "$project/custom output"
+cp "$project/build/DemoProject" "$project/custom output/Renamed"
+rm "$project/build/DemoProject"
+assert_failure_contains 'No project executable was found' "$project/run-report.sh"
+"$project/run-report.sh" --executable 'custom output/Renamed' --mayaflux-root "$fixture_root" >/dev/null 2>&1 \
+    || fail "Report runner rejected a custom executable layout"
+printf '\000\001\002\003binary' >"$project/custom output/Broken"
+chmod +x "$project/custom output/Broken"
+assert_failure_contains 'could not be started' "$project/run-report.sh" --executable 'custom output/Broken'
+if no_root_output="$(PATH="$tool_bin" MAYAFLUX_ROOT= "$project/run-report.sh" --executable 'custom output/Renamed' 2>&1)"; then
+    fail "Report runner unexpectedly found MayaFlux without a root or Homebrew"
+fi
+assert_output_contains "$no_root_output" 'MayaFlux was not found'
 
 shader_project_parent="$test_root/Shader Projects"
 mkdir -p "$shader_project_parent"

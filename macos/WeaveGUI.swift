@@ -316,9 +316,11 @@ class InstallerState: ObservableObject {
         let templatesDest = NSHomeDirectory() + "/.local/share/weave/templates"
         let templatesCode = await run(
             "test -f \(shellEscape(templatesSource + "/validate-macos.sh")) && "
+                + "test -f \(shellEscape(templatesSource + "/run-report-macos.sh")) && "
                 + "mkdir -p \(shellEscape(templatesDest)) && "
                 + "cp -R \(shellEscape(templatesSource))/ \(shellEscape(templatesDest))/ && "
-                + "test -f \(shellEscape(templatesDest + "/validate-macos.sh"))"
+                + "test -f \(shellEscape(templatesDest + "/validate-macos.sh")) && "
+                + "test -f \(shellEscape(templatesDest + "/run-report-macos.sh"))"
         )
         guard templatesCode == 0 else {
             step = .failed("Failed to install templates to \(templatesDest).")

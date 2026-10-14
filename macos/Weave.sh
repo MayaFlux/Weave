@@ -189,6 +189,7 @@ cmd_new() {
 
     [ ! -f "$TEMPLATES_DIR/CMakeLists.txt" ] && error "Required template missing: CMakeLists.txt"
     [ ! -f "$TEMPLATES_DIR/validate-macos.sh" ] && error "Required template missing: validate-macos.sh"
+    [ ! -f "$TEMPLATES_DIR/run-report-macos.sh" ] && error "Required template missing: run-report-macos.sh"
     [ ! -f "$TEMPLATES_DIR/cmake/mayaflux.cmake" ] && error "Required template missing: cmake/mayaflux.cmake"
     [ ! -f "$TEMPLATES_DIR/cmake/shaders.cmake" ] && error "Required template missing: cmake/shaders.cmake"
     [ ! -f "$TEMPLATES_DIR/cmake/build_community.cmake" ] && error "Required template missing: cmake/build_community.cmake"
@@ -270,6 +271,10 @@ cmd_new() {
         || error "Failed to copy validate-macos.sh"
     chmod +x "$PROJECT_DIR/validate.sh" || error "Could not make validate.sh executable"
     echo "  ✓ Copied validate.sh"
+    sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" "$TEMPLATES_DIR/run-report-macos.sh" >"$PROJECT_DIR/run-report.sh" \
+        || error "Failed to generate run-report.sh"
+    chmod +x "$PROJECT_DIR/run-report.sh" || error "Could not make run-report.sh executable"
+    echo "  ✓ Generated run-report.sh"
     printf '\n' >"$PROJECT_DIR/community.cmake"
 
     # ============================================================================
@@ -371,6 +376,10 @@ cmake --build . --parallel
 ## Troubleshooting
 
 If setup or a build fails, run \`./validate.sh\` to check the MayaFlux Homebrew setup, shell environment, build tools, and project files.
+
+## Reporting a problem
+
+Build the project, then run \`./run-report.sh\`. It runs the project with MayaFlux's report configuration. Reproduce the problem, then close the application. Attach \`mayaflux_run.txt\` and \`data/log/mayaflux_report.log\` to the issue, together with the output of \`./validate.sh\`.
 
 ## Running
 
