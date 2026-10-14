@@ -283,6 +283,93 @@ class LinuxCliTests(unittest.TestCase):
                 (project / "community.cmake").read_text(), "terrain_field\n"
             )
 
+    def _update_fixture(self, root, modules=("terrain_field", "noise_bank")):
+        project = root / "AudioGarden"
+        project.mkdir()
+        (project / "CMakeLists.txt").write_text("project(AudioGarden)\n")
+        fixture = root / "module_fixture"
+        (fixture / "src").mkdir(parents=True)
+        prefix = root / "mayaflux" / "lib" / "cmake" / "MayaFlux"
+        prefix.mkdir(parents=True)
+        (prefix / "MayaFluxConfigVersion.cmake").write_text('set(PACKAGE_VERSION "0.6.0")\n')
+        registry = root / "registry.json"
+        registry.write_text(json.dumps([
+            {"name": name, "repo": f"https://example.org/{name}.git", "min_version": "0.5.0"}
+            for name in modules
+        ]))
+        bin_dir = root / "bin"
+        bin_dir.mkdir()
+        for command in ("python3", "grep", "sed", "mkdir", "touch"):
+            executable = shutil.which(command)
+            if executable is None:
+                self.skipTest(f"{command} is required for the CLI")
+            (bin_dir / command).symlink_to(executable)
+        curl = bin_dir / "curl"
+        curl.write_text(
+            "#!/usr/bin/env python3\n"
+            "import os, pathlib, sys\n"
+            'sys.stdout.write(pathlib.Path(os.environ["REGISTRY_FIXTURE"]).read_text())\n'
+        )
+        curl.chmod(0o755)
+        git = bin_dir / "git"
+        git.write_text(
+            "#!/usr/bin/env python3\n"
+            "import os, pathlib, shutil, sys\n"
+            'if sys.argv[1] != "clone":\n'
+            "    sys.exit(1)\n"
+            'name = pathlib.Path(sys.argv[-1]).name\n'
+            'shutil.copytree(os.environ["MODULE_FIXTURE"], sys.argv[-1])\n'
+            '(pathlib.Path(sys.argv[-1]) / (name + ".cmake")).write_text("")\n'
+            'if name == os.environ.get("BROKEN_MODULE"):\n'
+            '    (pathlib.Path(sys.argv[-1]) / (name + ".cmake")).unlink()\n'
+            'pathlib.Path(os.environ["GIT_LOG"]).open("a").write(name + "\\n")\n'
+        )
+        git.chmod(0o755)
+        environment = {
+            "PATH": str(bin_dir),
+            "REGISTRY_FIXTURE": str(registry),
+            "MODULE_FIXTURE": str(fixture),
+            "GIT_LOG": str(root / "git.log"),
+        }
+        return project, environment
+
+    def test_update_accepts_comma_lists_and_deduplicates_in_request_order(self):
+        for arguments in (("noise_bank,terrain_field, noise_bank",), ("noise_bank", " terrain_field,noise_bank")):
+            with self.subTest(arguments=arguments), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                project, environment = self._update_fixture(root)
+
+                result = run_cli("update", project, *arguments, root=root, environment=environment)
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual((project / "community.cmake").read_text(), "noise_bank\nterrain_field\n")
+                self.assertEqual((root / "git.log").read_text(), "noise_bank\nterrain_field\n")
+
+    def test_update_rejects_empty_or_malformed_names_before_registry_access(self):
+        for argument in ("", "terrain_field,", ",terrain_field", "a,,b", "../terrain", "Terrain", "9lives"):
+            with self.subTest(argument=argument), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                project, environment = self._update_fixture(root)
+
+                result = run_cli("update", project, argument, root=root, environment=environment)
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse((project / "community").exists())
+                self.assertFalse((project / "community.cmake").exists())
+                self.assertFalse((root / "git.log").exists())
+
+    def test_update_registers_nothing_when_a_later_module_fails_validation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project, environment = self._update_fixture(root)
+            environment["BROKEN_MODULE"] = "noise_bank"
+
+            result = run_cli("update", project, "terrain_field,noise_bank", root=root, environment=environment)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("noise_bank.cmake", result.stderr)
+            self.assertEqual((project / "community.cmake").read_text(), "")
+
     def test_update_rejects_missing_module_name_before_registry_access(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

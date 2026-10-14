@@ -101,6 +101,8 @@ The script finds MayaFlux through `--mayaflux-root`, then `MAYAFLUX_ROOT`, then 
 
 Open Weave and choose **Add Community Module**, select your project directory, and enter the module name. Weave fetches the registry, checks version compatibility, clones the module into `community/<name>/`, and registers it in `community.cmake`. Rebuild your project after adding modules. If the module declares dependencies in its `community.json`, Weave tells you but does not install them. Install them with your package manager.
 
+From a terminal, `weave update <project-dir> <module> [module ...]` does the same. It accepts several names, separated by spaces or commas (`terrain_field,noise_bank`), skips duplicates, and registers the modules only after every one has been cloned and checked. The terminal command does not read `community.json`; use Weave to see what a module declares.
+
 ### Creating a module
 
 Choose **Create Community Module** in Weave. Enter a name (snake_case), description, minimum MayaFlux version, and whether the module requires Lila. Weave scaffolds the module with `src/`, `test/`, a `CMakePresets.json`, and a git repository ready to push.

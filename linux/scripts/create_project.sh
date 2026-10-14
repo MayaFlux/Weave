@@ -328,6 +328,26 @@ cmd_update() {
 
     [ ! -f "$PROJECT_DIR/CMakeLists.txt" ] && error "Not a MayaFlux project: $PROJECT_DIR"
 
+    local -a MODULE_NAMES=()
+    local ARG REST PART KNOWN DUPLICATE
+    for ARG in "$@"; do
+        REST="$ARG,"
+        while [ -n "$REST" ]; do
+            PART="${REST%%,*}"
+            REST="${REST#*,}"
+            PART="${PART#"${PART%%[![:space:]]*}"}"
+            PART="${PART%"${PART##*[![:space:]]}"}"
+            [ -n "$PART" ] || error "Empty module name in: $ARG"
+            printf '%s\n' "$PART" | grep -qE '^[a-z][a-z0-9_]*$' ||
+                error "Module name must be snake_case (lowercase letters, digits, underscores, no leading digit): $PART"
+            DUPLICATE=0
+            for KNOWN in ${MODULE_NAMES[@]+"${MODULE_NAMES[@]}"}; do
+                [ "$KNOWN" = "$PART" ] && DUPLICATE=1
+            done
+            [ "$DUPLICATE" -eq 1 ] || MODULE_NAMES+=("$PART")
+        done
+    done
+
     require_cmd curl
     require_cmd git
 
@@ -341,7 +361,7 @@ cmd_update() {
     local COMMUNITY_CMAKE="$PROJECT_DIR/community.cmake"
     touch "$COMMUNITY_CMAKE"
 
-    for MODULE_NAME in "$@"; do
+    for MODULE_NAME in "${MODULE_NAMES[@]}"; do
         log "Looking up module: $MODULE_NAME"
 
         local REPO MIN_VERSION
@@ -371,7 +391,9 @@ cmd_update() {
 
         [ ! -f "$MODULE_DIR/${MODULE_NAME}.cmake" ] && error "Module '$MODULE_NAME' is missing ${MODULE_NAME}.cmake"
         [ ! -d "$MODULE_DIR/src" ] && error "Module '$MODULE_NAME' is missing src/"
+    done
 
+    for MODULE_NAME in "${MODULE_NAMES[@]}"; do
         if ! grep -qxF "$MODULE_NAME" "$COMMUNITY_CMAKE"; then
             echo "$MODULE_NAME" >>"$COMMUNITY_CMAKE"
             log "  ✓ Added $MODULE_NAME to community.cmake"

@@ -446,6 +446,31 @@ assert_file "$update_project/community/fixture_module/fixture_module.cmake"
 [ "$(wc -l <"$update_project/community.cmake" | tr -d ' ')" = 1 ] \
     || fail "Repeated update duplicated the module registration"
 
+comma_project="$test_root/Comma Update Project"
+mkdir -p "$comma_project"
+printf 'project(CommaFixture)\n' >"$comma_project/CMakeLists.txt"
+"$cli" update "$comma_project" "fixture_module, fixture_module" fixture_module >/dev/null \
+    || fail "Packaged CLI could not update a project from a comma separated list"
+[ "$(cat "$comma_project/community.cmake")" = fixture_module ] \
+    || fail "Comma separated duplicates were not registered once"
+
+batch_project="$test_root/Batch Update Project"
+mkdir -p "$batch_project"
+printf 'project(BatchFixture)\n' >"$batch_project/CMakeLists.txt"
+if "$cli" update "$batch_project" "fixture_module,absent_module" >/dev/null 2>&1; then
+    fail "Update unexpectedly succeeded with an unknown module in the batch"
+fi
+[ ! -s "$batch_project/community.cmake" ] \
+    || fail "A failed batch registered a module before every module validated"
+
+for bad_names in "" "fixture_module," ",fixture_module" "a,,b"; do
+    assert_failure_contains 'Empty module name' "$cli" update "$batch_project" "$bad_names"
+done
+for bad_names in "../outside" "Fixture"; do
+    assert_failure_contains 'snake_case' "$cli" update "$batch_project" "$bad_names"
+done
+[ ! -e "$batch_project/community" ] || fail "Rejected module names reached the registry or clone steps"
+
 if missing_curl_output="$(PATH="$tool_bin" "$cli" update "$update_project" fixture_module 2>&1)"; then
     fail "Update unexpectedly succeeded without curl"
 fi
