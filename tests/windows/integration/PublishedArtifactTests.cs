@@ -86,7 +86,7 @@ public class PublishedArtifactTests
     {
         var root = bundle.PrepareInstallation();
         var templates = Path.Combine(root, "share", "weave", "templates");
-        string[] required = ["CMakeLists.txt", "CMakePresets.json", "main.cpp", "user_project.hpp", ".gitignore", "validate.ps1",
+        string[] required = ["CMakeLists.txt", "CMakePresets.json", "main.cpp", "user_project.hpp", ".gitignore", "validate.ps1", "run-report.ps1",
             @"cmake\mayaflux.cmake", @"cmake\shaders.cmake", @"cmake\build_community.cmake", @"community\module.cmake",
             @"community\community.json", @"community\CMakePresets.json", @"community\test\CMakeLists.txt",
             @"vscode\settings.json", @"vscode\tasks.json", @"vscode\launch.json"];
@@ -168,10 +168,28 @@ public class PublishedArtifactTests
         }
         Assert.Multiple(() =>
         {
-            foreach (var relative in new[] { "CMakeLists.txt", "CMakePresets.json", "validate.ps1", @"src\main.cpp", @"src\user_project.hpp", @".vscode\launch.json" })
+            foreach (var relative in new[] { "CMakeLists.txt", "CMakePresets.json", "validate.ps1", "run-report.ps1", "validate.bat", "run-report.bat", @"src\main.cpp", @"src\user_project.hpp", @".vscode\launch.json" })
                 Assert.That(File.Exists(Path.Combine(project, relative)), Is.True, relative);
             Assert.That(File.ReadAllText(Path.Combine(project, "CMakeLists.txt")), Does.Contain("PackagedProject").And.Not.Contain("@PROJECT_NAME@"));
+            Assert.That(File.ReadAllText(Path.Combine(project, "run-report.ps1")), Does.Contain("$ProjectName = 'PackagedProject'").And.Not.Contain("@PROJECT_NAME@"));
         });
+        var launcherRequest = new ProcessStartInfo("cmd.exe")
+        {
+            UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+            WorkingDirectory = bundle.Root, Arguments = "/d /s /c \"\"%WEAVE_REPORT_LAUNCHER%\"\""
+        };
+        launcherRequest.Environment["WEAVE_REPORT_LAUNCHER"] = Path.Combine(project, "run-report.bat");
+        launcherRequest.Environment["MAYAFLUX_ROOT"] = installation;
+        launcherRequest.Environment["PATH"] = Environment.GetFolderPath(Environment.SpecialFolder.System);
+        using (var launcher = Process.Start(launcherRequest)!)
+        {
+            var output = launcher.StandardOutput.ReadToEndAsync();
+            var errors = launcher.StandardError.ReadToEndAsync();
+            if (!launcher.WaitForExit(30000)) { launcher.Kill(true); Assert.Fail("The packaged report launcher timed out."); }
+            Assert.That(launcher.ExitCode, Is.EqualTo(1), errors.GetAwaiter().GetResult());
+            Assert.That(output.GetAwaiter().GetResult(), Does.Contain("Build the project first"));
+            Assert.That(File.Exists(Path.Combine(project, "mayaflux_run.txt")), Is.False);
+        }
         var main = Path.Combine(project, "src", "main.cpp");
         File.WriteAllText(main, "User-owned changes");
         using var retry = new PackagedGui(bundle, installation);

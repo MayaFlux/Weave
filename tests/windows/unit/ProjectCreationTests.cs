@@ -41,6 +41,9 @@ public class ProjectCreationTests
             Assert.That(host.Files[Project + @"\src\main.cpp"], Is.EqualTo(host.Files[Templates + @"\main.cpp"]));
             Assert.That(host.Files[Project + @"\src\user_project.hpp"], Is.EqualTo(host.Files[Templates + @"\user_project.hpp"]));
             Assert.That(host.Files[Project + @"\validate.ps1"], Is.EqualTo(host.Files[Templates + @"\validate.ps1"]));
+            Assert.That(host.Files[Project + @"\run-report.ps1"], Does.Contain("$ProjectName = 'MyProject'").And.Not.Contain("@PROJECT_NAME@"));
+            Assert.That(host.Files.ContainsKey(Project + @"\validate.bat"), Is.True);
+            Assert.That(host.Files.ContainsKey(Project + @"\run-report.bat"), Is.True);
             Assert.That(host.Files[Project + @"\CMakeLists.txt"], Does.Contain("project(MyProject"));
             Assert.That(host.Files[Project + @"\CMakeLists.txt"], Does.Contain("GLOB_RECURSE").And.Contain("/include/*.tpp"));
             Assert.That(host.Files[Project + @"\CMakePresets.json"], Is.EqualTo(host.Files[Templates + @"\CMakePresets.json"]));
@@ -48,7 +51,7 @@ public class ProjectCreationTests
             Assert.That(host.Files[Project + @"\cmake\mayaflux.cmake"].Contains("target_link_libraries(${PROJECT_NAME} PRIVATE MayaFlux::MayaFluxHost)"), Is.EqualTo(lila));
             Assert.That(host.Files.ContainsKey(Project + @"\.vscode\tasks.json"), Is.EqualTo(vscode));
             Assert.That(host.Files.Where(file => file.Key.StartsWith(Project + "\\")).Any(file => file.Value.Contains("@PROJECT_NAME@") || file.Value.Contains("@LILA_")), Is.False);
-            Assert.That(host.Files[Project + @"\README.md"], Does.Contain("run this manually").And.Contain("cmake --preset release"));
+            Assert.That(host.Files[Project + @"\README.md"], Does.Contain("run this manually").And.Contain("cmake --preset release").And.Contain(".\\validate.bat").And.Contain(".\\run-report.bat"));
         });
         using var presets = JsonDocument.Parse(host.Files[Project + @"\CMakePresets.json"]);
         var configure = presets.RootElement.GetProperty("configurePresets").EnumerateArray().ToDictionary(preset => preset.GetProperty("name").GetString()!);
@@ -104,6 +107,7 @@ public class ProjectCreationTests
     }
 
     [TestCase("main.cpp")]
+    [TestCase("run-report.ps1")]
     [TestCase("CMakePresets.json")]
     [TestCase(@"cmake\shaders.cmake")]
     public void MissingRequiredTemplateFailsBeforeProjectWrites(string relative)

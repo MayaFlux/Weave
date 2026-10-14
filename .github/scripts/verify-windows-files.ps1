@@ -37,6 +37,8 @@ $templates = @(
     "templates\CMakeLists.txt",
     "templates\main.cpp",
     "templates\user_project.hpp",
+    "templates\validate.ps1",
+    "templates\run-report.ps1",
     "templates\.gitignore",
     "templates\cmake\mayaflux.cmake",
     "templates\cmake\shaders.cmake",

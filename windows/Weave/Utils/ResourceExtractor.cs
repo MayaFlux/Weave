@@ -4,7 +4,7 @@ public static class ResourceExtractor
 {
     internal static readonly string[] RequiredTemplates =
     [
-        "CMakeLists.txt", "CMakePresets.json", "main.cpp", "user_project.hpp", ".gitignore", "validate.ps1",
+        "CMakeLists.txt", "CMakePresets.json", "main.cpp", "user_project.hpp", ".gitignore", "validate.ps1", "run-report.ps1",
         "cmake\\mayaflux.cmake", "cmake\\shaders.cmake", "cmake\\build_community.cmake",
         "community\\module.cmake", "community\\community.json", "community\\CMakePresets.json",
         "community\\test\\CMakeLists.txt", "vscode\\settings.json", "vscode\\tasks.json", "vscode\\launch.json"

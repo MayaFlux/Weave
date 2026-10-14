@@ -10,7 +10,7 @@ public class TemplateInstallStepTests
 {
     private const string Root = @"D:\Maya Flux";
     private const string Templates = @"D:\Maya Flux\share\weave\templates";
-    private static readonly string[] Required = ["CMakeLists.txt", "CMakePresets.json", "main.cpp", "user_project.hpp", ".gitignore", "validate.ps1", "cmake\\mayaflux.cmake", "cmake\\shaders.cmake", "cmake\\build_community.cmake", "community\\module.cmake", "community\\community.json", "community\\CMakePresets.json", "community\\test\\CMakeLists.txt", "vscode\\settings.json", "vscode\\tasks.json", "vscode\\launch.json"];
+    private static readonly string[] Required = ["CMakeLists.txt", "CMakePresets.json", "main.cpp", "user_project.hpp", ".gitignore", "validate.ps1", "run-report.ps1", "cmake\\mayaflux.cmake", "cmake\\shaders.cmake", "cmake\\build_community.cmake", "community\\module.cmake", "community\\community.json", "community\\CMakePresets.json", "community\\test\\CMakeLists.txt", "vscode\\settings.json", "vscode\\tasks.json", "vscode\\launch.json"];
     private static string Resource(string relative) => "Weave.Resources.templates." + relative.Replace('\\', '.');
 
     [Test]

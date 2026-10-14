@@ -64,7 +64,7 @@ Linux and macOS:
 Windows:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\validate.ps1
+.\validate.bat
 ```
 
 The report checks project files, presets, community module references, `mayaflux.json`, local shaders and the MayaFlux installation. It also lists the system details that bug reports need: the OS, the GPU and Vulkan driver, and whether the Vulkan validation layer is installed. On Windows it also checks tools and terminal settings. It does not configure, build, launch or modify the project. To check a project elsewhere, pass its folder as the first argument on Linux and macOS, or add `-ProjectRoot "C:\Path\To\Project"` on Windows. Weave does not run the diagnostic automatically.
@@ -78,6 +78,17 @@ A project loads `mayaflux.json` from its folder at startup when the file exists,
 ### Reporting a problem
 
 Run `validate`, then run the project with the report configuration that MayaFlux installs at `share/MayaFlux/report/mayaflux.report.json`. It turns on the Vulkan validation layers and writes a complete log to `data/log/`. Open an issue with the [Weave project template](https://github.com/MayaFlux/MayaFlux/issues/new/choose) and follow its steps.
+
+New Windows projects include both PowerShell scripts and batch launchers. From the project folder, run:
+
+```powershell
+.\validate.bat
+.\run-report.bat
+```
+
+Build the project first, reproduce the problem during the report run, then close the application. Attach `mayaflux_run.txt` and `data/log/mayaflux_report.log` to the issue. Previous logs are preserved with a `.previous-` suffix. If the application stops before creating its report, attach the console log and mention that the report was not created.
+
+Use `run-report.bat -Configuration Debug` when multiple build configurations exist, or `run-report.bat -Executable "custom output\MyProject.exe"` for another layout. Add `-MayaFluxRoot "C:\Your MayaFlux Folder"` for a custom installation. The launchers preserve the terminal's environment and return the scripts' exit codes. The `.ps1` scripts remain directly usable when PowerShell permits script execution. Existing projects retain their files; these launchers are generated when creating a new project.
 
 `CMakeLists.txt` is yours to edit. Add source files, link libraries, and set compiler flags as needed. The MayaFlux integration lives in `cmake/mayaflux.cmake` and is included automatically at the end of `CMakeLists.txt`.
 

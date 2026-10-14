@@ -29,7 +29,7 @@ internal sealed class ProjectCreationService(string templatesDir, ProjectCreatio
         WindowsInstallationPaths.EnsureNoReparseAncestors(projectDir, host);
         WindowsInstallationPaths.EnsureNoReparseAncestors(templatesDir, host);
         templates.Clear();
-        foreach (var relative in new[] { "CMakeLists.txt", "CMakePresets.json", "main.cpp", "user_project.hpp", "validate.ps1", ".gitignore", @"cmake\mayaflux.cmake", @"cmake\shaders.cmake", @"cmake\build_community.cmake" }) LoadTemplate(relative);
+        foreach (var relative in new[] { "CMakeLists.txt", "CMakePresets.json", "main.cpp", "user_project.hpp", "validate.ps1", "run-report.ps1", ".gitignore", @"cmake\mayaflux.cmake", @"cmake\shaders.cmake", @"cmake\build_community.cmake" }) LoadTemplate(relative);
         if (withVscode)
         {
             foreach (var relative in new[] { @"vscode\settings.json", @"vscode\tasks.json", @"vscode\launch.json" })
@@ -94,6 +94,15 @@ internal sealed class ProjectCreationService(string templatesDir, ProjectCreatio
         Log($"  Using MAYAFLUX_ROOT: {mayaFluxRoot}");
         host.WriteAllText(Path.Combine(projectDir, "validate.ps1"), validator);
         Log("  Copied validate.ps1 (run manually for diagnostics)");
+        host.WriteAllText(Path.Combine(projectDir, "run-report.ps1"), LoadTemplate("run-report.ps1").Replace("@PROJECT_NAME@", projectName));
+        foreach (var name in new[] { "validate", "run-report" })
+        {
+            var launcher = "@echo off\r\nsetlocal DisableDelayedExpansion\r\n" +
+                $"\"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -NoProfile -ExecutionPolicy Bypass -File \"%~dp0{name}.ps1\" %*\r\n" +
+                "exit /b %ERRORLEVEL%\r\n";
+            host.WriteAllText(Path.Combine(projectDir, name + ".bat"), launcher);
+        }
+        Log("  Generated run-report.ps1, validate.bat and run-report.bat (run manually for diagnostics)");
         Log("Generating CMakeLists.txt");
 
         var cmakelists = LoadTemplate("CMakeLists.txt")
@@ -228,9 +237,14 @@ internal sealed class ProjectCreationService(string templatesDir, ProjectCreatio
             "## Diagnostics\r\n\r\n" +
             "When you need diagnostics, run this manually from the project folder:\r\n\r\n" +
             "```powershell\r\n" +
-            "powershell -NoProfile -ExecutionPolicy Bypass -File .\\validate.ps1\r\n" +
+            ".\\validate.bat\r\n" +
             "```\r\n\r\n" +
             "It checks the project, MayaFlux installation, tools and terminal settings without building or changing anything. Copy the report when requesting help.\r\n\r\n" +
+            "After building, collect logs for a bug report:\r\n\r\n" +
+            "```powershell\r\n.\\run-report.bat\r\n```\r\n\r\n" +
+            "Reproduce the problem, then close the application. Attach `mayaflux_run.txt` and `data/log/mayaflux_report.log` to your issue. Previous logs are preserved with a `.previous-` suffix.\r\n\r\n" +
+            "For multiple build configurations, use `run-report.bat -Configuration Debug`. For a custom output folder, use `run-report.bat -Executable \"path\\to\\application.exe\"`. For a custom installation, add `-MayaFluxRoot \"C:\\Your MayaFlux Folder\"`.\r\n\r\n" +
+            "Both `.ps1` scripts are included and can also be run directly when your PowerShell execution policy permits it. The batch launchers preserve the calling terminal's environment.\r\n\r\n" +
             "## Building\r\n\r\n" +
             "```powershell\r\n" +
             "cmake --preset release\r\n" +
@@ -294,7 +308,7 @@ internal sealed class ProjectCreationService(string templatesDir, ProjectCreatio
         if (string.IsNullOrWhiteSpace(content)) throw new IOException($"Required template is empty: {templateName}. Use Weave installation to reinstall its templates, then try again.");
         foreach (Match marker in Regex.Matches(content, @"@[A-Z][A-Z0-9_]*@"))
         {
-            var valid = marker.Value == "@PROJECT_NAME@" && (templateName == "CMakeLists.txt" || templateName.StartsWith("vscode")) ||
+            var valid = marker.Value == "@PROJECT_NAME@" && (templateName == "CMakeLists.txt" || templateName == "run-report.ps1" || templateName.StartsWith("vscode")) ||
                 templateName == @"cmake\mayaflux.cmake" && marker.Value is "@LILA_LINK_BLOCK@" or "@LILA_DEBUGGER_PATH@" or "@LILA_DLL_COPY@";
             if (!valid) throw new IOException($"Unexpected template value {marker.Value} in {templateName}");
         }
