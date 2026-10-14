@@ -213,13 +213,14 @@ class ProjectCreationMode(Gtk.ApplicationWindow):
 
             if result.returncode == 0:
                 project_path = Path(loc) / name
-                if not (project_path / "validate.sh").is_file():
-                    self._show_error(
-                        f"Project was created at {project_path}, but validate.sh was not deployed. Check the Weave templates."
-                    )
-                    self.create_btn.set_sensitive(True)
-                    self.create_btn.set_label(original_label)
-                    return
+                for script in ("validate.sh", "run-report.sh"):
+                    if not (project_path / script).is_file():
+                        self._show_error(
+                            f"Project was created at {project_path}, but {script} was not deployed. Check the Weave templates."
+                        )
+                        self.create_btn.set_sensitive(True)
+                        self.create_btn.set_label(original_label)
+                        return
                 dialog = Gtk.AlertDialog(
                     message="Project Created Successfully!",
                     detail=f"Project '{name}' created at:\n{project_path}",

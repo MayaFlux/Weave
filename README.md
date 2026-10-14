@@ -88,13 +88,15 @@ New Windows projects include both PowerShell scripts and batch launchers. From t
 
 Build the project first, reproduce the problem during the report run, then close the application. Attach `mayaflux_run.txt` and `data/log/mayaflux_report.log` to the issue. Previous logs are preserved with a `.previous-` suffix. If the application stops before creating its report, attach the console log and mention that the report was not created.
 
-On macOS, new projects include `run-report.sh`. Build the project, then run it from the project folder:
+On Linux and macOS, new projects include `run-report.sh`. Build the project, then run it from the project folder:
 
 ```sh
 ./run-report.sh
 ```
 
 It runs the project with MayaFlux's report configuration, writes the console output to `mayaflux_run.txt`, and returns the application's exit code. The MayaFlux installation comes from `--mayaflux-root`, `MAYAFLUX_ROOT`, or the installed Homebrew formula. Use `--configuration Debug` when several build configurations exist, or `--executable path/to/binary` for another layout. Previous logs are preserved with a `.previous-` suffix. Existing projects retain their files; the script is generated when creating a new project.
+
+On Linux the MayaFlux installation comes from `--mayaflux-root`, `MAYAFLUX_ROOT`, `/usr` or `/usr/local`.
 
 Use `run-report.bat -Configuration Debug` when multiple build configurations exist, or `run-report.bat -Executable "custom output\MyProject.exe"` for another layout. Add `-MayaFluxRoot "C:\Your MayaFlux Folder"` for a custom installation. The launchers preserve the terminal's environment and return the scripts' exit codes. The `.ps1` scripts remain directly usable when PowerShell permits script execution. Existing projects retain their files; these launchers are generated when creating a new project.
 

@@ -113,6 +113,7 @@ class AppImageIntegrationTests(unittest.TestCase):
             "lib/templates/CMakeLists.txt",
             "lib/templates/main.cpp",
             "lib/templates/validate.sh",
+            "lib/templates/run-report.sh",
             "lib/templates/community",
             "usr/bin/python3",
             "usr/lib/libEGL.so.1",
@@ -200,6 +201,8 @@ print(json.dumps({
         self.assertTrue((project / "cmake" / "mayaflux.cmake").is_file())
         self.assertTrue((project / "validate.sh").is_file())
         self.assertTrue(os.access(project / "validate.sh", os.X_OK))
+        self.assertTrue(os.access(project / "run-report.sh", os.X_OK))
+        self.assertIn("project_name='AudioGarden'", (project / "run-report.sh").read_text())
 
     def test_packaged_cli_creates_community_module_with_packaged_templates(self):
         self.assertIsNotNone(shutil.which("git"), "git is required by the CLI")
@@ -311,6 +314,7 @@ print(json.dumps({
         self.assertEqual(created.returncode, 0, created.stderr)
         self.assertTrue((project_root / "AudioGarden" / "CMakeLists.txt").is_file())
         self.assertTrue((project_root / "AudioGarden" / "validate.sh").is_file())
+        self.assertTrue((project_root / "AudioGarden" / "run-report.sh").is_file())
 
     def test_packaged_installer_pty_reports_command_status(self):
         probe = r'''

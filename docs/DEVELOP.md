@@ -51,6 +51,9 @@ Weave/
 │   ├── main.cpp
 │   ├── user_project.hpp
 │   ├── validate.sh                 # Project diagnostics (Linux)
+│   ├── run-report.sh               # Report runner (Linux)
+│   ├── run-report-macos.sh         # Report runner (macOS)
+│   ├── run-report.ps1              # Report runner (Windows)
 │   ├── validate-macos.sh           # Project diagnostics (macOS)
 │   ├── validate.ps1                # Project diagnostics (Windows)
 │   ├── .gitignore

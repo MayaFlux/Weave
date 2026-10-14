@@ -157,7 +157,7 @@ cmd_new() {
 
     [ ! -d "$TEMPLATES_DIR" ] && error "Templates not found at $TEMPLATES_DIR"
 
-    for template in CMakeLists.txt CMakePresets.json main.cpp user_project.hpp validate.sh .gitignore; do
+    for template in CMakeLists.txt CMakePresets.json main.cpp user_project.hpp validate.sh run-report.sh .gitignore; do
         [ ! -f "$TEMPLATES_DIR/$template" ] && error "Required template missing: $template"
     done
 
@@ -237,6 +237,10 @@ cmd_new() {
     chmod +x "$PROJECT_DIR/validate.sh"
     log "  ✓ Copied validate.sh"
 
+    sed "s|@PROJECT_NAME@|$PROJECT_NAME|g" "$TEMPLATES_DIR/run-report.sh" >"$PROJECT_DIR/run-report.sh"
+    chmod +x "$PROJECT_DIR/run-report.sh"
+    log "  ✓ Generated run-report.sh"
+
     cp "$TEMPLATES_DIR/main.cpp" "$PROJECT_DIR/src/main.cpp"
     log "  ✓ Generated main.cpp"
 
@@ -289,6 +293,10 @@ A MayaFlux multimedia DSP project.
 ## Troubleshooting
 
 If setup or a build fails, run \`./validate.sh\` from this project folder to check the installed MayaFlux package, its dependencies, and project files. Copy its report when requesting help.
+
+## Reporting a problem
+
+Build the project, then run \`./run-report.sh\`. It runs the project with MayaFlux's report configuration. Reproduce the problem, then close the application. Attach \`mayaflux_run.txt\` and \`data/log/mayaflux_report.log\` to the issue, together with the output of \`./validate.sh\`.
 
 ## Building
 

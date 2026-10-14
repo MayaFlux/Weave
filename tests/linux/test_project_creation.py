@@ -118,6 +118,7 @@ class ProjectCreationTests(unittest.TestCase):
             project = Path(temporary) / "MyProject"
             project.mkdir()
             (project / "validate.sh").write_text("#!/bin/bash\n")
+            (project / "run-report.sh").write_text("#!/bin/bash\n")
             completed = subprocess.CompletedProcess([], 0, stdout="Created", stderr="")
             dialog = Mock()
 
@@ -173,6 +174,8 @@ class ProjectCreationTests(unittest.TestCase):
 
             project = root / "MyProject"
             self.assertTrue((project / "validate.sh").is_file())
+            self.assertTrue(os.access(project / "run-report.sh", os.X_OK))
+            self.assertIn("project_name='MyProject'", (project / "run-report.sh").read_text())
             self.assertEqual(
                 (project / "data/shaders/effects/blur.comp").read_text(),
                 "shader source\n",
@@ -193,6 +196,23 @@ class ProjectCreationTests(unittest.TestCase):
 
         alert.assert_not_called()
         self.assertIn("validate.sh was not deployed", view._show_error.call_args.args[0])
+
+    def test_missing_deployed_report_runner_prevents_success_report(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            view = project_view("MyProject", temporary)
+            project = Path(temporary) / "MyProject"
+            project.mkdir()
+            (project / "validate.sh").write_text("#!/bin/bash\n")
+            completed = subprocess.CompletedProcess([], 0, stdout="Created", stderr="")
+            with patch.object(project_mode.subprocess, "run", return_value=completed):
+                with patch.object(project_mode.Gtk, "AlertDialog", create=True) as alert:
+                    project_mode.ProjectCreationMode._create_project_async(
+                        view, "MyProject", temporary, "Create Project"
+                    )
+
+        alert.assert_not_called()
+        self.assertIn("run-report.sh was not deployed", view._show_error.call_args.args[0])
+        view.create_btn.set_sensitive.assert_called_with(True)
 
     def test_generator_timeout_restores_create_button(self):
         with tempfile.TemporaryDirectory() as temporary:
