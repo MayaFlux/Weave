@@ -17,6 +17,7 @@ import termios
 import errno
 import pty
 import re
+import signal
 from pathlib import Path
 
 
@@ -161,6 +162,9 @@ class ReleaseTypeStep:
 class DependenciesStep:
     """Install MayaFlux via native package manager using a PTY."""
 
+    _STALL_TIMEOUT = 300
+    _COMMAND_TIMEOUT = 1800
+
     def __init__(self):
         self.release_type = "stable"
         self._password = ""
@@ -279,6 +283,8 @@ class DependenciesStep:
             if not ok:
                 GLib.idle_add(self._log, f"ERROR: Failed to remove {conflict}.")
                 GLib.idle_add(self.status.set_text, "ERROR: Installation failed.")
+                GLib.idle_add(self._install_btn.set_sensitive, True)
+                GLib.idle_add(self._pw_entry.set_sensitive, True)
                 self._zero_password()
                 return False
             GLib.idle_add(self._log, f"✅ {conflict} removed")
@@ -292,6 +298,8 @@ class DependenciesStep:
                 if not ok:
                     GLib.idle_add(self._log, f"ERROR: Command failed: {' '.join(cmd)}")
                     GLib.idle_add(self.status.set_text, "ERROR: Installation failed.")
+                    GLib.idle_add(self._install_btn.set_sensitive, True)
+                    GLib.idle_add(self._pw_entry.set_sensitive, True)
                     return False
         finally:
             self._zero_password()
@@ -331,18 +339,34 @@ class DependenciesStep:
 
         buf = b""
         loop = asyncio.get_event_loop()
+        last_progress = loop.time()
+        received_amount = None
+        downloading = False
 
         def _read_ready():
-            nonlocal buf
+            nonlocal buf, last_progress, received_amount, downloading
             try:
                 data = os.read(master_fd, 4096)
                 buf += data
-                lines = buf.split(b"\n")
+                lines = re.split(b"[\r\n]", buf)
                 buf = lines[-1]
                 for line in lines[:-1]:
                     text = line.decode(errors="replace").rstrip("\r")
                     if text:
-                        GLib.idle_add(self._log, self._strip_ansi(text))
+                        text = self._strip_ansi(text)
+                        transfer = re.match(r"^\s*\d{1,3}\s+\S+\s+\d{1,3}\s+(\S+)\s+", text)
+                        if transfer:
+                            downloading = True
+                            amount = transfer.group(1)
+                            if amount != received_amount:
+                                received_amount = amount
+                                last_progress = loop.time()
+                                GLib.idle_add(self._log, text)
+                        else:
+                            downloading = False
+                            received_amount = None
+                            last_progress = loop.time()
+                            GLib.idle_add(self._log, text)
             except OSError as e:
                 if e.errno not in (errno.EAGAIN, errno.EIO):
                     GLib.idle_add(self._log, f"ERROR reading PTY: {e}")
@@ -357,12 +381,40 @@ class DependenciesStep:
         loop.add_reader(master_fd, _read_ready)
 
         status = 0
+        timed_out = False
         while True:
             try:
                 wp, status = os.waitpid(pid, os.WNOHANG)
                 if wp == pid:
                     break
             except ChildProcessError:
+                break
+            limit = self._STALL_TIMEOUT if downloading else self._COMMAND_TIMEOUT
+            if loop.time() - last_progress >= limit:
+                timed_out = True
+                if downloading:
+                    GLib.idle_add(
+                        self._log,
+                        "ERROR: No download progress for 5 minutes. Stopping command; retry the installation when the connection is available.",
+                    )
+                else:
+                    GLib.idle_add(
+                        self._log,
+                        "ERROR: No installer output for 30 minutes. Stopping command; retry the installation.",
+                    )
+                try:
+                    os.killpg(pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                await asyncio.sleep(0.2)
+                try:
+                    os.killpg(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                try:
+                    _, status = os.waitpid(pid, 0)
+                except ChildProcessError:
+                    pass
                 break
             await asyncio.sleep(0.05)
 
@@ -381,7 +433,7 @@ class DependenciesStep:
             pass
 
         os.close(master_fd)
-        return os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0
+        return not timed_out and os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0
 
     def _detect_distro(self):
         if shutil.which("pacman"):
@@ -684,7 +736,7 @@ class InstallationMode(Gtk.ApplicationWindow):
         self.content.queue_resize()
 
     def _on_step_done(self, success):
-        self.next_btn.set_sensitive(True)
+        self.next_btn.set_sensitive(success)
 
     def _on_next(self, btn):
         if self.current < len(self.steps) - 1:

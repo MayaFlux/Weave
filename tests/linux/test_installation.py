@@ -4,6 +4,7 @@ import os
 import stat
 import sys
 import tempfile
+import time
 import types
 import unittest
 from pathlib import Path
@@ -153,6 +154,43 @@ class InstallationTests(unittest.TestCase):
         self.assertEqual(runner.await_count, 1)
         self.assertEqual(self.step._password, "")
         self.step.status.set_text.assert_called_with("ERROR: Installation failed.")
+        self.step._install_btn.set_sensitive.assert_called_with(True)
+        self.step._pw_entry.set_sensitive.assert_called_with(True)
+
+    def test_stalled_package_transfer_ends_and_reports_retry(self):
+        command = [
+            sys.executable,
+            "-c",
+            "import sys,time\n"
+            "for _ in range(20):\n"
+            " sys.stdout.write('  0  0  0  0  0  0\\r')\n"
+            " sys.stdout.flush()\n"
+            " time.sleep(0.05)\n",
+        ]
+        with patch.object(installation_mode.DependenciesStep, "_STALL_TIMEOUT", 0.2, create=True):
+            started = time.monotonic()
+            result = asyncio.run(self.step._run_pty(command))
+        self.assertFalse(result)
+        self.assertLess(time.monotonic() - started, 0.8)
+        self.assertTrue(any("no download progress" in call.args[0].lower() for call in self.step._log.call_args_list))
+
+    def test_package_transfer_with_new_bytes_continues(self):
+        command = [
+            sys.executable,
+            "-c",
+            "import sys,time\n"
+            "for amount in range(1, 7):\n"
+            " sys.stdout.write(f'  0  0  0  {amount}K  0  0\\r')\n"
+            " sys.stdout.flush()\n"
+            " time.sleep(0.08)\n",
+        ]
+        with patch.object(installation_mode.DependenciesStep, "_STALL_TIMEOUT", 0.2):
+            self.assertTrue(asyncio.run(self.step._run_pty(command)))
+
+    def test_failed_install_keeps_next_step_disabled(self):
+        view = types.SimpleNamespace(next_btn=Mock())
+        installation_mode.InstallationMode._on_step_done(view, False)
+        view.next_btn.set_sensitive.assert_called_once_with(False)
 
     def test_declined_conflict_does_not_remove_or_install_packages(self):
         with patch.object(self.step, "_detect_distro", return_value="ubuntu"):
