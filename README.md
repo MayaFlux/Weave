@@ -10,13 +10,7 @@ Weave installs MayaFlux, creates projects, and manages community modules. Downlo
 
 Launch Weave and choose **Install MayaFlux**. Weave downloads the framework, installs all dependencies, and configures your environment. Restart your terminal when it finishes.
 
-On Windows, run the installation check before reporting a problem:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:MAYAFLUX_ROOT\share\weave\templates\validate.ps1"
-```
-
-The check reports your installed MayaFlux version, required tools and environment settings, with suggested fixes. It makes no changes and does not contact the network. Copy the report into your issue. If `MAYAFLUX_ROOT` is missing, use the script's full installed path and add `-MayaFluxRoot "C:\Your MayaFlux Folder"`.
+If something goes wrong, see [Diagnostics and bug reports](#diagnostics-and-bug-reports).
 
 ---
 
@@ -69,6 +63,14 @@ Each new project includes two scripts. Run them from the project folder:
 | Collect a report | `./run-report.sh` | `.\run-report.bat` |
 
 **`validate`** checks project files, presets, community module references, `mayaflux.json`, local shaders and the MayaFlux installation. It also lists the OS, the GPU and Vulkan driver, and whether the Vulkan validation layer is installed. On Windows it also checks tools and terminal settings. It does not configure, build, launch or modify anything, and Weave never runs it automatically. To check another folder, pass it as the first argument on Linux and macOS, or add `-ProjectRoot "C:\Path\To\Project"` on Windows.
+
+On Windows, `validate.ps1` is also installed with Weave, so you can check the installation before you have a project:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:MAYAFLUX_ROOT\share\weave\templates\validate.ps1"
+```
+
+It makes no changes and does not contact the network. If `MAYAFLUX_ROOT` is missing, use the script's full installed path and add `-MayaFluxRoot "C:\Your MayaFlux Folder"`.
 
 **`run-report`** runs the built project with the report configuration that MayaFlux installs at `share/MayaFlux/report/mayaflux.report.json`, which turns on the Vulkan validation layers and writes a complete log. Build the project first, reproduce the problem, then close the application. The script saves the console output to `mayaflux_run.txt` and the application writes `data/log/mayaflux_report.log`. Earlier logs are kept with a `.previous-` suffix, and the script returns the application's exit code. If the application stops before creating its report, attach the console log and say so.
 

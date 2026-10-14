@@ -463,13 +463,17 @@ fi
 [ ! -s "$batch_project/community.cmake" ] \
     || fail "A failed batch registered a module before every module validated"
 
+rejected_project="$test_root/Rejected Names Project"
+mkdir -p "$rejected_project"
+printf 'project(RejectedFixture)\n' >"$rejected_project/CMakeLists.txt"
 for bad_names in "" "fixture_module," ",fixture_module" "a,,b"; do
-    assert_failure_contains 'Empty module name' "$cli" update "$batch_project" "$bad_names"
+    assert_failure_contains 'Empty module name' "$cli" update "$rejected_project" "$bad_names"
 done
 for bad_names in "../outside" "Fixture"; do
-    assert_failure_contains 'snake_case' "$cli" update "$batch_project" "$bad_names"
+    assert_failure_contains 'snake_case' "$cli" update "$rejected_project" "$bad_names"
 done
-[ ! -e "$batch_project/community" ] || fail "Rejected module names reached the registry or clone steps"
+[ ! -e "$rejected_project/community" ] || fail "Rejected module names reached the registry or clone steps"
+[ ! -e "$rejected_project/community.cmake" ] || fail "Rejected module names created a registration file"
 
 if missing_curl_output="$(PATH="$tool_bin" "$cli" update "$update_project" fixture_module 2>&1)"; then
     fail "Update unexpectedly succeeded without curl"
