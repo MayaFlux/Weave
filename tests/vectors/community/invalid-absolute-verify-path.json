@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "name": "vector_module",
+  "min_version": "0.5.0",
+  "manual_installs": [
+    {
+      "id": "vendor_sdk",
+      "platforms": [
+        "windows"
+      ],
+      "url": "https://vendor.example/sdk",
+      "description": "Download and install Vendor SDK 4.2 or newer.",
+      "verify": {
+        "path": "/usr/bin/sdk"
+      },
+      "environment": {
+        "VENDOR_SDK_ROOT": "{selected_install_directory}"
+      }
+    }
+  ]
+}

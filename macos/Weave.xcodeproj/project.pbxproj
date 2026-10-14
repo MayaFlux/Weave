@@ -24,6 +24,7 @@
 		A10000000000000000000017 /* CreationOperations.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* CreationOperations.swift */; };
 		A10000000000000000000018 /* CreationOperations.swift in Unit Tests */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* CreationOperations.swift */; };
 		A10000000000000000000020 /* RunReportScriptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000020 /* RunReportScriptTests.swift */; };
+		A10000000000000000000021 /* CommunityManifestVectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* CommunityManifestVectorTests.swift */; };
 		A10000000000000000000019 /* CreationOperationsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* CreationOperationsTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -46,6 +47,7 @@
 		A20000000000000000000010 /* ShellEnvironmentFileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellEnvironmentFileTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000011 /* CreationOperations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreationOperations.swift; sourceTree = "<group>"; };
 		A20000000000000000000020 /* RunReportScriptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunReportScriptTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000021 /* CommunityManifestVectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityManifestVectorTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000012 /* CreationOperationsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreationOperationsTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -58,7 +60,7 @@
 		A40000000000000000000001 = {isa = PBXGroup; children = (A40000000000000000000002 /* Weave */, A40000000000000000000004 /* Unit Tests */, A40000000000000000000003 /* Products */, ); sourceTree = "<group>"; };
 		A40000000000000000000002 /* Weave */ = {isa = PBXGroup; children = (A20000000000000000000001 /* WeaveGUI.swift */, A20000000000000000000002 /* CommunityManifest.swift */, A20000000000000000000003 /* CommunityUpdate.swift */, A2000000000000000000000C /* InstallerWorkflow.swift */, A2000000000000000000000F /* ShellEnvironment.swift */, A20000000000000000000011 /* CreationOperations.swift */, A20000000000000000000004 /* weave.icns */, A20000000000000000000005 /* Weave.sh */, A20000000000000000000006 /* templates */, ); path = .; sourceTree = "<group>"; };
 		A40000000000000000000003 /* Products */ = {isa = PBXGroup; children = (A20000000000000000000007 /* Weave.app */, ); name = Products; sourceTree = "<group>"; };
-		A40000000000000000000004 /* Unit Tests */ = {isa = PBXGroup; children = (A20000000000000000000008 /* CommunityManifestTests.swift */, A20000000000000000000009 /* CommunityUpdateTests.swift */, A2000000000000000000000D /* InstallerWorkflowTests.swift */, A2000000000000000000000E /* HomebrewLocatorTests.swift */, A20000000000000000000010 /* ShellEnvironmentFileTests.swift */, A20000000000000000000012 /* CreationOperationsTests.swift */, A20000000000000000000020 /* RunReportScriptTests.swift */, ); path = ../tests/macos/unit; sourceTree = "<group>"; };
+		A40000000000000000000004 /* Unit Tests */ = {isa = PBXGroup; children = (A20000000000000000000008 /* CommunityManifestTests.swift */, A20000000000000000000009 /* CommunityUpdateTests.swift */, A2000000000000000000000D /* InstallerWorkflowTests.swift */, A2000000000000000000000E /* HomebrewLocatorTests.swift */, A20000000000000000000010 /* ShellEnvironmentFileTests.swift */, A20000000000000000000012 /* CreationOperationsTests.swift */, A20000000000000000000020 /* RunReportScriptTests.swift */, A20000000000000000000021 /* CommunityManifestVectorTests.swift */, ); path = ../tests/macos/unit; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -72,7 +74,7 @@
 
 /* Begin PBXResourcesBuildPhase section */
 		A30000000000000000000003 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000004 /* weave.icns in Resources */, ); runOnlyForDeploymentPostprocessing = 0; };
-		A30000000000000000000006 /* Unit Test Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000005 /* CommunityManifest.swift in Unit Tests */, A10000000000000000000006 /* CommunityUpdate.swift in Unit Tests */, A10000000000000000000011 /* InstallerWorkflow.swift in Unit Tests */, A10000000000000000000013 /* ShellEnvironment.swift in Unit Tests */, A10000000000000000000018 /* CreationOperations.swift in Unit Tests */, A10000000000000000000007 /* CommunityManifestTests.swift in Sources */, A10000000000000000000008 /* CommunityUpdateTests.swift in Sources */, A10000000000000000000014 /* InstallerWorkflowTests.swift in Sources */, A10000000000000000000015 /* HomebrewLocatorTests.swift in Sources */, A10000000000000000000016 /* ShellEnvironmentFileTests.swift in Sources */, A10000000000000000000019 /* CreationOperationsTests.swift in Sources */, A10000000000000000000020 /* RunReportScriptTests.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
+		A30000000000000000000006 /* Unit Test Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000005 /* CommunityManifest.swift in Unit Tests */, A10000000000000000000006 /* CommunityUpdate.swift in Unit Tests */, A10000000000000000000011 /* InstallerWorkflow.swift in Unit Tests */, A10000000000000000000013 /* ShellEnvironment.swift in Unit Tests */, A10000000000000000000018 /* CreationOperations.swift in Unit Tests */, A10000000000000000000007 /* CommunityManifestTests.swift in Sources */, A10000000000000000000008 /* CommunityUpdateTests.swift in Sources */, A10000000000000000000014 /* InstallerWorkflowTests.swift in Sources */, A10000000000000000000015 /* HomebrewLocatorTests.swift in Sources */, A10000000000000000000016 /* ShellEnvironmentFileTests.swift in Sources */, A10000000000000000000019 /* CreationOperationsTests.swift in Sources */, A10000000000000000000020 /* RunReportScriptTests.swift in Sources */, A10000000000000000000021 /* CommunityManifestVectorTests.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */

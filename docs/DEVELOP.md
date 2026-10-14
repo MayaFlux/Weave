@@ -72,6 +72,10 @@ Weave/
 │       ├── tasks.json
 │       └── launch.json
 │
+├── tests/
+│   └── vectors/
+│       └── community/              # Manifest corpus run by all three platform suites
+│
 ├── .github/
 │   ├── workflows/
 │   │   └── build.yml               # CI/CD pipeline
@@ -145,6 +149,16 @@ python3 -m unittest discover -s tests/linux/integration -p 'test_*.py' -v
 CI runs these tests on the built AppImage before uploading it. They extract the image, verify that the Python and GTK runtime loads from the bundle, and exercise the packaged installer process and CLI with local fixtures. A second runtime test runs in a minimal Ubuntu container with no GTK or graphics libraries installed. The AppImage still uses the host kernel, glibc, display server, hardware driver, shell, and native package manager.
 
 The manual build workflow has a checkbox for each platform, enabled by default. It uploads artifacts for the selected platforms and publishes a release only when all three builds succeed.
+
+### Manifest vectors
+
+`tests/vectors/community/` holds `community.json` manifests that the Linux, macOS and Windows parsers must judge identically. A file named `valid-<case>.json` must be accepted and `invalid-<case>.json` must be rejected. Each runner enumerates the folder, passes the manifest's own `name` as the expected module name, compares only accepted or rejected, and fails if the folder is empty or holds a file with any other prefix.
+
+- Linux: `tests/linux/test_community_manifest_vectors.py`
+- macOS: `tests/macos/unit/CommunityManifestVectorTests.swift`
+- Windows: `tests/windows/unit/CommunityManifestVectorTests.cs`
+
+An invalid vector differs from a valid manifest by one fault, so it cannot be rejected for an unrelated reason. Name mismatch against the requested module is not a vector, because the runners always pass the manifest's own name. Each platform tests it in its own suite. Add a vector whenever [COMMUNITY_MANIFEST.md](COMMUNITY_MANIFEST.md) gains a rule. When a platform disagrees, fix the parser that departs from that document, or clarify the document.
 
 ---
 

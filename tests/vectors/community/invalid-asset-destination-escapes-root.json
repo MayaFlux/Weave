@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "name": "vector_module",
+  "min_version": "0.5.0",
+  "assets": [
+    {
+      "id": "terrain_textures",
+      "url": "https://example.org/terrain-textures-v1.zip",
+      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "size_bytes": 428000000,
+      "license_url": "https://example.org/license",
+      "destination": "../outside",
+      "description": "Terrain texture collection.",
+      "archive_format": "zip",
+      "max_extracted_size_bytes": 1712000000,
+      "max_files": 10000
+    }
+  ]
+}
