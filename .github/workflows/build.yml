@@ -87,13 +87,38 @@ jobs:
         run: |
           ./.github/scripts/verify-macos-build.sh
 
+      - name: Install DMG tooling
+        run: |
+          BREW_EXECUTABLE="$(command -v brew || true)"
+          if [ -z "$BREW_EXECUTABLE" ]; then
+            echo "Homebrew was not found on the macOS runner PATH." >&2
+            exit 1
+          fi
+          "$BREW_EXECUTABLE" install create-dmg
+
       - name: Create DMG
         run: |
-          hdiutil create \
-            -volname "Weave" \
-            -srcfolder "build/macos/WeaveApp/Weave.app" \
-            -ov -format UDZO \
-            "build/macos/Weave.dmg"
+          DMG_WORK="$(mktemp -d "${RUNNER_TEMP}/weave-dmg.XXXXXX")"
+          DMG_ROOT="$DMG_WORK/source"
+          mkdir -p "$DMG_ROOT"
+          trap 'rm -rf "$DMG_WORK"' EXIT
+          cp -R "build/macos/WeaveApp/Weave.app" "$DMG_ROOT/Weave.app"
+          swift macos/scripts/create_dmg_background.swift "$DMG_WORK/background.png"
+          BREW_EXECUTABLE="$(command -v brew)"
+          CREATE_DMG_EXECUTABLE="$("$BREW_EXECUTABLE" --prefix create-dmg)/bin/create-dmg"
+          "$CREATE_DMG_EXECUTABLE" \
+            --volname "Weave" \
+            --volicon "macos/resources/weave.icns" \
+            --background "$DMG_WORK/background.png" \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "Weave.app" 200 200 \
+            --hide-extension "Weave.app" \
+            --app-drop-link 600 200 \
+            --format UDZO \
+            --overwrite \
+            "build/macos/Weave.dmg" \
+            "$DMG_ROOT"
 
       - name: Generate SHA256 hash
         id: hash
