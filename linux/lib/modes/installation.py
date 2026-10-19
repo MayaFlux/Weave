@@ -258,12 +258,7 @@ class DependenciesStep:
         GLib.idle_add(self._log, f"Detected distribution: {distro}")
 
         if distro == "arch":
-            if self.release_type == "dev":
-                target = "mayaflux-dev-bin"
-            elif self._is_pkg_installed("arch", "mayaflux-bin"):
-                target = "mayaflux-bin"
-            else:
-                target = "mayaflux"
+            target = "mayaflux-dev-bin" if self.release_type == "dev" else "mayaflux-bin"
         elif distro == "fedora":
             target = "mayaflux-dev" if self.release_type == "dev" else "mayaflux"
         else:
@@ -530,7 +525,7 @@ class DependenciesStep:
 
     def _build_commands(self, distro, build_dir=None, package=None):
         if distro == "arch":
-            pkg = package or ("mayaflux-dev-bin" if self.release_type == "dev" else "mayaflux")
+            pkg = package or ("mayaflux-dev-bin" if self.release_type == "dev" else "mayaflux-bin")
             if build_dir is None:
                 raise ValueError("Arch package build directory is required")
             return [

@@ -70,7 +70,7 @@ class InstallationTests(unittest.TestCase):
 
     def test_arch_clones_fresh_package_even_with_aur_helper(self):
         for release, available, pkg in (
-            ("stable", {"yay", "paru"}, "mayaflux"),
+            ("stable", {"yay", "paru"}, "mayaflux-bin"),
             ("dev", {"paru"}, "mayaflux-dev-bin"),
         ):
             with self.subTest(release=release):

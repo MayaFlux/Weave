@@ -26,7 +26,7 @@ package=''
 manager=''
 if command -v pacman >/dev/null 2>&1; then
     manager='pacman'
-    packages=(mayaflux mayaflux-dev-bin)
+    packages=(mayaflux-bin mayaflux-dev-bin)
 elif command -v dnf >/dev/null 2>&1 && command -v rpm >/dev/null 2>&1; then
     manager='dnf'
     packages=(mayaflux mayaflux-dev)

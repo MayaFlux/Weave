@@ -10,7 +10,7 @@ Weave detects your distribution automatically and installs MayaFlux via the nati
 
 | Distribution | Minimum version | Package manager | Channel: Stable | Channel: Development |
 | ------------ | --------------- | --------------- | --------------- | -------------------- |
-| Arch Linux   | rolling         | AUR             | `mayaflux`      | `mayaflux-dev-bin`   |
+| Arch Linux   | rolling         | AUR             | `mayaflux-bin`  | `mayaflux-dev-bin`   |
 | Fedora       | 43              | COPR            | `mayaflux`      | `mayaflux-dev`       |
 | Ubuntu       | 25              | PPA             | `mayaflux`      | `mayaflux-edge`      |
 
@@ -155,7 +155,7 @@ rm -rf ~/.local/Weave-X.X.X
 rm ~/.local/bin/weave
 
 # Remove MayaFlux — Arch
-sudo pacman -R mayaflux         # or mayaflux-dev-bin
+sudo pacman -R mayaflux-bin     # or mayaflux-dev-bin
 
 # Remove MayaFlux — Fedora
 sudo dnf remove mayaflux        # or mayaflux-dev
