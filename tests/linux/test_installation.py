@@ -56,7 +56,7 @@ class InstallationTests(unittest.TestCase):
 
     def test_conflicting_packages_depend_on_distro_and_release(self):
         expected = {
-            ("arch", "stable"): ("mayaflux-dev-bin",),
+            ("arch", "stable"): ("mayaflux", "mayaflux-dev-bin"),
             ("arch", "dev"): ("mayaflux", "mayaflux-bin"),
             ("fedora", "stable"): ("mayaflux-dev",),
             ("fedora", "dev"): ("mayaflux",),

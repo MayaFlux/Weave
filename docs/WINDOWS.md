@@ -6,8 +6,8 @@
 
 ## Installing MayaFlux
 
-1. Download `Weave-X.X.X.exe` from [Releases](https://github.com/MayaFlux/Weave/releases)
-2. Double-click the `.exe`. A UAC prompt appears —> click **Yes**
+1. Download `Weave-windows.zip` from [Releases](https://github.com/MayaFlux/Weave/releases) and extract it
+2. Right-click `Weave.exe` and choose **Run as administrator**. A UAC prompt appears —> click **Yes**
 3. Choose **Install MayaFlux**
 4. Follow the step-by-step installer:
 

@@ -463,7 +463,7 @@ class DependenciesStep:
         if distro == "arch":
             if self.release_type == "dev":
                 return ("mayaflux", "mayaflux-bin")
-            return ("mayaflux-dev-bin",)
+            return ("mayaflux", "mayaflux-dev-bin")
         if distro == "fedora":
             return ("mayaflux",) if self.release_type == "dev" else ("mayaflux-dev",)
         if distro == "ubuntu":

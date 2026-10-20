@@ -20,14 +20,14 @@ Only one channel can be installed at a time. If a conflicting package is already
 
 ## Installing MayaFlux
 
-1. Download `Weave-X.X.X-linux.tar.gz` from [Releases](https://github.com/MayaFlux/Weave/releases)
-2. Extract it:
+1. Download `Weave-linux.AppImage` from [Releases](https://github.com/MayaFlux/Weave/releases)
+2. Make it executable:
    ```bash
-   tar -xzf Weave-X.X.X-linux.tar.gz -C ~/.local/
+   chmod +x Weave-linux.AppImage
    ```
 3. Launch Weave:
    ```bash
-   ~/.local/Weave-X.X.X/Weave
+   ./Weave-linux.AppImage
    ```
 4. Choose **Install MayaFlux**
 5. Select a release channel. Stable is recommended for most users
@@ -41,7 +41,7 @@ Only one channel can be installed at a time. If a conflicting package is already
 
 ### What each distro does
 
-**Arch Linux** : installs from the AUR using `yay` or `paru` if available, otherwise falls back to cloning and running `makepkg`.
+**Arch Linux** : clones the package from the AUR (`mayaflux-bin` or `mayaflux-dev-bin`) and installs it with `makepkg -si`, even if `yay` or `paru` is present. The packages repackage the prebuilt MayaFlux release, so nothing is compiled.
 
 **Fedora** : enables three COPR repositories (`ranjithshegde/spirv-cross`, `ranjithshegde/asio-standalone`, and `ranjithshegde/mayaflux` or `ranjithshegde/mayaflux-dev`) then installs via `dnf`.
 
@@ -151,7 +151,7 @@ Weave detects distros by checking for `pacman`, `dnf`, or `apt-get` in that orde
 
 ```bash
 # Remove Weave
-rm -rf ~/.local/Weave-X.X.X
+rm Weave-linux.AppImage
 rm ~/.local/bin/weave
 
 # Remove MayaFlux — Arch
