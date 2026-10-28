@@ -137,7 +137,7 @@ fn cli_does_not_overwrite_an_existing_project() {
 }
 
 #[test]
-fn cli_help_exposes_the_three_project_operations() {
+fn cli_help_exposes_project_and_install_operations() {
     let result = Command::new(env!("CARGO_BIN_EXE_weave"))
         .arg("--help")
         .output()
@@ -147,6 +147,21 @@ fn cli_help_exposes_the_three_project_operations() {
     assert!(help.contains("weave new"));
     assert!(help.contains("weave update"));
     assert!(help.contains("weave community"));
+    assert!(help.contains("weave install <stable|development>"));
+}
+
+#[test]
+fn cli_rejects_invalid_install_channel_without_starting_an_install() {
+    let result = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args(["install", "nightly"])
+        .output()
+        .unwrap();
+    assert!(!result.status.success());
+    let error = String::from_utf8_lossy(&result.stderr);
+    #[cfg(target_os = "macos")]
+    assert!(error.contains("Unsupported MayaFlux install channel: nightly"));
+    #[cfg(not(target_os = "macos"))]
+    assert!(error.contains("not yet supported on this operating system"));
 }
 
 #[test]

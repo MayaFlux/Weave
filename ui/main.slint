@@ -1,10 +1,13 @@
 import { HorizontalBox, VerticalBox } from "std-widgets.slint";
 import { WeaveTheme } from "./theme.slint";
 import { ProjectsScreen } from "./screens/projects.slint";
+import { LandingScreen } from "./screens/landing.slint";
 import { CreateProjectScreen } from "./screens/create_project.slint";
 import { UpdateProjectScreen } from "./screens/update_project.slint";
 import { CreateCommunityModuleScreen } from "./screens/create_community_module.slint";
+import { InstallMayaFluxScreen } from "./screens/install_mayaflux.slint";
 import { ResultDialog } from "./result_dialog.slint";
+import { ConfirmationDialog } from "./confirmation_dialog.slint";
 
 export component MainWindow inherits Window {
     title: "Weave";
@@ -21,10 +24,16 @@ export component MainWindow inherits Window {
     in-out property <int> screen: 0;
     in-out property <string> module_names: "";
     in-out property <bool> result_open: false;
+    in-out property <bool> result_busy: false;
+    in-out property <bool> conflict_confirmation_open: false;
     in-out property <int> result_kind: 0;
     in-out property <string> result_title: "";
     in-out property <string> result_message: "";
+    in-out property <string> conflict_confirmation_title: "";
+    in-out property <string> conflict_confirmation_message: "";
+    in-out property <string> pending_install_channel: "";
     in-out property <bool> busy: false;
+    in property <bool> install_available: false;
     in-out property <bool> community_needs_lila: false;
     in-out property <bool> with_lila: false;
     in-out property <bool> with_vscode: true;
@@ -33,6 +42,9 @@ export component MainWindow inherits Window {
     callback create_project();
     callback create_community_module();
     callback update_project();
+    callback install_mayaflux(string);
+    callback confirm_install_replacement();
+    callback cancel_install_replacement();
 
     Rectangle {
         width: 100%;
@@ -47,50 +59,68 @@ export component MainWindow inherits Window {
                 VerticalBox {
                     spacing: 2px;
                     Text { text: "MAYAFLUX"; color: WeaveTheme.accent; font-size: WeaveTheme.font-caption; font-weight: 700; }
-                    Text { text: "WEAVE  /  PROJECT STUDIO"; color: WeaveTheme.text-primary; font-size: WeaveTheme.font-body; font-weight: 650; }
+                    Text { text: "WEAVE  /  MAYAFLUX TOOLCHAIN"; color: WeaveTheme.text-primary; font-size: WeaveTheme.font-body; font-weight: 650; }
                 }
                 Rectangle { horizontal-stretch: 1; background: transparent; }
                 Text { text: "0.6"; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; vertical-alignment: center; }
             }
-            if root.screen == 0: ProjectsScreen {
-                create_project => { root.screen = 1; }
-                update_project => { root.screen = 2; }
-                create_community_module => { root.screen = 3; }
+            if root.screen == 0: LandingScreen {
+                install_available: root.install_available;
+                install_mayaflux => { root.screen = 5; }
+                projects => { root.screen = 1; }
             }
-            if root.screen == 1: CreateProjectScreen {
+            if root.screen == 1: ProjectsScreen {
+                back => { root.screen = 0; }
+                create_project => { root.screen = 2; }
+                update_project => { root.screen = 3; }
+                create_community_module => { root.screen = 4; }
+            }
+            if root.screen == 2: CreateProjectScreen {
                 project_name <=> root.project_name;
                 destination <=> root.destination;
                 with_lila <=> root.with_lila;
                 with_vscode <=> root.with_vscode;
                 copy_shader_sources <=> root.copy_shader_sources;
-                back => { root.screen = 0; }
+                back => { root.screen = 1; }
                 choose_destination => { root.choose_destination(); }
                 create_project => { root.create_project(); }
             }
-            if root.screen == 2: UpdateProjectScreen {
+            if root.screen == 3: UpdateProjectScreen {
                 destination <=> root.destination;
                 module_names <=> root.module_names;
                 busy: root.busy;
-                back => { root.screen = 0; }
+                back => { root.screen = 1; }
                 choose_destination => { root.choose_destination(); }
                 update_project => { root.update_project(); }
             }
-            if root.screen == 3: CreateCommunityModuleScreen {
+            if root.screen == 5: InstallMayaFluxScreen {
+                busy: root.busy;
+                back => { root.screen = 0; }
+                install_mayaflux(channel) => { root.install_mayaflux(channel); }
+            }
+            if root.screen == 4: CreateCommunityModuleScreen {
                 module_name <=> root.module_name;
                 module_description <=> root.module_description;
                 module_min_version <=> root.module_min_version;
                 destination <=> root.destination;
                 community_needs_lila <=> root.community_needs_lila;
-                back => { root.screen = 0; }
+                back => { root.screen = 1; }
                 choose_destination => { root.choose_destination(); }
                 create_community_module => { root.create_community_module(); }
             }
         }
         if root.result_open: ResultDialog {
+            result_busy: root.result_busy;
             result_kind: root.result_kind;
             result_title: root.result_title;
             result_message: root.result_message;
             close => { root.result_open = false; }
+        }
+        if root.conflict_confirmation_open: ConfirmationDialog {
+            title: root.conflict_confirmation_title;
+            message: root.conflict_confirmation_message;
+            confirm => { root.confirm_install_replacement(); }
+            cancel => { root.cancel_install_replacement(); }
         }
     }
 }

@@ -1,0 +1,30 @@
+import { VerticalBox } from "std-widgets.slint";
+import { WeaveTheme } from "../theme.slint";
+import { ActionCard } from "../components.slint";
+
+export component LandingScreen inherits VerticalBox {
+    in property <bool> install_available;
+    callback install_mayaflux;
+    callback projects;
+
+    spacing: 16px;
+    Text { text: "Welcome to Weave"; color: WeaveTheme.accent; font-size: WeaveTheme.font-page-title; font-weight: 650; }
+    Text { text: "Choose what you want to do."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-body; }
+    Rectangle { vertical-stretch: 1; background: transparent; }
+    if root.install_available: ActionCard {
+        eyebrow: "MAYAFLUX TOOLCHAIN";
+        heading: "Install MayaFlux";
+        detail: "Install or switch the MayaFlux edition for this Mac.";
+        accent: WeaveTheme.action-accent;
+        clicked => { root.install_mayaflux(); }
+    }
+    ActionCard {
+        eyebrow: "PROJECT WORKSPACE";
+        heading: "Projects";
+        detail: "Create projects, update them with community modules, or create a module.";
+        accent: WeaveTheme.action-accent;
+        clicked => { root.projects(); }
+    }
+    Rectangle { vertical-stretch: 1; background: transparent; }
+    Text { text: "MayaFlux installation and project work are separate operations."; color: WeaveTheme.text-muted; font-size: WeaveTheme.font-caption; wrap: word-wrap; }
+}

@@ -1,13 +1,15 @@
 import { VerticalBox } from "std-widgets.slint";
 import { WeaveTheme } from "../theme.slint";
-import { ActionCard } from "../components.slint";
+import { ActionCard, AppButton } from "../components.slint";
 
 export component ProjectsScreen inherits VerticalBox {
+    callback back;
     callback create_project;
     callback update_project;
     callback create_community_module;
 
     spacing: 16px;
+    AppButton { text: "←  Home"; clicked => { root.back(); } }
     Text { text: "Projects"; color: WeaveTheme.accent; font-size: WeaveTheme.font-page-title; font-weight: 650; }
     Text { text: "Create and maintain portable MayaFlux projects and community modules."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-body; wrap: word-wrap; }
     Rectangle { height: 8px; background: transparent; }

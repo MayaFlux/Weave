@@ -1,4 +1,5 @@
 use crate::community::{CommunityCreationResult, CommunityModuleOptions, create_community_module};
+use crate::install;
 use crate::project::{ProjectCreationResult, ProjectOptions, create_project};
 use crate::update;
 use std::path::Path;
@@ -8,6 +9,19 @@ pub fn run_cli(arguments: &[String]) -> ExitCode {
     if arguments[0] == "--help" || arguments[0] == "-h" {
         print_usage();
         return ExitCode::SUCCESS;
+    }
+
+    if arguments[0] == "install" {
+        return match run_install(&arguments[1..]) {
+            Ok(message) => {
+                println!("{message}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("[Weave ERROR] {error}");
+                ExitCode::FAILURE
+            }
+        };
     }
 
     if arguments[0] == "community" {
@@ -55,6 +69,24 @@ pub fn run_cli(arguments: &[String]) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+fn run_install(arguments: &[String]) -> Result<String, String> {
+    let mut channel = None;
+    let mut replace_conflict = false;
+    for argument in arguments {
+        match argument.as_str() {
+            "--replace-conflict" => replace_conflict = true,
+            value if value.starts_with('-') => return Err(format!("Unknown option: {value}")),
+            value if channel.is_none() => channel = Some(value),
+            value => return Err(format!("Unexpected argument: {value}")),
+        }
+    }
+    let channel = channel.ok_or_else(|| {
+        "Usage: weave install <stable|development> [--replace-conflict]".to_owned()
+    })?;
+    install::install_mayaflux(channel, replace_conflict, |line| println!("{line}"))
+        .map_err(|error| error.to_string())
 }
 
 fn run_new(arguments: &[String]) -> Result<ProjectCreationResult, String> {
@@ -134,6 +166,6 @@ fn run_community(arguments: &[String]) -> Result<CommunityCreationResult, String
 
 fn print_usage() {
     println!(
-        "Weave - MayaFlux project tool\n\nUsage:\n  weave                 Open the Projects screen\n  weave new <name> [destination] [options]\n  weave update <project-dir> <module-name>[,<module-name>...]\n  weave community <module-name> [destination-dir] [options]\n  weave --help\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila"
+        "Weave - MayaFlux project tool\n\nUsage:\n  weave                 Open the Projects screen\n  weave new <name> [destination] [options]\n  weave update <project-dir> <module-name>[,<module-name>...]\n  weave community <module-name> [destination-dir] [options]\n  weave install <stable|development> [--replace-conflict]\n  weave --help\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila"
     );
 }

@@ -1,0 +1,35 @@
+import { HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { WeaveTheme } from "../theme.slint";
+import { ActionCard, AppButton } from "../components.slint";
+
+export component InstallMayaFluxScreen inherits VerticalBox {
+    in property <bool> busy;
+    callback back;
+    callback install_mayaflux(string);
+
+    spacing: 14px;
+    AppButton { text: "←  Projects"; clicked => { root.back(); } }
+    Text { text: "Install MayaFlux"; color: WeaveTheme.accent; font-size: WeaveTheme.font-heading; font-weight: 650; }
+    Text { text: "Install MayaFlux through Homebrew. The install runs as your logged-in user. If Homebrew is missing, its signed Apple Silicon package opens in macOS Installer for authorization."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-description; wrap: word-wrap; }
+    Rectangle { vertical-stretch: 1; background: transparent; }
+    HorizontalBox {
+        spacing: 18px;
+        ActionCard {
+            eyebrow: "RECOMMENDED RELEASE";
+            heading: "Stable";
+            detail: root.busy ? "Installation is in progress…" : "Install the current stable MayaFlux release.";
+            accent: WeaveTheme.action-accent;
+            clicked => { if (!root.busy) { root.install_mayaflux("stable"); } }
+        }
+        ActionCard {
+            eyebrow: "LATEST DEVELOPMENT";
+            heading: "Development";
+            detail: root.busy ? "Installation is in progress…" : "Install the latest development build.";
+            accent: WeaveTheme.action-accent;
+            clicked => { if (!root.busy) { root.install_mayaflux("development"); } }
+        }
+    }
+    Rectangle { vertical-stretch: 1; background: transparent; }
+    Text { text: "If the other edition is installed, Weave will ask before replacing it."; color: WeaveTheme.text-muted; font-size: WeaveTheme.font-caption; wrap: word-wrap; horizontal-alignment: center; }
+    AppButton { text: "Back to Projects"; enabled: !root.busy; clicked => { root.back(); } }
+}

@@ -2,6 +2,7 @@ mod cli;
 mod community;
 mod git;
 mod gui;
+mod install;
 mod platform;
 mod project;
 mod update;

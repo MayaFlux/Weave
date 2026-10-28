@@ -7,6 +7,15 @@ mod macos;
 #[cfg(target_os = "windows")]
 mod windows;
 
+#[cfg(target_os = "macos")]
+pub fn install_macos(
+    channel: &str,
+    replace_conflict: bool,
+    log: &(impl Fn(&str) + Sync),
+) -> Result<String, crate::install::InstallError> {
+    macos::install_macos(channel, replace_conflict, log)
+}
+
 pub fn shader_source_root() -> Result<PathBuf, String> {
     if let Some(root) = std::env::var_os("MAYAFLUX_ROOT").filter(|root| !root.is_empty()) {
         return Ok(PathBuf::from(root).join("share/MayaFlux/src/shaders"));

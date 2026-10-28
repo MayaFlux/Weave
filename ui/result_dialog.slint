@@ -1,4 +1,4 @@
-import { HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
 import { WeaveTheme } from "./theme.slint";
 import { AppButton } from "./components.slint";
 
@@ -6,6 +6,7 @@ export component ResultDialog inherits Rectangle {
     in property <int> result_kind;
     in property <string> result_title;
     in property <string> result_message;
+    in property <bool> result_busy;
     callback close;
 
     x: 0px;
@@ -18,8 +19,8 @@ export component ResultDialog inherits Rectangle {
     Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        width: 520px;
-        height: 270px;
+        width: 700px;
+        height: root.result_busy ? 520px : 300px;
         border-radius: 6px;
         border-width: 1px;
         border-color: WeaveTheme.border-strong;
@@ -32,7 +33,7 @@ export component ResultDialog inherits Rectangle {
                     width: 34px; height: 34px; border-radius: 4px;
                     background: root.result_kind == 2 ? WeaveTheme.error-background : root.result_kind == 1 ? WeaveTheme.warning-background : WeaveTheme.success-background;
                     Text {
-                        text: root.result_kind == 2 ? "!" : root.result_kind == 1 ? "!" : "✓";
+                    text: root.result_busy ? "…" : root.result_kind == 2 ? "!" : root.result_kind == 1 ? "!" : "✓";
                         color: root.result_kind == 2 ? WeaveTheme.error-text : root.result_kind == 1 ? WeaveTheme.warning-text : WeaveTheme.success-text;
                         font-size: WeaveTheme.font-icon; font-weight: 700;
                         horizontal-alignment: center; vertical-alignment: center;
@@ -40,15 +41,33 @@ export component ResultDialog inherits Rectangle {
                 }
                 VerticalBox {
                     spacing: 2px;
-                    Text { text: root.result_kind == 2 ? "FAILED" : root.result_kind == 1 ? "COMPLETED WITH WARNING" : "COMPLETED"; color: root.result_kind == 2 ? WeaveTheme.error-text : root.result_kind == 1 ? WeaveTheme.warning-text : WeaveTheme.success-text; font-size: WeaveTheme.font-tiny; font-weight: 700; }
+                    Text { text: root.result_busy ? "IN PROGRESS" : root.result_kind == 2 ? "FAILED" : root.result_kind == 1 ? "COMPLETED WITH WARNING" : "COMPLETED"; color: root.result_busy ? WeaveTheme.accent : root.result_kind == 2 ? WeaveTheme.error-text : root.result_kind == 1 ? WeaveTheme.warning-text : WeaveTheme.success-text; font-size: WeaveTheme.font-tiny; font-weight: 700; }
                     Text { text: root.result_title; color: WeaveTheme.text-primary; font-size: WeaveTheme.font-dialog-title; font-weight: 650; wrap: word-wrap; }
                 }
             }
             Rectangle { height: 1px; background: WeaveTheme.border; }
-            Text { text: root.result_message; color: WeaveTheme.text-body; font-size: WeaveTheme.font-small; wrap: word-wrap; vertical-stretch: 1; }
+            ScrollView {
+                vertical-stretch: 1;
+                content-height: log_text.preferred-height + 16px;
+                content-y: max(0px, self.content-height - self.visible-height);
+                Rectangle {
+                    width: parent.width;
+                    height: log_text.preferred-height + 16px;
+                    background: WeaveTheme.window-background;
+                    log_text := Text {
+                        x: 10px; y: 8px; width: parent.width - 20px;
+                        height: self.preferred-height;
+                        text: root.result_message;
+                        color: WeaveTheme.text-body;
+                        font-size: WeaveTheme.font-small;
+                        wrap: word-wrap;
+                        vertical-alignment: top;
+                    }
+                }
+            }
             HorizontalBox {
                 Rectangle { horizontal-stretch: 1; background: transparent; }
-                AppButton { text: "Close"; primary: true; clicked => { root.close(); } }
+                AppButton { text: root.result_busy ? "Hide" : "Close"; primary: true; clicked => { root.close(); } }
             }
         }
     }
