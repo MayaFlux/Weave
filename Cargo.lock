@@ -4628,6 +4628,7 @@ dependencies = [
 name = "weave"
 version = "0.6.0"
 dependencies = [
+ "libc",
  "rfd",
  "serde_json",
  "slint",

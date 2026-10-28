@@ -85,7 +85,7 @@ fn run_install(arguments: &[String]) -> Result<String, String> {
     let channel = channel.ok_or_else(|| {
         "Usage: weave install <stable|development> [--replace-conflict]".to_owned()
     })?;
-    install::install_mayaflux(channel, replace_conflict, |line| println!("{line}"))
+    install::install_mayaflux(channel, replace_conflict, None, |line| println!("{line}"))
         .map_err(|error| error.to_string())
 }
 

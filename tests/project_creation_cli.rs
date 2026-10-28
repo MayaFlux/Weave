@@ -1,4 +1,6 @@
 use std::fs;
+#[cfg(target_os = "linux")]
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -29,6 +31,16 @@ impl Drop for TestDirectory {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.0);
     }
+}
+
+#[cfg(target_os = "linux")]
+fn write_fake_tool(bin: &Path, name: &str, script: &str) {
+    use std::os::unix::fs::PermissionsExt;
+    let path = bin.join(name);
+    fs::write(&path, script).unwrap();
+    let mut permissions = fs::metadata(&path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions).unwrap();
 }
 
 #[test]
@@ -160,8 +172,192 @@ fn cli_rejects_invalid_install_channel_without_starting_an_install() {
     let error = String::from_utf8_lossy(&result.stderr);
     #[cfg(target_os = "macos")]
     assert!(error.contains("Unsupported MayaFlux install channel: nightly"));
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    assert!(error.contains("Unsupported MayaFlux install channel: nightly"));
+    #[cfg(target_os = "windows")]
     assert!(error.contains("not yet supported on this operating system"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_installs_on_ubuntu_with_fake_package_tools_only() {
+    use std::os::unix::fs::PermissionsExt;
+    let temporary = TestDirectory::new();
+    let bin = temporary.0.join("bin");
+    fs::create_dir(&bin).unwrap();
+    let log = temporary.0.join("commands.log");
+    let state = temporary.0.join("installed");
+    for (name, script) in [
+        ("sudo", "#!/bin/sh\nexec \"$@\"\n"),
+        (
+            "apt-get",
+            "#!/bin/sh\nprintf '%s\\n' \"apt-get $*\" >> \"$WEAVE_TEST_LOG\"\nif [ \"$1\" = install ]; then printf installed > \"$WEAVE_TEST_STATE\"; fi\n",
+        ),
+        (
+            "add-apt-repository",
+            "#!/bin/sh\nprintf '%s\\n' \"add-apt-repository $*\" >> \"$WEAVE_TEST_LOG\"\n",
+        ),
+        (
+            "dpkg-query",
+            "#!/bin/sh\nif [ \"$3\" = mayaflux ] && [ -f \"$WEAVE_TEST_STATE\" ]; then printf 'install ok installed'; else exit 1; fi\n",
+        ),
+    ] {
+        let path = bin.join(name);
+        fs::write(&path, script).unwrap();
+        let mut permissions = fs::metadata(&path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(path, permissions).unwrap();
+    }
+    let result = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args(["install", "stable"])
+        .env("PATH", &bin)
+        .env("WEAVE_TEST_LOG", &log)
+        .env("WEAVE_TEST_STATE", &state)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(String::from_utf8_lossy(&result.stdout).contains("mayaflux installed and verified"));
+    assert_eq!(
+        fs::read_to_string(log).unwrap(),
+        "add-apt-repository -y ppa:mayaflux/mayaflux\napt-get update\napt-get install -y mayaflux\n"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_fedora_requires_conflict_approval_then_removes_and_installs() {
+    let temporary = TestDirectory::new();
+    let bin = temporary.0.join("bin");
+    fs::create_dir(&bin).unwrap();
+    let log = temporary.0.join("commands.log");
+    let state = temporary.0.join("installed");
+    fs::write(&state, "mayaflux-dev").unwrap();
+    write_fake_tool(&bin, "sudo", "#!/bin/sh\nexec \"$@\"\n");
+    write_fake_tool(
+        &bin,
+        "rpm",
+        "#!/bin/sh\nread -r installed < \"$WEAVE_TEST_STATE\"\n[ \"$1\" = -q ] && [ \"$2\" = \"$installed\" ]\n",
+    );
+    write_fake_tool(
+        &bin,
+        "dnf",
+        "#!/bin/sh\nprintf 'dnf %s\\n' \"$*\" >> \"$WEAVE_TEST_LOG\"\nif [ \"$1\" = \"$WEAVE_FAIL\" ]; then exit 9; fi\nif [ \"$1\" = remove ]; then : > \"$WEAVE_TEST_STATE\"; fi\nif [ \"$1\" = install ]; then printf '%s' \"$3\" > \"$WEAVE_TEST_STATE\"; fi\n",
+    );
+    let run = |replace: bool, fail_step: &str| {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_weave"));
+        command
+            .args(["install", "stable"])
+            .env("PATH", &bin)
+            .env("WEAVE_TEST_LOG", &log)
+            .env("WEAVE_TEST_STATE", &state)
+            .env("WEAVE_FAIL", fail_step);
+        if replace {
+            command.arg("--replace-conflict");
+        }
+        command.output().unwrap()
+    };
+    let refused = run(false, "");
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("mayaflux-dev"));
+    assert_eq!(fs::read_to_string(&state).unwrap(), "mayaflux-dev");
+    assert!(!log.exists());
+
+    let failed = run(true, "copr");
+    assert!(!failed.status.success());
+    assert!(String::from_utf8_lossy(&failed.stderr).contains("restore"));
+    assert_eq!(fs::read_to_string(&state).unwrap(), "");
+
+    let approved = run(true, "");
+    assert!(
+        approved.status.success(),
+        "{}",
+        String::from_utf8_lossy(&approved.stderr)
+    );
+    assert_eq!(fs::read_to_string(&state).unwrap(), "mayaflux");
+    assert_eq!(
+        fs::read_to_string(&log).unwrap(),
+        "dnf remove -y mayaflux-dev\ndnf copr enable -y ranjithshegde/spirv-cross\ndnf copr enable -y ranjithshegde/spirv-cross\ndnf copr enable -y ranjithshegde/asio-standalone\ndnf copr enable -y ranjithshegde/mayaflux\ndnf install -y mayaflux\n"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_arch_uses_fresh_checkout_and_cleans_it_after_install() {
+    let temporary = TestDirectory::new();
+    let bin = temporary.0.join("bin");
+    fs::create_dir(&bin).unwrap();
+    let log = temporary.0.join("commands.log");
+    let state = temporary.0.join("installed");
+    fs::write(&state, "mayaflux-dev-bin").unwrap();
+    write_fake_tool(&bin, "sudo", "#!/bin/sh\nexec \"$@\"\n");
+    write_fake_tool(
+        &bin,
+        "pacman",
+        "#!/bin/sh\nread -r installed < \"$WEAVE_TEST_STATE\"\nif [ \"$1\" = -Qq ]; then [ \"$2\" = \"$installed\" ] && printf '%s\\n' \"$2\"; exit; fi\nprintf 'pacman %s\\n' \"$*\" >> \"$WEAVE_TEST_LOG\"\n: > \"$WEAVE_TEST_STATE\"\n",
+    );
+    write_fake_tool(
+        &bin,
+        "git",
+        "#!/bin/sh\nprintf 'git %s\\n' \"$*\" >> \"$WEAVE_TEST_LOG\"\n[ -d \"$3\" ]\n",
+    );
+    write_fake_tool(
+        &bin,
+        "makepkg",
+        "#!/bin/sh\nprintf 'makepkg %s\\n' \"$*\" >> \"$WEAVE_TEST_LOG\"\n[ -d \"$2\" ] || exit 3\nprintf mayaflux-bin > \"$WEAVE_TEST_STATE\"\n",
+    );
+    let result = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args(["install", "stable", "--replace-conflict"])
+        .env("PATH", &bin)
+        .env("WEAVE_TEST_LOG", &log)
+        .env("WEAVE_TEST_STATE", &state)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(fs::read_to_string(&state).unwrap(), "mayaflux-bin");
+    let commands = fs::read_to_string(&log).unwrap();
+    let lines: Vec<_> = commands.lines().collect();
+    assert_eq!(lines.len(), 3);
+    assert_eq!(lines[0], "pacman -R --noconfirm mayaflux-dev-bin");
+    assert!(lines[1].starts_with("git clone https://aur.archlinux.org/mayaflux-bin.git "));
+    let checkout = Path::new(lines[1].split_whitespace().last().unwrap());
+    assert!(lines[2].starts_with(&format!(
+        "makepkg --dir {} -si --noconfirm",
+        checkout.display()
+    )));
+    assert!(!checkout.exists());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_reports_missing_host_tool_before_package_query_or_change() {
+    let temporary = TestDirectory::new();
+    let bin = temporary.0.join("bin");
+    fs::create_dir(&bin).unwrap();
+    let log = temporary.0.join("commands.log");
+    for name in ["sudo", "apt-get", "dpkg-query"] {
+        write_fake_tool(
+            &bin,
+            name,
+            "#!/bin/sh\nprintf 'called\\n' >> \"$WEAVE_TEST_LOG\"\n",
+        );
+    }
+    let result = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args(["install", "stable", "--replace-conflict"])
+        .env("PATH", &bin)
+        .env("WEAVE_TEST_LOG", &log)
+        .output()
+        .unwrap();
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("add-apt-repository"));
+    assert!(!log.exists());
 }
 
 #[test]

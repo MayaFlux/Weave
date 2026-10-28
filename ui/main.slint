@@ -32,8 +32,13 @@ export component MainWindow inherits Window {
     in-out property <string> conflict_confirmation_title: "";
     in-out property <string> conflict_confirmation_message: "";
     in-out property <string> pending_install_channel: "";
+    in-out property <bool> install_replace_confirmed: false;
+    in-out property <string> install_password: "";
+    in-out property <string> install_channel: "stable";
+    in-out property <int> install_step: 1;
     in-out property <bool> busy: false;
     in property <bool> install_available: false;
+    in property <bool> linux_install: false;
     in-out property <bool> community_needs_lila: false;
     in-out property <bool> with_lila: false;
     in-out property <bool> with_vscode: true;
@@ -43,6 +48,7 @@ export component MainWindow inherits Window {
     callback create_community_module();
     callback update_project();
     callback install_mayaflux(string);
+    callback prepare_install_mayaflux(string);
     callback confirm_install_replacement();
     callback cancel_install_replacement();
 
@@ -66,7 +72,13 @@ export component MainWindow inherits Window {
             }
             if root.screen == 0: LandingScreen {
                 install_available: root.install_available;
-                install_mayaflux => { root.screen = 5; }
+                linux_install: root.linux_install;
+                install_mayaflux => {
+                    root.install_step = 1;
+                    root.install_password = "";
+                    root.install_replace_confirmed = false;
+                    root.screen = 5;
+                }
                 projects => { root.screen = 1; }
             }
             if root.screen == 1: ProjectsScreen {
@@ -95,8 +107,13 @@ export component MainWindow inherits Window {
             }
             if root.screen == 5: InstallMayaFluxScreen {
                 busy: root.busy;
-                back => { root.screen = 0; }
+                linux_install: root.linux_install;
+                install_step <=> root.install_step;
+                install_channel <=> root.install_channel;
+                install_password <=> root.install_password;
+                back => { root.install_password = ""; root.screen = 0; }
                 install_mayaflux(channel) => { root.install_mayaflux(channel); }
+                prepare_install_mayaflux(channel) => { root.prepare_install_mayaflux(channel); }
             }
             if root.screen == 4: CreateCommunityModuleScreen {
                 module_name <=> root.module_name;

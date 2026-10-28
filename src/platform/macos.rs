@@ -1,7 +1,7 @@
+use crate::install::run_command_with_log;
 use std::fs;
-use std::io::Read;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 pub fn shader_source_root() -> Option<PathBuf> {
     for brew in brew_candidates() {
@@ -384,50 +384,6 @@ fn run_brew_with_log(
         Ok(())
     } else {
         Err(format!("command exited with {status}"))
-    }
-}
-
-fn run_command_with_log(
-    command: &mut Command,
-    label: &str,
-    log: &(impl Fn(&str) + Sync),
-) -> Result<std::process::ExitStatus, String> {
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = command
-        .spawn()
-        .map_err(|error| format!("could not launch {label}: {error}"))?;
-    let stdout = child.stdout.take().expect("stdout was piped");
-    let stderr = child.stderr.take().expect("stderr was piped");
-    let status = std::thread::scope(|scope| {
-        scope.spawn(|| stream_output(stdout, log));
-        scope.spawn(|| stream_output(stderr, log));
-        child.wait()
-    })
-    .map_err(|error| format!("could not wait for {label}: {error}"))?;
-    Ok(status)
-}
-
-fn stream_output(mut output: impl Read, log: &(impl Fn(&str) + Sync)) {
-    let mut buffer = [0_u8; 4096];
-    let mut pending = Vec::new();
-    loop {
-        let count = match output.read(&mut buffer) {
-            Ok(0) | Err(_) => break,
-            Ok(count) => count,
-        };
-        for byte in &buffer[..count] {
-            if *byte == b'\n' || *byte == b'\r' {
-                if !pending.is_empty() {
-                    log(&String::from_utf8_lossy(&pending));
-                    pending.clear();
-                }
-            } else {
-                pending.push(*byte);
-            }
-        }
-    }
-    if !pending.is_empty() {
-        log(&String::from_utf8_lossy(&pending));
     }
 }
 
