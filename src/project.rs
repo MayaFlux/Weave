@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::fs;
 use std::io;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 const SHADER_EXTENSIONS: &[&str] = &[
     "glsl", "vert", "frag", "comp", "geom", "tesc", "tese", "mesh", "task", "rgen",
@@ -92,37 +92,19 @@ fn resolve_destination(destination: &Path) -> Result<PathBuf, ProjectCreationErr
         std::env::current_dir()?.join(destination)
     };
 
-    let mut current = PathBuf::new();
-    for component in absolute.components() {
-        match component {
-            Component::Prefix(_) | Component::RootDir => current.push(component.as_os_str()),
-            Component::CurDir => {}
-            Component::ParentDir => {
-                current.pop();
-            }
-            Component::Normal(part) => {
-                current.push(part);
-                match fs::symlink_metadata(&current) {
-                    Ok(metadata) if metadata.file_type().is_symlink() => {
-                        return Err(ProjectCreationError(format!(
-                            "Project destination contains a symbolic link: {}",
-                            current.display()
-                        )));
-                    }
-                    Ok(_) => {}
-                    Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                        return Err(ProjectCreationError(format!(
-                            "Project destination does not exist: {}",
-                            current.display()
-                        )));
-                    }
-                    Err(error) => return Err(error.into()),
-                }
-            }
-        }
+    let metadata = fs::symlink_metadata(&absolute).map_err(|error| {
+        ProjectCreationError(format!(
+            "Project destination does not exist: {}: {error}",
+            absolute.display()
+        ))
+    })?;
+    if metadata.file_type().is_symlink() {
+        return Err(ProjectCreationError(format!(
+            "Project destination is a symbolic link: {}",
+            absolute.display()
+        )));
     }
-
-    if !absolute.is_dir() {
+    if !metadata.is_dir() {
         return Err(ProjectCreationError(format!(
             "Project destination must be an existing directory: {}",
             absolute.display()
@@ -361,7 +343,10 @@ mod tests {
         let temporary = TestDirectory::new();
         let project = create_project("AudioDemo", &temporary.0, ProjectOptions::default()).unwrap();
 
-        assert_eq!(project, temporary.0.join("AudioDemo"));
+        assert_eq!(
+            project,
+            fs::canonicalize(&temporary.0).unwrap().join("AudioDemo")
+        );
         assert!(project.join("src/main.cpp").is_file());
         assert!(project.join("src/user_project.hpp").is_file());
         assert!(project.join("CMakePresets.json").is_file());

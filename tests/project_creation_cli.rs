@@ -85,3 +85,91 @@ fn cli_does_not_overwrite_an_existing_project() {
     assert!(!result.status.success());
     assert_eq!(fs::read_to_string(project.join("keep.txt")).unwrap(), "preserve");
 }
+
+#[test]
+fn cli_creates_a_community_module_from_embedded_templates() {
+    let temporary = TestDirectory::new();
+    let result = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args([
+            "community",
+            "audio_tools",
+            temporary.0.to_str().unwrap(),
+            "--description",
+            "Audio \"helpers\"",
+            "--min-version",
+            "0.6.0",
+            "--with-lila",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    let module = temporary.0.join("audio_tools");
+    assert!(module.join("src").is_dir());
+    assert!(!module.join("src/audio_tools.cpp").exists());
+    assert!(module.join("CMakeLists.txt").is_file());
+    assert!(module.join("README.md").is_file());
+    assert!(module.join("test/test_audio_tools.cpp").is_file());
+    assert!(module.join("audio_tools.cmake").is_file());
+    let manifest_text = fs::read_to_string(module.join("community.json")).unwrap();
+    let manifest: serde_json::Value = serde_json::from_str(&manifest_text).unwrap();
+    assert_eq!(manifest["name"], "audio_tools");
+    assert_eq!(manifest["min_version"], "0.6.0");
+    assert_eq!(manifest["needs_lila"], true);
+    assert_eq!(manifest["description"], "Audio \"helpers\"");
+    let cmake = fs::read_to_string(module.join("audio_tools.cmake")).unwrap();
+    assert!(cmake.contains("set(MF_NEEDS_LILA ON)"));
+    assert!(cmake.contains("set(MF_MIN_VERSION \"0.6.0\")"));
+    let test_cmake = fs::read_to_string(module.join("test/CMakeLists.txt")).unwrap();
+    assert!(test_cmake.contains("set(MF_NEEDS_LILA ON)"));
+    assert!(test_cmake.contains("set(MF_MIN_VERSION \"0.6.0\")"));
+    assert!(fs::read_to_string(module.join("CMakeLists.txt")).unwrap().contains("add_subdirectory(test)"));
+    assert!(fs::read_to_string(module.join("README.md")).unwrap().contains("Audio \"helpers\""));
+    assert!(!manifest_text.contains("@MODULE_NAME@"));
+
+    let default_result = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args(["community", "default_module", temporary.0.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(default_result.status.success(), "{}", String::from_utf8_lossy(&default_result.stderr));
+    let default_module = temporary.0.join("default_module");
+    let default_manifest: serde_json::Value = serde_json::from_slice(
+        &fs::read(default_module.join("community.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(default_manifest["min_version"], "0.5.0");
+    assert_eq!(default_manifest["needs_lila"], false);
+    assert!(fs::read_to_string(default_module.join("default_module.cmake")).unwrap().contains("set(MF_NEEDS_LILA OFF)"));
+}
+
+#[test]
+fn cli_rejects_invalid_community_names_without_writing_files() {
+    let temporary = TestDirectory::new();
+    let result = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args(["community", "Bad-Name", temporary.0.to_str().unwrap()])
+        .output()
+        .unwrap();
+
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("Module name"));
+    assert_eq!(fs::read_dir(&temporary.0).unwrap().count(), 0);
+}
+
+#[test]
+fn cli_rejects_invalid_community_minimum_versions_without_writing_files() {
+    let temporary = TestDirectory::new();
+    let result = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args([
+            "community",
+            "audio_tools",
+            temporary.0.to_str().unwrap(),
+            "--min-version",
+            "01.2.3",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("major.minor.patch"));
+    assert_eq!(fs::read_dir(&temporary.0).unwrap().count(), 0);
+}
