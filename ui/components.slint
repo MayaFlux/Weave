@@ -1,0 +1,94 @@
+import { WeaveTheme } from "./theme.slint";
+import { VerticalBox } from "std-widgets.slint";
+
+export component ActionCard inherits Rectangle {
+    in property <string> eyebrow;
+    in property <string> heading;
+    in property <string> detail;
+    in property <color> accent: WeaveTheme.action-accent;
+    callback clicked;
+
+    height: 104px;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: WeaveTheme.border;
+    background: WeaveTheme.panel-background;
+
+    Rectangle {
+        x: 0px;
+        y: 18px;
+        width: 4px;
+        height: parent.height - 36px;
+        border-radius: 2px;
+        background: root.accent;
+    }
+
+    VerticalBox {
+        x: 24px;
+        y: 18px;
+        width: parent.width - 76px;
+        height: parent.height - 36px;
+        spacing: 3px;
+        Text { text: root.eyebrow; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-tiny; font-weight: 600; }
+        Text { text: root.heading; color: WeaveTheme.accent; font-size: WeaveTheme.font-card-title; font-weight: 600; }
+        Text { text: root.detail; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-small; wrap: word-wrap; }
+    }
+
+    Text {
+        x: parent.width - 48px;
+        y: (parent.height - self.height) / 2;
+        text: "→";
+        color: root.accent;
+        font-size: WeaveTheme.font-arrow;
+    }
+
+    touch-area := TouchArea { clicked => { root.clicked(); } }
+
+    states [
+        hovered when touch-area.has-hover: {
+            background: WeaveTheme.panel-hover;
+            border-color: root.accent;
+        }
+        pressed when touch-area.pressed: { opacity: 0.78; }
+    ]
+}
+
+export component AppButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary: false;
+    in property <bool> enabled: true;
+    in property <color> accent: WeaveTheme.action-accent;
+    callback clicked;
+
+    height: 42px;
+    min-width: 116px;
+    border-radius: 4px;
+    background: root.primary ? root.accent : WeaveTheme.panel-background;
+    border-width: root.primary ? 0px : 1px;
+    border-color: WeaveTheme.border;
+    opacity: root.enabled ? 1 : 0.48;
+
+    Text {
+        x: 18px;
+        y: (parent.height - self.height) / 2;
+        width: parent.width - 36px;
+        text: root.text;
+        color: root.primary ? WeaveTheme.button-text : WeaveTheme.text-primary;
+        font-size: WeaveTheme.font-body;
+        font-weight: 650;
+        horizontal-alignment: center;
+    }
+
+    touch-area := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+
+    states [
+        hovered when touch-area.has-hover && root.enabled: {
+            background: root.primary ? root.accent.darker(0.08) : WeaveTheme.panel-hover;
+            border-color: root.primary ? root.accent : WeaveTheme.border-hover;
+        }
+        pressed when touch-area.pressed && root.enabled: { opacity: 0.78; }
+    ]
+}

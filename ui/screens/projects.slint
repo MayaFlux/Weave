@@ -1,0 +1,37 @@
+import { VerticalBox } from "std-widgets.slint";
+import { WeaveTheme } from "../theme.slint";
+import { ActionCard } from "../components.slint";
+
+export component ProjectsScreen inherits VerticalBox {
+    callback create_project;
+    callback update_project;
+    callback create_community_module;
+
+    spacing: 16px;
+    Text { text: "Projects"; color: WeaveTheme.accent; font-size: WeaveTheme.font-page-title; font-weight: 650; }
+    Text { text: "Create and maintain portable MayaFlux projects and community modules."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-body; wrap: word-wrap; }
+    Rectangle { height: 8px; background: transparent; }
+    ActionCard {
+        eyebrow: "START SOMETHING NEW";
+        heading: "Create Project";
+        detail: "Generate a ready-to-build CMake project with your preferred tools and options.";
+        accent: WeaveTheme.action-accent;
+        clicked => { root.create_project(); }
+    }
+    ActionCard {
+        eyebrow: "COMMUNITY MODULES";
+        heading: "Update Project";
+        detail: "Add and validate community modules in an existing MayaFlux project.";
+        accent: WeaveTheme.action-accent;
+        clicked => { root.update_project(); }
+    }
+    ActionCard {
+        eyebrow: "SHARE YOUR WORK";
+        heading: "Create Community Module";
+        detail: "Scaffold a portable module with a manifest, CMake setup, and tests.";
+        accent: WeaveTheme.action-accent;
+        clicked => { root.create_community_module(); }
+    }
+    Rectangle { vertical-stretch: 1; background: transparent; }
+    Text { text: "Projects remain ordinary CMake directories and can be opened in any editor."; color: WeaveTheme.text-muted; font-size: WeaveTheme.font-caption; wrap: word-wrap; }
+}

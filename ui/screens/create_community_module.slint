@@ -1,0 +1,48 @@
+import { CheckBox, HorizontalBox, LineEdit, VerticalBox } from "std-widgets.slint";
+import { WeaveTheme } from "../theme.slint";
+import { AppButton } from "../components.slint";
+
+export component CreateCommunityModuleScreen inherits VerticalBox {
+    in-out property <string> module_name;
+    in-out property <string> module_description;
+    in-out property <string> module_min_version;
+    in-out property <string> destination;
+    in-out property <bool> community_needs_lila;
+    callback back;
+    callback choose_destination;
+    callback create_community_module;
+
+    spacing: 14px;
+    AppButton { text: "←  Projects"; clicked => { root.back(); } }
+    Text { text: "Create a community module"; color: WeaveTheme.accent; font-size: WeaveTheme.font-heading; font-weight: 650; }
+    Text { text: "Set up a reusable module with its manifest and standalone CMake test project."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-description; }
+    Rectangle {
+        height: 420px;
+        background: WeaveTheme.panel-background;
+        border-width: 1px;
+        border-color: WeaveTheme.border;
+        border-radius: 6px;
+        VerticalBox {
+            x: 24px; y: 20px; width: parent.width - 48px; height: parent.height - 40px; spacing: 9px;
+            Text { text: "MODULE DETAILS"; color: WeaveTheme.accent; font-size: WeaveTheme.font-tiny; font-weight: 700; }
+            Text { text: "Module name"; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; }
+            LineEdit { text <=> root.module_name; placeholder-text: "snake_case name"; }
+            Text { text: "Description"; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; }
+            LineEdit { text <=> root.module_description; placeholder-text: "What does this module do?"; }
+            Text { text: "Minimum MayaFlux version"; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; }
+            LineEdit { text <=> root.module_min_version; placeholder-text: "0.5.0"; }
+            Text { text: "Create in"; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; }
+            HorizontalBox {
+                spacing: 12px;
+                Text { text: root.destination; color: WeaveTheme.text-primary; vertical-alignment: center; overflow: elide; }
+                AppButton { text: "Choose folder"; clicked => { root.choose_destination(); } }
+            }
+            CheckBox { text: "Requires Lila live coding"; checked <=> root.community_needs_lila; }
+        }
+    }
+    HorizontalBox {
+        AppButton { text: "Back"; clicked => { root.back(); } }
+        Rectangle { horizontal-stretch: 1; background: transparent; }
+        AppButton { text: "Create module"; primary: true; clicked => { root.create_community_module(); } }
+    }
+}

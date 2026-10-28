@@ -1,0 +1,96 @@
+import { HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { WeaveTheme } from "./theme.slint";
+import { ProjectsScreen } from "./screens/projects.slint";
+import { CreateProjectScreen } from "./screens/create_project.slint";
+import { UpdateProjectScreen } from "./screens/update_project.slint";
+import { CreateCommunityModuleScreen } from "./screens/create_community_module.slint";
+import { ResultDialog } from "./result_dialog.slint";
+
+export component MainWindow inherits Window {
+    title: "Weave";
+    width: 900px;
+    height: 760px;
+    default-font-family: WeaveTheme.font-family;
+    background: WeaveTheme.window-background;
+
+    in-out property <string> project_name: "MyProject";
+    in-out property <string> module_name: "my_module";
+    in-out property <string> module_description: "";
+    in-out property <string> module_min_version: "0.5.0";
+    in-out property <string> destination: "";
+    in-out property <int> screen: 0;
+    in-out property <string> module_names: "";
+    in-out property <bool> result_open: false;
+    in-out property <int> result_kind: 0;
+    in-out property <string> result_title: "";
+    in-out property <string> result_message: "";
+    in-out property <bool> busy: false;
+    in-out property <bool> community_needs_lila: false;
+    in-out property <bool> with_lila: false;
+    in-out property <bool> with_vscode: true;
+    in-out property <bool> copy_shader_sources: false;
+    callback choose_destination();
+    callback create_project();
+    callback create_community_module();
+    callback update_project();
+
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        background: WeaveTheme.window-background;
+        VerticalBox {
+            padding: 30px;
+            spacing: 18px;
+            HorizontalBox {
+                height: 48px;
+                spacing: 12px;
+                VerticalBox {
+                    spacing: 2px;
+                    Text { text: "MAYAFLUX"; color: WeaveTheme.accent; font-size: WeaveTheme.font-caption; font-weight: 700; }
+                    Text { text: "WEAVE  /  PROJECT STUDIO"; color: WeaveTheme.text-primary; font-size: WeaveTheme.font-body; font-weight: 650; }
+                }
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+                Text { text: "0.6"; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; vertical-alignment: center; }
+            }
+            if root.screen == 0: ProjectsScreen {
+                create_project => { root.screen = 1; }
+                update_project => { root.screen = 2; }
+                create_community_module => { root.screen = 3; }
+            }
+            if root.screen == 1: CreateProjectScreen {
+                project_name <=> root.project_name;
+                destination <=> root.destination;
+                with_lila <=> root.with_lila;
+                with_vscode <=> root.with_vscode;
+                copy_shader_sources <=> root.copy_shader_sources;
+                back => { root.screen = 0; }
+                choose_destination => { root.choose_destination(); }
+                create_project => { root.create_project(); }
+            }
+            if root.screen == 2: UpdateProjectScreen {
+                destination <=> root.destination;
+                module_names <=> root.module_names;
+                busy: root.busy;
+                back => { root.screen = 0; }
+                choose_destination => { root.choose_destination(); }
+                update_project => { root.update_project(); }
+            }
+            if root.screen == 3: CreateCommunityModuleScreen {
+                module_name <=> root.module_name;
+                module_description <=> root.module_description;
+                module_min_version <=> root.module_min_version;
+                destination <=> root.destination;
+                community_needs_lila <=> root.community_needs_lila;
+                back => { root.screen = 0; }
+                choose_destination => { root.choose_destination(); }
+                create_community_module => { root.create_community_module(); }
+            }
+        }
+        if root.result_open: ResultDialog {
+            result_kind: root.result_kind;
+            result_title: root.result_title;
+            result_message: root.result_message;
+            close => { root.result_open = false; }
+        }
+    }
+}

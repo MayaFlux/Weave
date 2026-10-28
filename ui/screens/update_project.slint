@@ -1,0 +1,41 @@
+import { HorizontalBox, LineEdit, VerticalBox } from "std-widgets.slint";
+import { WeaveTheme } from "../theme.slint";
+import { AppButton } from "../components.slint";
+
+export component UpdateProjectScreen inherits VerticalBox {
+    in-out property <string> destination;
+    in-out property <string> module_names;
+    in property <bool> busy;
+    callback back;
+    callback choose_destination;
+    callback update_project;
+
+    spacing: 14px;
+    AppButton { text: "←  Projects"; clicked => { root.back(); } }
+    Text { text: "Update a project"; color: WeaveTheme.accent; font-size: WeaveTheme.font-heading; font-weight: 650; }
+    Text { text: "Select a project and enter one or more community module names."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-description; }
+    Rectangle {
+        height: 250px;
+        background: WeaveTheme.panel-background;
+        border-width: 1px;
+        border-color: WeaveTheme.border;
+        border-radius: 6px;
+        VerticalBox {
+            x: 24px; y: 22px; width: parent.width - 48px; height: parent.height - 44px; spacing: 12px;
+            Text { text: "PROJECT FOLDER"; color: WeaveTheme.accent; font-size: WeaveTheme.font-tiny; font-weight: 700; }
+            HorizontalBox {
+                spacing: 12px;
+                Text { text: root.destination; color: WeaveTheme.text-primary; vertical-alignment: center; overflow: elide; }
+                AppButton { text: "Choose project"; clicked => { root.choose_destination(); } }
+            }
+            Text { text: "COMMUNITY MODULES"; color: WeaveTheme.accent; font-size: WeaveTheme.font-tiny; font-weight: 700; }
+            LineEdit { text <=> root.module_names; placeholder-text: "terrain_field, audio_tools"; }
+            Text { text: "Weave checks registry and MayaFlux compatibility, validates module files, then registers the modules in community.cmake."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-small; wrap: word-wrap; }
+        }
+    }
+    HorizontalBox {
+        AppButton { text: "Back"; clicked => { root.back(); } }
+        Rectangle { horizontal-stretch: 1; background: transparent; }
+        AppButton { text: root.busy ? "Updating…" : "Update project"; primary: true; enabled: !root.busy; clicked => { root.update_project(); } }
+    }
+}

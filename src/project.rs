@@ -1,13 +1,13 @@
+use crate::git::initialize_repository;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use crate::git::initialize_repository;
 
 const SHADER_EXTENSIONS: &[&str] = &[
-    "glsl", "vert", "frag", "comp", "geom", "tesc", "tese", "mesh", "task", "rgen",
-    "rchit", "rahit", "rmiss", "rint", "rcall",
+    "glsl", "vert", "frag", "comp", "geom", "tesc", "tese", "mesh", "task", "rgen", "rchit",
+    "rahit", "rmiss", "rint", "rcall",
 ];
 
 #[derive(Clone, Copy, Debug)]
@@ -102,7 +102,10 @@ fn create_project_with_shader_root(
     }
 
     let git_warning = initialize_repository(&project_path, "project");
-    Ok(ProjectCreationResult { path: project_path, git_warning })
+    Ok(ProjectCreationResult {
+        path: project_path,
+        git_warning,
+    })
 }
 
 fn resolve_destination(destination: &Path) -> Result<PathBuf, ProjectCreationError> {
@@ -171,42 +174,106 @@ fn populate_project(
         .replace("@LILA_DEBUGGER_PATH@", lila_debugger)
         .replace("@LILA_DLL_COPY@", lila_dll_copy);
     let mut files = vec![
-        ("CMakeLists.txt", include_str!("../templates/CMakeLists.txt").replace("@PROJECT_NAME@", name), false),
-        ("CMakePresets.json", include_str!("../templates/CMakePresets.json").to_owned(), false),
-        ("src/main.cpp", include_str!("../templates/main.cpp").to_owned(), false),
-        ("src/user_project.hpp", include_str!("../templates/user_project.hpp").to_owned(), false),
+        (
+            "CMakeLists.txt",
+            include_str!("../templates/CMakeLists.txt").replace("@PROJECT_NAME@", name),
+            false,
+        ),
+        (
+            "CMakePresets.json",
+            include_str!("../templates/CMakePresets.json").to_owned(),
+            false,
+        ),
+        (
+            "src/main.cpp",
+            include_str!("../templates/main.cpp").to_owned(),
+            false,
+        ),
+        (
+            "src/user_project.hpp",
+            include_str!("../templates/user_project.hpp").to_owned(),
+            false,
+        ),
         ("cmake/mayaflux.cmake", mayaflux_cmake, false),
-        ("cmake/shaders.cmake", include_str!("../templates/cmake/shaders.cmake").to_owned(), false),
-        ("cmake/build_community.cmake", include_str!("../templates/cmake/build_community.cmake").to_owned(), false),
+        (
+            "cmake/shaders.cmake",
+            include_str!("../templates/cmake/shaders.cmake").to_owned(),
+            false,
+        ),
+        (
+            "cmake/build_community.cmake",
+            include_str!("../templates/cmake/build_community.cmake").to_owned(),
+            false,
+        ),
         ("community.cmake", String::new(), false),
-        (".gitignore", include_str!("../templates/.gitignore").to_owned(), false),
+        (
+            ".gitignore",
+            include_str!("../templates/.gitignore").to_owned(),
+            false,
+        ),
     ];
 
     #[cfg(target_os = "windows")]
     files.extend([
-        ("validate.ps1", include_str!("../templates/validate.ps1").to_owned(), false),
-        ("run-report.ps1", include_str!("../templates/run-report.ps1").replace("@PROJECT_NAME@", name), false),
+        (
+            "validate.ps1",
+            include_str!("../templates/validate.ps1").to_owned(),
+            false,
+        ),
+        (
+            "run-report.ps1",
+            include_str!("../templates/run-report.ps1").replace("@PROJECT_NAME@", name),
+            false,
+        ),
         ("validate.bat", batch_launcher("validate.ps1"), false),
         ("run-report.bat", batch_launcher("run-report.ps1"), false),
     ]);
 
     #[cfg(target_os = "macos")]
     files.extend([
-        ("validate.sh", include_str!("../templates/validate-macos.sh").to_owned(), true),
-        ("run-report.sh", include_str!("../templates/run-report-macos.sh").replace("@PROJECT_NAME@", name), true),
+        (
+            "validate.sh",
+            include_str!("../templates/validate-macos.sh").to_owned(),
+            true,
+        ),
+        (
+            "run-report.sh",
+            include_str!("../templates/run-report-macos.sh").replace("@PROJECT_NAME@", name),
+            true,
+        ),
     ]);
 
     #[cfg(target_os = "linux")]
     files.extend([
-        ("validate.sh", include_str!("../templates/validate.sh").to_owned(), true),
-        ("run-report.sh", include_str!("../templates/run-report.sh").replace("@PROJECT_NAME@", name), true),
+        (
+            "validate.sh",
+            include_str!("../templates/validate.sh").to_owned(),
+            true,
+        ),
+        (
+            "run-report.sh",
+            include_str!("../templates/run-report.sh").replace("@PROJECT_NAME@", name),
+            true,
+        ),
     ]);
 
     if options.with_vscode {
         files.extend([
-            (".vscode/settings.json", include_str!("../templates/vscode/settings.json").replace("@PROJECT_NAME@", name), false),
-            (".vscode/tasks.json", include_str!("../templates/vscode/tasks.json").replace("@PROJECT_NAME@", name), false),
-            (".vscode/launch.json", include_str!("../templates/vscode/launch.json").replace("@PROJECT_NAME@", name), false),
+            (
+                ".vscode/settings.json",
+                include_str!("../templates/vscode/settings.json").replace("@PROJECT_NAME@", name),
+                false,
+            ),
+            (
+                ".vscode/tasks.json",
+                include_str!("../templates/vscode/tasks.json").replace("@PROJECT_NAME@", name),
+                false,
+            ),
+            (
+                ".vscode/launch.json",
+                include_str!("../templates/vscode/launch.json").replace("@PROJECT_NAME@", name),
+                false,
+            ),
         ]);
     }
 
@@ -259,9 +326,7 @@ fn read_shader_sources() -> Result<Vec<(PathBuf, Vec<u8>)>, ProjectCreationError
 }
 
 fn read_shader_sources_at(root: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>, ProjectCreationError> {
-    if fs::symlink_metadata(root)
-        .is_ok_and(|metadata| metadata.file_type().is_symlink())
-    {
+    if fs::symlink_metadata(root).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
         return Err(ProjectCreationError(format!(
             "MayaFlux shader source directory is a symbolic link: {}",
             root.display()
@@ -293,7 +358,9 @@ fn read_shader_sources_at(root: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>, Projec
                     .path()
                     .extension()
                     .and_then(|value| value.to_str())
-                    .is_some_and(|extension| SHADER_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str()))
+                    .is_some_and(|extension| {
+                        SHADER_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
+                    })
             {
                 let path = entry.path();
                 let relative = path
@@ -320,7 +387,8 @@ fn validate_name(name: &str) -> Result<(), ProjectCreationError> {
     let valid_start = characters
         .next()
         .is_some_and(|character| character.is_ascii_alphabetic() || character == '_');
-    let valid_rest = characters.all(|character| character.is_ascii_alphanumeric() || character == '_');
+    let valid_rest =
+        characters.all(|character| character.is_ascii_alphanumeric() || character == '_');
     let uppercase = name.to_ascii_uppercase();
     let bytes = uppercase.as_bytes();
     let reserved = ["CON", "PRN", "AUX", "NUL"].contains(&uppercase.as_str())
@@ -350,14 +418,15 @@ mod tests {
 
             loop {
                 let sequence = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-                let path = std::env::temp_dir().join(format!(
-                    "weave-test-{}-{sequence}",
-                    std::process::id()
-                ));
+                let path = std::env::temp_dir()
+                    .join(format!("weave-test-{}-{sequence}", std::process::id()));
                 match fs::create_dir(&path) {
                     Ok(()) => return Self(path),
                     Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                    Err(error) => panic!("Could not create test directory {}: {error}", path.display()),
+                    Err(error) => panic!(
+                        "Could not create test directory {}: {error}",
+                        path.display()
+                    ),
                 }
             }
         }
@@ -372,7 +441,9 @@ mod tests {
     #[test]
     fn creates_project_from_embedded_templates() {
         let temporary = TestDirectory::new();
-        let project = create_project("AudioDemo", &temporary.0, ProjectOptions::default()).unwrap().path;
+        let project = create_project("AudioDemo", &temporary.0, ProjectOptions::default())
+            .unwrap()
+            .path;
 
         assert_eq!(
             project,
@@ -389,19 +460,31 @@ mod tests {
         assert!(project.join(".gitignore").is_file());
         assert!(project.join("README.md").is_file());
         #[cfg(target_os = "windows")]
-        for script in ["validate.ps1", "run-report.ps1", "validate.bat", "run-report.bat"] {
+        for script in [
+            "validate.ps1",
+            "run-report.ps1",
+            "validate.bat",
+            "run-report.bat",
+        ] {
             assert!(project.join(script).is_file());
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         for script in ["validate.sh", "run-report.sh"] {
             assert!(project.join(script).is_file());
         }
-        assert!(fs::read_to_string(project.join("CMakeLists.txt"))
+        assert!(
+            fs::read_to_string(project.join("CMakeLists.txt"))
+                .unwrap()
+                .contains("project(AudioDemo")
+        );
+        let presets: serde_json::Value =
+            serde_json::from_slice(&fs::read(project.join("CMakePresets.json")).unwrap()).unwrap();
+        let configure: Vec<_> = presets["configurePresets"]
+            .as_array()
             .unwrap()
-            .contains("project(AudioDemo"));
-        let presets: serde_json::Value = serde_json::from_slice(&fs::read(project.join("CMakePresets.json")).unwrap()).unwrap();
-        let configure: Vec<_> = presets["configurePresets"].as_array().unwrap().iter()
-            .map(|preset| preset["name"].as_str().unwrap()).collect();
+            .iter()
+            .map(|preset| preset["name"].as_str().unwrap())
+            .collect();
         assert!(configure.contains(&"debug"));
         assert!(configure.contains(&"release"));
         for preset in presets["buildPresets"].as_array().unwrap() {
@@ -421,21 +504,33 @@ mod tests {
                 copy_shader_sources: false,
             },
         )
-        .unwrap().path;
+        .unwrap()
+        .path;
 
         let cmake = fs::read_to_string(project.join("cmake/mayaflux.cmake")).unwrap();
         assert!(cmake.contains("MayaFlux::MayaFluxHost"));
         assert!(!cmake.contains("@LILA_"));
         assert!(project.join(".vscode/tasks.json").is_file());
-        let tasks: serde_json::Value = serde_json::from_slice(&fs::read(project.join(".vscode/tasks.json")).unwrap()).unwrap();
-        let launch: serde_json::Value = serde_json::from_slice(&fs::read(project.join(".vscode/launch.json")).unwrap()).unwrap();
-        let settings: serde_json::Value = serde_json::from_slice(&fs::read(project.join(".vscode/settings.json")).unwrap()).unwrap();
+        let tasks: serde_json::Value =
+            serde_json::from_slice(&fs::read(project.join(".vscode/tasks.json")).unwrap()).unwrap();
+        let launch: serde_json::Value =
+            serde_json::from_slice(&fs::read(project.join(".vscode/launch.json")).unwrap())
+                .unwrap();
+        let settings: serde_json::Value =
+            serde_json::from_slice(&fs::read(project.join(".vscode/settings.json")).unwrap())
+                .unwrap();
         assert_eq!(tasks["version"], "2.0.0");
-        assert!(launch["configurations"].as_array().is_some_and(|items| !items.is_empty()));
+        assert!(
+            launch["configurations"]
+                .as_array()
+                .is_some_and(|items| !items.is_empty())
+        );
         assert!(settings.is_object());
-        assert!(fs::read_to_string(project.join(".vscode/launch.json"))
-            .unwrap()
-            .contains("AudioDemo"));
+        assert!(
+            fs::read_to_string(project.join(".vscode/launch.json"))
+                .unwrap()
+                .contains("AudioDemo")
+        );
     }
 
     #[test]
@@ -449,11 +544,18 @@ mod tests {
         let result = create_project_with_shader_root(
             "ShaderDemo",
             &temporary.0,
-            ProjectOptions { copy_shader_sources: true, ..ProjectOptions::default() },
+            ProjectOptions {
+                copy_shader_sources: true,
+                ..ProjectOptions::default()
+            },
             Some(&shader_root),
-        ).unwrap();
+        )
+        .unwrap();
 
-        assert_eq!(fs::read_to_string(result.path.join("data/shaders/nested/effect.frag")).unwrap(), "shader source");
+        assert_eq!(
+            fs::read_to_string(result.path.join("data/shaders/nested/effect.frag")).unwrap(),
+            "shader source"
+        );
         assert!(!result.path.join("data/shaders/readme.txt").exists());
     }
 
@@ -466,9 +568,13 @@ mod tests {
         let error = create_project_with_shader_root(
             "ShaderDemo",
             &temporary.0,
-            ProjectOptions { copy_shader_sources: true, ..ProjectOptions::default() },
+            ProjectOptions {
+                copy_shader_sources: true,
+                ..ProjectOptions::default()
+            },
             Some(&shader_root),
-        ).unwrap_err();
+        )
+        .unwrap_err();
 
         assert!(error.to_string().contains("shader sources are empty"));
         assert!(!temporary.0.join("ShaderDemo").exists());
@@ -489,9 +595,13 @@ mod tests {
         let error = create_project_with_shader_root(
             "ShaderDemo",
             &temporary.0,
-            ProjectOptions { copy_shader_sources: true, ..ProjectOptions::default() },
+            ProjectOptions {
+                copy_shader_sources: true,
+                ..ProjectOptions::default()
+            },
             Some(&shader_root),
-        ).unwrap_err();
+        )
+        .unwrap_err();
 
         assert!(error.to_string().contains("symbolic link"));
         assert!(!temporary.0.join("ShaderDemo").exists());
@@ -514,7 +624,10 @@ mod tests {
         fs::write(existing.join("keep.txt"), "preserve").unwrap();
 
         assert!(create_project("AudioDemo", &temporary.0, ProjectOptions::default()).is_err());
-        assert_eq!(fs::read_to_string(existing.join("keep.txt")).unwrap(), "preserve");
+        assert_eq!(
+            fs::read_to_string(existing.join("keep.txt")).unwrap(),
+            "preserve"
+        );
     }
 
     #[test]

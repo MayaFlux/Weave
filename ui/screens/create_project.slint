@@ -1,0 +1,50 @@
+import { CheckBox, HorizontalBox, LineEdit, VerticalBox } from "std-widgets.slint";
+import { WeaveTheme } from "../theme.slint";
+import { AppButton } from "../components.slint";
+
+export component CreateProjectScreen inherits VerticalBox {
+    in-out property <string> project_name;
+    in-out property <string> destination;
+    in-out property <bool> with_lila;
+    in-out property <bool> with_vscode;
+    in-out property <bool> copy_shader_sources;
+    callback back;
+    callback choose_destination;
+    callback create_project;
+
+    spacing: 14px;
+    AppButton { text: "←  Projects"; clicked => { root.back(); } }
+    Text { text: "Create a project"; color: WeaveTheme.accent; font-size: WeaveTheme.font-heading; font-weight: 650; }
+    Text { text: "Choose a name and location, then select the project tools to include."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-description; }
+    Rectangle {
+        height: 360px;
+        background: WeaveTheme.panel-background;
+        border-width: 1px;
+        border-color: WeaveTheme.border;
+        border-radius: 6px;
+        VerticalBox {
+            x: 24px; y: 20px; width: parent.width - 48px; height: parent.height - 40px; spacing: 10px;
+            Text { text: "PROJECT DETAILS"; color: WeaveTheme.accent; font-size: WeaveTheme.font-tiny; font-weight: 700; }
+            Text { text: "Project name"; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; }
+            LineEdit { text <=> root.project_name; placeholder-text: "For example, AudioDemo"; }
+            Text { text: "Create in"; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; }
+            HorizontalBox {
+                spacing: 12px;
+                Text { text: root.destination; color: WeaveTheme.text-primary; vertical-alignment: center; overflow: elide; }
+                AppButton { text: "Choose folder"; clicked => { root.choose_destination(); } }
+            }
+            Text { text: "PROJECT OPTIONS"; color: WeaveTheme.accent; font-size: WeaveTheme.font-tiny; font-weight: 700; }
+            HorizontalBox {
+                spacing: 18px;
+                CheckBox { text: "Live coding (Lila)"; checked <=> root.with_lila; }
+                CheckBox { text: "VS Code setup"; checked <=> root.with_vscode; }
+            }
+            CheckBox { text: "Copy MayaFlux shader sources"; checked <=> root.copy_shader_sources; }
+        }
+    }
+    HorizontalBox {
+        AppButton { text: "Back"; clicked => { root.back(); } }
+        Rectangle { horizontal-stretch: 1; background: transparent; }
+        AppButton { text: "Create project"; primary: true; clicked => { root.create_project(); } }
+    }
+}
