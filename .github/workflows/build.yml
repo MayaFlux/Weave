@@ -61,6 +61,10 @@ jobs:
         if: steps.platform-selection.outputs.enabled == 'true'
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust dependencies and build artifacts
+        if: steps.platform-selection.outputs.enabled == 'true'
+        uses: Swatinem/rust-cache@v2
+
       - name: Install Linux GUI build dependencies
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Linux'
         run: |
