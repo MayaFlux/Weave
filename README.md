@@ -30,6 +30,17 @@ cargo test --locked
 
 The Slint UI and project templates are compiled into the executable during the build. `Cargo.lock` pins the application and UI compiler dependencies.
 
+On x86_64 Linux, build the AppImage on Ubuntu 26.04 (or an equivalent glibc 2.43 build environment), then validate the downloadable artifact. On Arch or another newer Linux host, the container wrapper uses Podman or Docker to provide that build environment:
+
+```sh
+bash linux/scripts/package_weave_linux_container.sh
+bash linux/scripts/verify_weave_linux_package.sh build/linux/rust-package/output/Weave-0.6.0-Linux-x86_64.AppImage
+```
+
+On Ubuntu 26.04 itself, `bash linux/scripts/package_weave_linux.sh /tmp/weave-linux` builds directly without a container.
+
+The AppImage includes the Weave executable and its resources. The host needs FUSE to launch it, plus a supported Linux display service and graphics driver for the GUI. It does not need Rust, Python, GTK, or a separate Weave runtime. The supported executable ABI baseline is glibc 2.43, matching Ubuntu 26.04 as MayaFlux's minimum Ubuntu release. Host tools such as Git, CMake, and compilers remain separate dependencies for the operations that use them.
+
 On an Apple Silicon Mac with the Rust target and Xcode tools installed, build and validate the macOS package with:
 
 ```sh
@@ -49,7 +60,7 @@ The default app bundle is ad-hoc signed to seal its resources and allow integrit
 - `.github/`: CI and release workflows
 - `Agents.md`: current implementation, packaging, platform, and test requirements
 
-The active workflow builds and tests the Rust application on native Linux, macOS, and Windows runners. On macOS it also creates and validates an Apple Silicon `.app` and `.dmg`, then uploads the DMG as a workflow artifact. The workflow runs on pushes to `main` and version tags; `develop` remains manual through workflow dispatch. Linux and Windows packages and GitHub Release publishing are still in progress. The archived applications and CI helpers are retained for feature and packaging comparisons, but are not built or tested by active CI.
+The active workflow builds and tests the Rust application on native Linux, macOS, and Windows runners. It packages and validates the Linux x86_64 AppImage and the Apple Silicon `.app` and `.dmg`, then uploads them as workflow artifacts. The workflow runs on pushes to `main` and version tags; `develop` remains manual through workflow dispatch. The Windows package and GitHub Release publishing are still in progress. The archived applications and CI helpers are retained for feature and packaging comparisons, but are not built or tested by active CI.
 
 ## Documentation
 

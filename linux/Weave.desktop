@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Weave
+Comment=MayaFlux project and installation tool
+Exec=weave
+Icon=weave
+Categories=Development;
+Terminal=false

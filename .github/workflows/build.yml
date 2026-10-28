@@ -28,7 +28,7 @@ jobs:
       matrix:
         include:
           - platform: linux
-            os: ubuntu-latest
+            os: ubuntu-26.04
           - platform: macos
             os: macos-26
           - platform: windows
@@ -69,7 +69,14 @@ jobs:
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Linux'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev libxcursor-dev
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev libxcursor-dev libfontconfig1-dev libfreetype-dev file binutils
+
+      - name: Cache Linux AppImage packaging tools
+        if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Linux'
+        uses: actions/cache@v4
+        with:
+          path: build/linux/rust-package/tools
+          key: weave-linux-appimage-tools-x86_64-v1
 
       - name: Test Rust application
         if: steps.platform-selection.outputs.enabled == 'true'
@@ -78,6 +85,22 @@ jobs:
       - name: Build Rust application
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os != 'macOS'
         run: cargo build --release --locked
+
+      - name: Package Linux AppImage
+        if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Linux'
+        run: bash linux/scripts/package_weave_linux.sh "$RUNNER_TEMP/weave-linux"
+
+      - name: Validate Linux AppImage
+        if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Linux'
+        run: bash linux/scripts/verify_weave_linux_package.sh "$RUNNER_TEMP"/weave-linux/Weave-*-Linux-x86_64.AppImage
+
+      - name: Upload Linux AppImage
+        if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Weave-linux-x86_64
+          path: ${{ runner.temp }}/weave-linux/Weave-*-Linux-x86_64.AppImage
+          if-no-files-found: error
 
       - name: Install Apple Silicon Rust target
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'macOS'

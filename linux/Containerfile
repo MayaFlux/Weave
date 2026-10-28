@@ -1,0 +1,18 @@
+FROM ubuntu:26.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    RUSTUP_HOME=/opt/rustup \
+    CARGO_HOME=/opt/cargo \
+    PATH=/opt/cargo/bin:$PATH
+
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
+    build-essential pkg-config curl ca-certificates file binutils \
+    libxkbcommon-dev libwayland-dev libx11-dev libx11-xcb-dev \
+    libxkbcommon-x11-dev libxcursor-dev libfontconfig1-dev libfreetype-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal \
+    --default-toolchain 1.99.1 \
+    && chmod -R a+rX /opt/rustup /opt/cargo
+
+WORKDIR /workspace
