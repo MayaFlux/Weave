@@ -19,9 +19,10 @@ The parser entry points are:
 
 | Platform | File | API |
 | -------- | ---- | --- |
-| Linux | `linux/lib/community_manifest.py` | `parse_manifest(source, expected_name=None)` |
-| macOS | `macos/CommunityManifest.swift` | `CommunityManifest.parse(_:expectedName:)` |
-| Windows | `windows/Shared/CommunityManifest.cs` | `CommunityManifest.Parse(source, expectedName)` |
+| Rust (current) | `src/update.rs` | `read_manifest(path, name)` |
+| Linux (legacy) | `legacy/linux/lib/community_manifest.py` | `parse_manifest(source, expected_name=None)` |
+| macOS (legacy) | `legacy/macos/CommunityManifest.swift` | `CommunityManifest.parse(_:expectedName:)` |
+| Windows (legacy) | `legacy/windows/Shared/CommunityManifest.cs` | `CommunityManifest.Parse(source, expectedName)` |
 
 Each parser receives JSON text and an optional expected module name. It returns
 a validated document with explicit defaults, or reports a field path and reason.

@@ -3,18 +3,18 @@ build/
 .vs/
 .ccls-cache/
 
-windows/Weave/bin/
-windows/Weave/obj/
-windows/Shared/bin/
-windows/Shared/obj/
-windows/**/**/**.resx
-windows/**/**.csproj.user
+legacy/windows/Weave/bin/
+legacy/windows/Weave/obj/
+legacy/windows/Shared/bin/
+legacy/windows/Shared/obj/
+legacy/windows/**/**/**.resx
+legacy/windows/**/**.csproj.user
 
-linux/**/**/__pycache__/
-linux/**/**/__init__.py
-linux/weave.egg-info/
+legacy/linux/**/**/__pycache__/
+legacy/linux/**/**/__init__.py
+legacy/linux/weave.egg-info/
 
-tests/linux/**/**/__pycache__/
+legacy/tests/linux/**/**/__pycache__/
 
 # macOS metadata
 .DS_Store

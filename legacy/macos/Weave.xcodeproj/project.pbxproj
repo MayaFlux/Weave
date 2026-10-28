@@ -1,0 +1,104 @@
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* WeaveGUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* WeaveGUI.swift */; };
+		A10000000000000000000002 /* CommunityManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* CommunityManifest.swift */; };
+		A10000000000000000000003 /* CommunityUpdate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* CommunityUpdate.swift */; };
+		A10000000000000000000004 /* weave.icns in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* weave.icns */; };
+		A10000000000000000000005 /* CommunityManifest.swift in Unit Tests */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* CommunityManifest.swift */; };
+		A10000000000000000000006 /* CommunityUpdate.swift in Unit Tests */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* CommunityUpdate.swift */; };
+		A10000000000000000000007 /* CommunityManifestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* CommunityManifestTests.swift */; };
+		A10000000000000000000008 /* CommunityUpdateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* CommunityUpdateTests.swift */; };
+		A10000000000000000000009 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* XCTest.framework */; };
+		A10000000000000000000010 /* InstallerWorkflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* InstallerWorkflow.swift */; };
+		A10000000000000000000011 /* InstallerWorkflow.swift in Unit Tests */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* InstallerWorkflow.swift */; };
+		A10000000000000000000012 /* ShellEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* ShellEnvironment.swift */; };
+		A10000000000000000000013 /* ShellEnvironment.swift in Unit Tests */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* ShellEnvironment.swift */; };
+		A10000000000000000000014 /* InstallerWorkflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* InstallerWorkflowTests.swift */; };
+		A10000000000000000000015 /* HomebrewLocatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* HomebrewLocatorTests.swift */; };
+		A10000000000000000000016 /* ShellEnvironmentFileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* ShellEnvironmentFileTests.swift */; };
+		A10000000000000000000017 /* CreationOperations.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* CreationOperations.swift */; };
+		A10000000000000000000018 /* CreationOperations.swift in Unit Tests */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* CreationOperations.swift */; };
+		A10000000000000000000020 /* RunReportScriptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000020 /* RunReportScriptTests.swift */; };
+		A10000000000000000000021 /* CommunityManifestVectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* CommunityManifestVectorTests.swift */; };
+		A10000000000000000000019 /* CreationOperationsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* CreationOperationsTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A20000000000000000000001 /* WeaveGUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeaveGUI.swift; sourceTree = "<group>"; };
+		A20000000000000000000002 /* CommunityManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityManifest.swift; sourceTree = "<group>"; };
+		A20000000000000000000003 /* CommunityUpdate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityUpdate.swift; sourceTree = "<group>"; };
+		A20000000000000000000004 /* weave.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = resources/weave.icns; sourceTree = "<group>"; };
+		A20000000000000000000005 /* Weave.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = Weave.sh; sourceTree = "<group>"; };
+		A20000000000000000000006 /* templates */ = {isa = PBXFileReference; lastKnownFileType = folder; path = ../../templates; sourceTree = "<group>"; };
+		A20000000000000000000007 /* Weave.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Weave.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000008 /* CommunityManifestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityManifestTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000009 /* CommunityUpdateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityUpdateTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000000A /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
+		A2000000000000000000000B /* WeaveUnitTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WeaveUnitTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A2000000000000000000000C /* InstallerWorkflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallerWorkflow.swift; sourceTree = "<group>"; };
+		A2000000000000000000000D /* InstallerWorkflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallerWorkflowTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000000E /* HomebrewLocatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomebrewLocatorTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000000F /* ShellEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellEnvironment.swift; sourceTree = "<group>"; };
+		A20000000000000000000010 /* ShellEnvironmentFileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellEnvironmentFileTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000011 /* CreationOperations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreationOperations.swift; sourceTree = "<group>"; };
+		A20000000000000000000020 /* RunReportScriptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunReportScriptTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000021 /* CommunityManifestVectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityManifestVectorTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000012 /* CreationOperationsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreationOperationsTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A30000000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A30000000000000000000005 /* Unit Test Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000009 /* XCTest.framework in Frameworks */, ); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A40000000000000000000001 = {isa = PBXGroup; children = (A40000000000000000000002 /* Weave */, A40000000000000000000004 /* Unit Tests */, A40000000000000000000003 /* Products */, ); sourceTree = "<group>"; };
+		A40000000000000000000002 /* Weave */ = {isa = PBXGroup; children = (A20000000000000000000001 /* WeaveGUI.swift */, A20000000000000000000002 /* CommunityManifest.swift */, A20000000000000000000003 /* CommunityUpdate.swift */, A2000000000000000000000C /* InstallerWorkflow.swift */, A2000000000000000000000F /* ShellEnvironment.swift */, A20000000000000000000011 /* CreationOperations.swift */, A20000000000000000000004 /* weave.icns */, A20000000000000000000005 /* Weave.sh */, A20000000000000000000006 /* templates */, ); path = .; sourceTree = "<group>"; };
+		A40000000000000000000003 /* Products */ = {isa = PBXGroup; children = (A20000000000000000000007 /* Weave.app */, ); name = Products; sourceTree = "<group>"; };
+		A40000000000000000000004 /* Unit Tests */ = {isa = PBXGroup; children = (A20000000000000000000008 /* CommunityManifestTests.swift */, A20000000000000000000009 /* CommunityUpdateTests.swift */, A2000000000000000000000D /* InstallerWorkflowTests.swift */, A2000000000000000000000E /* HomebrewLocatorTests.swift */, A20000000000000000000010 /* ShellEnvironmentFileTests.swift */, A20000000000000000000012 /* CreationOperationsTests.swift */, A20000000000000000000020 /* RunReportScriptTests.swift */, A20000000000000000000021 /* CommunityManifestVectorTests.swift */, ); path = ../tests/macos/unit; sourceTree = "<group>"; };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A50000000000000000000001 /* Weave */ = {isa = PBXNativeTarget; buildConfigurationList = A80000000000000000000002 /* Build configuration list for PBXNativeTarget "Weave" */; buildPhases = (A30000000000000000000002 /* Sources */, A30000000000000000000001 /* Frameworks */, A30000000000000000000003 /* Resources */, A30000000000000000000004 /* Package Weave resources */, ); buildRules = (); dependencies = (); name = Weave; productName = Weave; productReference = A20000000000000000000007 /* Weave.app */; productType = "com.apple.product-type.application"; };
+		A50000000000000000000002 /* WeaveUnitTests */ = {isa = PBXNativeTarget; buildConfigurationList = A80000000000000000000003 /* Build configuration list for PBXNativeTarget "WeaveUnitTests" */; buildPhases = (A30000000000000000000006 /* Unit Test Sources */, A30000000000000000000005 /* Unit Test Frameworks */, ); buildRules = (); dependencies = (); name = WeaveUnitTests; productName = WeaveUnitTests; productReference = A2000000000000000000000B /* WeaveUnitTests.xctest */; productType = "com.apple.product-type.bundle.unit-test"; };
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A60000000000000000000001 /* Project object */ = {isa = PBXProject; attributes = {LastUpgradeCheck = 2600; BuildIndependentTargetsInParallel = 1; }; buildConfigurationList = A80000000000000000000001 /* Build configuration list for PBXProject "Weave" */; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base, ); mainGroup = A40000000000000000000001; productRefGroup = A40000000000000000000003 /* Products */; projectDirPath = ""; projectRoot = ""; targets = (A50000000000000000000001 /* Weave */, A50000000000000000000002 /* WeaveUnitTests */, ); };
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A30000000000000000000003 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000004 /* weave.icns in Resources */, ); runOnlyForDeploymentPostprocessing = 0; };
+		A30000000000000000000006 /* Unit Test Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000005 /* CommunityManifest.swift in Unit Tests */, A10000000000000000000006 /* CommunityUpdate.swift in Unit Tests */, A10000000000000000000011 /* InstallerWorkflow.swift in Unit Tests */, A10000000000000000000013 /* ShellEnvironment.swift in Unit Tests */, A10000000000000000000018 /* CreationOperations.swift in Unit Tests */, A10000000000000000000007 /* CommunityManifestTests.swift in Sources */, A10000000000000000000008 /* CommunityUpdateTests.swift in Sources */, A10000000000000000000014 /* InstallerWorkflowTests.swift in Sources */, A10000000000000000000015 /* HomebrewLocatorTests.swift in Sources */, A10000000000000000000016 /* ShellEnvironmentFileTests.swift in Sources */, A10000000000000000000019 /* CreationOperationsTests.swift in Sources */, A10000000000000000000020 /* RunReportScriptTests.swift in Sources */, A10000000000000000000021 /* CommunityManifestVectorTests.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A30000000000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001 /* WeaveGUI.swift in Sources */, A10000000000000000000002 /* CommunityManifest.swift in Sources */, A10000000000000000000003 /* CommunityUpdate.swift in Sources */, A10000000000000000000010 /* InstallerWorkflow.swift in Sources */, A10000000000000000000012 /* ShellEnvironment.swift in Sources */, A10000000000000000000017 /* CreationOperations.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A30000000000000000000004 /* Package Weave resources */ = {isa = PBXShellScriptBuildPhase; buildActionMask = 2147483647; files = (); inputPaths = ("$(SRCROOT)/Weave.sh", "$(SRCROOT)/../../templates", ); name = "Package Weave resources"; outputPaths = ("$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/weave", "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/templates", ); runOnlyForDeploymentPostprocessing = 0; shellPath = /bin/sh; shellScript = "set -eu\nresources=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nmkdir -p \"$resources\"\ninstall -m 755 \"${SRCROOT}/Weave.sh\" \"$resources/weave\"\nditto \"${SRCROOT}/../../templates\" \"$resources/templates\"\n"; };
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A70000000000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; MACOSX_DEPLOYMENT_TARGET = 26.0; SDKROOT = macosx; }; name = Debug; };
+		A70000000000000000000002 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; MACOSX_DEPLOYMENT_TARGET = 26.0; SDKROOT = macosx; }; name = Release; };
+		A70000000000000000000003 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {ARCHS = arm64; CODE_SIGN_STYLE = Automatic; COMBINE_HIDPI_IMAGES = YES; ENABLE_APP_SANDBOX = NO; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_CFBundleDevelopmentRegion = en; INFOPLIST_KEY_CFBundleExecutable = "$(EXECUTABLE_NAME)"; INFOPLIST_KEY_CFBundleIconFile = weave; INFOPLIST_KEY_CFBundleIdentifier = com.mayaflux.weave; INFOPLIST_KEY_CFBundleName = Weave; INFOPLIST_KEY_CFBundlePackageType = APPL; INFOPLIST_KEY_CFBundleShortVersionString = 1.0; INFOPLIST_KEY_CFBundleVersion = 1; INFOPLIST_KEY_LSMinimumSystemVersion = 26.0; INFOPLIST_KEY_NSPrincipalClass = NSApplication; MACOSX_DEPLOYMENT_TARGET = 26.0; PRODUCT_BUNDLE_IDENTIFIER = com.mayaflux.weave; PRODUCT_NAME = Weave; SDKROOT = macosx; SUPPORTED_PLATFORMS = macosx; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; }; name = Debug; };
+		A70000000000000000000004 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ARCHS = arm64; CODE_SIGN_STYLE = Automatic; COMBINE_HIDPI_IMAGES = YES; ENABLE_APP_SANDBOX = NO; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_CFBundleDevelopmentRegion = en; INFOPLIST_KEY_CFBundleExecutable = "$(EXECUTABLE_NAME)"; INFOPLIST_KEY_CFBundleIconFile = weave; INFOPLIST_KEY_CFBundleIdentifier = com.mayaflux.weave; INFOPLIST_KEY_CFBundleName = Weave; INFOPLIST_KEY_CFBundlePackageType = APPL; INFOPLIST_KEY_CFBundleShortVersionString = 1.0; INFOPLIST_KEY_CFBundleVersion = 1; INFOPLIST_KEY_LSMinimumSystemVersion = 26.0; INFOPLIST_KEY_NSPrincipalClass = NSApplication; MACOSX_DEPLOYMENT_TARGET = 26.0; PRODUCT_BUNDLE_IDENTIFIER = com.mayaflux.weave; PRODUCT_NAME = Weave; SDKROOT = macosx; SUPPORTED_PLATFORMS = macosx; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; }; name = Release; };
+		A70000000000000000000005 /* Unit Tests Debug */ = {isa = XCBuildConfiguration; buildSettings = {ARCHS = arm64; CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; MACOSX_DEPLOYMENT_TARGET = 26.0; PRODUCT_BUNDLE_IDENTIFIER = com.mayaflux.weave.unittests; PRODUCT_NAME = WeaveUnitTests; SDKROOT = macosx; SUPPORTED_PLATFORMS = macosx; SWIFT_VERSION = 5.0; }; name = Debug; };
+		A70000000000000000000006 /* Unit Tests Release */ = {isa = XCBuildConfiguration; buildSettings = {ARCHS = arm64; CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; MACOSX_DEPLOYMENT_TARGET = 26.0; PRODUCT_BUNDLE_IDENTIFIER = com.mayaflux.weave.unittests; PRODUCT_NAME = WeaveUnitTests; SDKROOT = macosx; SUPPORTED_PLATFORMS = macosx; SWIFT_VERSION = 5.0; }; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A80000000000000000000001 /* Build configuration list for PBXProject "Weave" */ = {isa = XCConfigurationList; buildConfigurations = (A70000000000000000000001 /* Debug */, A70000000000000000000002 /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		A80000000000000000000002 /* Build configuration list for PBXNativeTarget "Weave" */ = {isa = XCConfigurationList; buildConfigurations = (A70000000000000000000003 /* Debug */, A70000000000000000000004 /* Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		A80000000000000000000003 /* Build configuration list for PBXNativeTarget "WeaveUnitTests" */ = {isa = XCConfigurationList; buildConfigurations = (A70000000000000000000005 /* Unit Tests Debug */, A70000000000000000000006 /* Unit Tests Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Debug; };
+/* End XCConfigurationList section */
+	};
+	rootObject = A60000000000000000000001 /* Project object */;
+}
