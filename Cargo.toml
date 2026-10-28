@@ -1,0 +1,11 @@
+[package]
+name = "weave"
+version = "0.6.0"
+edition = "2024"
+rust-version = "1.92"
+description = "MayaFlux installation and project tool"
+license = "GPL-3.0-only"
+
+[dependencies]
+rfd = "=0.17.2"
+slint = { version = "=1.18.0", default-features = false, features = ["std", "compat-1-18", "backend-winit", "renderer-femtovg-wgpu"] }
