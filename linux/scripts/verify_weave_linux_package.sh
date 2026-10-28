@@ -51,16 +51,17 @@ mkdir "$TEMP_DIR/projects"
 "$APPDIR/AppRun" community package_smoke "$TEMP_DIR/modules"
 [[ -s "$TEMP_DIR/modules/package_smoke/community.json" ]] || fail "packaged community creation failed"
 
-# The real AppImage runtime must explain the FUSE prerequisite where the host
-# lacks /dev/fuse. Extraction above is only a package inspection technique.
-if [[ ! -e /dev/fuse ]]; then
-    if "$IMAGE" --help > "$TEMP_DIR/fuse.out" 2>&1; then
-        fail "AppImage unexpectedly launched without host FUSE"
-    fi
-    grep -iq 'fuse' "$TEMP_DIR/fuse.out" || { cat "$TEMP_DIR/fuse.out" >&2; fail "missing FUSE error was not clear"; }
+# Device presence alone does not prove FUSE works: libfuse can be missing, or
+# the device can be inaccessible. Probe the actual runtime in either case.
+# Extraction above is only a package inspection technique.
+if "$IMAGE" --help > "$TEMP_DIR/image-launch.txt" 2>&1; then
+    grep -q 'weave community' "$TEMP_DIR/image-launch.txt" || fail "actual AppImage CLI output was wrong"
 else
-    "$IMAGE" --help > "$TEMP_DIR/image-help.txt" || fail "actual AppImage CLI launch failed"
-    grep -q 'weave community' "$TEMP_DIR/image-help.txt" || fail "actual AppImage CLI output was wrong"
+    if ! grep -iq 'fuse' "$TEMP_DIR/image-launch.txt"; then
+        cat "$TEMP_DIR/image-launch.txt" >&2
+        fail "AppImage launch failed without a clear FUSE prerequisite error"
+    fi
+    echo "AppImage runtime reported that host FUSE is unavailable."
 fi
 
 if [[ "${WEAVE_GUI_SMOKE:-0}" == 1 ]]; then
