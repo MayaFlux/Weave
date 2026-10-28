@@ -21,6 +21,31 @@ on:
       - "v*"
 
 jobs:
+  build-rust:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-26, windows-latest]
+    steps:
+      - name: Checkout Weave
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux GUI build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev libxcursor-dev
+
+      - name: Test Rust application and project creation
+        run: cargo test --locked
+
+      - name: Build Rust application
+        run: cargo build --release --locked
+
   build-macos:
     if: github.event_name != 'workflow_dispatch' || inputs.macos
     runs-on: macos-26

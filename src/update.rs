@@ -267,16 +267,26 @@ fn update_project_with(project_path: &Path, values: &[String], services: &impl U
 mod tests {
     use super::*;
     use std::cell::{Cell, RefCell};
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     struct TestDirectory(PathBuf);
 
     impl TestDirectory {
         fn new() -> Self {
-            let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-            let path = std::env::temp_dir().join(format!("weave-update-{}-{nonce}", std::process::id()));
-            fs::create_dir(&path).unwrap();
-            Self(path)
+            static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+
+            loop {
+                let sequence = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+                let path = std::env::temp_dir().join(format!(
+                    "weave-update-{}-{sequence}",
+                    std::process::id()
+                ));
+                match fs::create_dir(&path) {
+                    Ok(()) => return Self(path),
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                    Err(error) => panic!("Could not create test directory {}: {error}", path.display()),
+                }
+            }
         }
     }
 
