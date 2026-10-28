@@ -28,7 +28,16 @@ cargo build --locked --release
 cargo test --locked
 ```
 
-The Slint UI is compiled into the executable during the build. `Cargo.lock` pins the application and UI compiler dependencies.
+The Slint UI and project templates are compiled into the executable during the build. `Cargo.lock` pins the application and UI compiler dependencies.
+
+On an Apple Silicon Mac with the Rust target and Xcode tools installed, build and validate the macOS package with:
+
+```sh
+bash macos/scripts/package_weave_macos.sh /tmp/weave-macos
+bash macos/scripts/verify_weave_macos_package.sh /tmp/weave-macos/Weave-0.6.0-macOS-arm64.dmg
+```
+
+The default app bundle is ad-hoc signed to seal its resources and allow integrity checks. It is not Developer ID signed or notarized, so this package is not a warning-free browser download; Gatekeeper may require the user to approve opening it.
 
 ## Repository layout
 
@@ -40,7 +49,7 @@ The Slint UI is compiled into the executable during the build. `Cargo.lock` pins
 - `.github/`: CI and release workflows
 - `Agents.md`: current implementation, packaging, platform, and test requirements
 
-The active workflow builds and tests the Rust application on native Linux, macOS, and Windows runners. It runs on pushes to `main` and version tags; `develop` is manual through workflow dispatch. Rust distribution packaging is still in progress, so this workflow does not publish release artifacts yet. The archived applications and their CI helpers are retained for feature and packaging comparisons, but are not built or tested by active CI.
+The active workflow builds and tests the Rust application on native Linux, macOS, and Windows runners. On macOS it also creates and validates an Apple Silicon `.app` and `.dmg`, then uploads the DMG as a workflow artifact. The workflow runs on pushes to `main` and version tags; `develop` remains manual through workflow dispatch. Linux and Windows packages and GitHub Release publishing are still in progress. The archived applications and CI helpers are retained for feature and packaging comparisons, but are not built or tested by active CI.
 
 ## Documentation
 
