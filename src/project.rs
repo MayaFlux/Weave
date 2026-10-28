@@ -3,6 +3,7 @@ use std::fmt::{Display, Formatter};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use crate::git::initialize_repository;
 
 const SHADER_EXTENSIONS: &[&str] = &[
     "glsl", "vert", "frag", "comp", "geom", "tesc", "tese", "mesh", "task", "rgen",
@@ -14,6 +15,12 @@ pub struct ProjectOptions {
     pub with_lila: bool,
     pub with_vscode: bool,
     pub copy_shader_sources: bool,
+}
+
+#[derive(Debug)]
+pub struct ProjectCreationResult {
+    pub path: PathBuf,
+    pub git_warning: Option<String>,
 }
 
 impl Default for ProjectOptions {
@@ -47,7 +54,16 @@ pub fn create_project(
     name: &str,
     destination: &Path,
     options: ProjectOptions,
-) -> Result<PathBuf, ProjectCreationError> {
+) -> Result<ProjectCreationResult, ProjectCreationError> {
+    create_project_with_shader_root(name, destination, options, None)
+}
+
+fn create_project_with_shader_root(
+    name: &str,
+    destination: &Path,
+    options: ProjectOptions,
+    shader_root: Option<&Path>,
+) -> Result<ProjectCreationResult, ProjectCreationError> {
     validate_name(name)?;
     let destination = resolve_destination(destination)?;
     let project_path = destination.join(name);
@@ -59,7 +75,10 @@ pub fn create_project(
     }
 
     let shader_sources = if options.copy_shader_sources {
-        Some(read_shader_sources()?)
+        Some(match shader_root {
+            Some(root) => read_shader_sources_at(root)?,
+            None => read_shader_sources()?,
+        })
     } else {
         None
     };
@@ -82,7 +101,8 @@ pub fn create_project(
         return Err(error);
     }
 
-    Ok(project_path)
+    let git_warning = initialize_repository(&project_path, "project");
+    Ok(ProjectCreationResult { path: project_path, git_warning })
 }
 
 fn resolve_destination(destination: &Path) -> Result<PathBuf, ProjectCreationError> {
@@ -229,13 +249,17 @@ fn batch_launcher(script: &str) -> String {
 
 fn project_readme(name: &str) -> String {
     format!(
-        "# {name}\n\nA MayaFlux multimedia DSP project.\n\n## Building\n\n```sh\ncmake --preset release\ncmake --build --preset release --parallel\n```\n\nRun `validate` from this folder to check the project and MayaFlux installation. Run `run-report` after building to collect diagnostics.\n"
+        "# {name}\n\nA MayaFlux multimedia DSP project.\n\n## Building\n\n```sh\ncmake --preset release\ncmake --build --preset release --parallel\n```\n\nRun `validate` from this folder to check the project and MayaFlux installation. Run `run-report` after building to collect diagnostics. When Git is available, Weave initializes a repository and stages the generated files.\n"
     )
 }
 
 fn read_shader_sources() -> Result<Vec<(PathBuf, Vec<u8>)>, ProjectCreationError> {
     let root = crate::platform::shader_source_root().map_err(ProjectCreationError)?;
-    if fs::symlink_metadata(&root)
+    read_shader_sources_at(&root)
+}
+
+fn read_shader_sources_at(root: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>, ProjectCreationError> {
+    if fs::symlink_metadata(root)
         .is_ok_and(|metadata| metadata.file_type().is_symlink())
     {
         return Err(ProjectCreationError(format!(
@@ -341,7 +365,7 @@ mod tests {
     #[test]
     fn creates_project_from_embedded_templates() {
         let temporary = TestDirectory::new();
-        let project = create_project("AudioDemo", &temporary.0, ProjectOptions::default()).unwrap();
+        let project = create_project("AudioDemo", &temporary.0, ProjectOptions::default()).unwrap().path;
 
         assert_eq!(
             project,
@@ -352,9 +376,30 @@ mod tests {
         assert!(project.join("CMakePresets.json").is_file());
         assert!(project.join("community.cmake").is_file());
         assert!(project.join("cmake/shaders.cmake").is_file());
+        assert!(project.join(".vscode/settings.json").is_file());
+        assert!(project.join(".vscode/tasks.json").is_file());
+        assert!(project.join(".vscode/launch.json").is_file());
+        assert!(project.join(".gitignore").is_file());
+        assert!(project.join("README.md").is_file());
+        #[cfg(target_os = "windows")]
+        for script in ["validate.ps1", "run-report.ps1", "validate.bat", "run-report.bat"] {
+            assert!(project.join(script).is_file());
+        }
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        for script in ["validate.sh", "run-report.sh"] {
+            assert!(project.join(script).is_file());
+        }
         assert!(fs::read_to_string(project.join("CMakeLists.txt"))
             .unwrap()
             .contains("project(AudioDemo"));
+        let presets: serde_json::Value = serde_json::from_slice(&fs::read(project.join("CMakePresets.json")).unwrap()).unwrap();
+        let configure: Vec<_> = presets["configurePresets"].as_array().unwrap().iter()
+            .map(|preset| preset["name"].as_str().unwrap()).collect();
+        assert!(configure.contains(&"debug"));
+        assert!(configure.contains(&"release"));
+        for preset in presets["buildPresets"].as_array().unwrap() {
+            assert!(configure.contains(&preset["configurePreset"].as_str().unwrap()));
+        }
     }
 
     #[test]
@@ -369,15 +414,80 @@ mod tests {
                 copy_shader_sources: false,
             },
         )
-        .unwrap();
+        .unwrap().path;
 
         let cmake = fs::read_to_string(project.join("cmake/mayaflux.cmake")).unwrap();
         assert!(cmake.contains("MayaFlux::MayaFluxHost"));
         assert!(!cmake.contains("@LILA_"));
         assert!(project.join(".vscode/tasks.json").is_file());
+        let tasks: serde_json::Value = serde_json::from_slice(&fs::read(project.join(".vscode/tasks.json")).unwrap()).unwrap();
+        let launch: serde_json::Value = serde_json::from_slice(&fs::read(project.join(".vscode/launch.json")).unwrap()).unwrap();
+        let settings: serde_json::Value = serde_json::from_slice(&fs::read(project.join(".vscode/settings.json")).unwrap()).unwrap();
+        assert_eq!(tasks["version"], "2.0.0");
+        assert!(launch["configurations"].as_array().is_some_and(|items| !items.is_empty()));
+        assert!(settings.is_object());
         assert!(fs::read_to_string(project.join(".vscode/launch.json"))
             .unwrap()
             .contains("AudioDemo"));
+    }
+
+    #[test]
+    fn copies_only_supported_shader_files_from_the_selected_source_root() {
+        let temporary = TestDirectory::new();
+        let shader_root = temporary.0.join("shader-source");
+        fs::create_dir_all(shader_root.join("nested")).unwrap();
+        fs::write(shader_root.join("nested/effect.frag"), "shader source").unwrap();
+        fs::write(shader_root.join("readme.txt"), "not a shader").unwrap();
+
+        let result = create_project_with_shader_root(
+            "ShaderDemo",
+            &temporary.0,
+            ProjectOptions { copy_shader_sources: true, ..ProjectOptions::default() },
+            Some(&shader_root),
+        ).unwrap();
+
+        assert_eq!(fs::read_to_string(result.path.join("data/shaders/nested/effect.frag")).unwrap(), "shader source");
+        assert!(!result.path.join("data/shaders/readme.txt").exists());
+    }
+
+    #[test]
+    fn shader_copy_rejects_empty_sources_before_creating_project() {
+        let temporary = TestDirectory::new();
+        let shader_root = temporary.0.join("empty-shaders");
+        fs::create_dir(&shader_root).unwrap();
+
+        let error = create_project_with_shader_root(
+            "ShaderDemo",
+            &temporary.0,
+            ProjectOptions { copy_shader_sources: true, ..ProjectOptions::default() },
+            Some(&shader_root),
+        ).unwrap_err();
+
+        assert!(error.to_string().contains("shader sources are empty"));
+        assert!(!temporary.0.join("ShaderDemo").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn shader_copy_rejects_linked_source_files() {
+        use std::os::unix::fs::symlink;
+
+        let temporary = TestDirectory::new();
+        let shader_root = temporary.0.join("shader-source");
+        fs::create_dir(&shader_root).unwrap();
+        let target = temporary.0.join("outside.frag");
+        fs::write(&target, "external").unwrap();
+        symlink(&target, shader_root.join("linked.frag")).unwrap();
+
+        let error = create_project_with_shader_root(
+            "ShaderDemo",
+            &temporary.0,
+            ProjectOptions { copy_shader_sources: true, ..ProjectOptions::default() },
+            Some(&shader_root),
+        ).unwrap_err();
+
+        assert!(error.to_string().contains("symbolic link"));
+        assert!(!temporary.0.join("ShaderDemo").exists());
     }
 
     #[test]
@@ -398,6 +508,18 @@ mod tests {
 
         assert!(create_project("AudioDemo", &temporary.0, ProjectOptions::default()).is_err());
         assert_eq!(fs::read_to_string(existing.join("keep.txt")).unwrap(), "preserve");
+    }
+
+    #[test]
+    fn missing_or_non_directory_parent_is_rejected_without_creating_a_project() {
+        let temporary = TestDirectory::new();
+        let file = temporary.0.join("not-a-directory");
+        fs::write(&file, "preserve").unwrap();
+        for destination in [temporary.0.join("missing"), file.clone()] {
+            assert!(create_project("AudioDemo", &destination, ProjectOptions::default()).is_err());
+        }
+        assert_eq!(fs::read_dir(&temporary.0).unwrap().count(), 1);
+        assert_eq!(fs::read_to_string(file).unwrap(), "preserve");
     }
 
     #[cfg(unix)]

@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use crate::git::initialize_repository;
 
 #[derive(Clone, Debug)]
 pub struct CommunityModuleOptions {
@@ -205,7 +205,7 @@ fn populate_module(
         "cmake_minimum_required(VERSION 3.25)\nproject({name} LANGUAGES C CXX)\nenable_testing()\nadd_subdirectory(test)\n"
     );
     let readme = format!(
-        "# {name}\n\n{}\n\nAdd module implementation files under `src/` and checks in `test/test_{name}.cpp`.\n\nWith MayaFlux and its required build tools installed, configure, build, and test with:\n\n```sh\ncmake --preset release\ncmake --build --preset release\nctest --preset release\n```\n\nGit is optional for building. To initialize the repository later, run `git init -b main` and `git add -A` from this directory.\n",
+        "# {name}\n\n{}\n\nAdd module implementation files under `src/` and checks in `test/test_{name}.cpp`.\n\nWith MayaFlux and its required build tools installed, configure, build, and test with:\n\n```sh\ncmake --preset release\ncmake --build --preset release\nctest --preset release\n```\n\nWhen Git is available, Weave initializes a repository and stages the generated files. Git is optional for building.\n",
         if options.description.is_empty() {
             "A MayaFlux community module."
         } else {
@@ -232,36 +232,123 @@ fn populate_module(
 }
 
 fn initialize_git(module_path: &Path) -> Option<String> {
-    let init = match Command::new("git")
-        .arg("-C")
-        .arg(module_path)
-        .args(["init", "-q", "-b", "main"])
-        .output()
-    {
-        Ok(output) => output,
-        Err(error) => return Some(format!("Git setup was skipped: {error}. Initialize it later with `git init -b main` and `git add -A` in the module directory.")),
-    };
-    if !init.status.success() {
-        return Some(format!(
-            "Git could not initialize the module repository: {}. The module files are ready; initialize Git later if needed.",
-            String::from_utf8_lossy(&init.stderr).trim()
-        ));
+    initialize_repository(module_path, "community module")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    struct TestDirectory(PathBuf);
+
+    impl TestDirectory {
+        fn new() -> Self {
+            let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+            let path = std::env::temp_dir().join(format!("weave-community-{}-{nonce}", std::process::id()));
+            fs::create_dir(&path).unwrap();
+            Self(path)
+        }
     }
 
-    let add = match Command::new("git")
-        .arg("-C")
-        .arg(module_path)
-        .args(["add", "--all"])
-        .output()
-    {
-        Ok(output) => output,
-        Err(error) => return Some(format!("Git could not stage the module files: {error}. The module files are ready; run `git add -A` in the module directory if needed.")),
-    };
-    if !add.status.success() {
-        return Some(format!(
-            "Git could not stage the module files: {}. The module files are ready; run `git add -A` in the module directory if needed.",
-            String::from_utf8_lossy(&add.stderr).trim()
-        ));
+    impl Drop for TestDirectory {
+        fn drop(&mut self) { let _ = fs::remove_dir_all(&self.0); }
     }
-    None
+
+    #[test]
+    fn creates_complete_module_with_normalized_options_and_no_generated_implementation_file() {
+        let temporary = TestDirectory::new();
+        let destination = temporary.0.join("new-location");
+        let result = create_community_module("audio_tools", &destination, &CommunityModuleOptions {
+            description: "  Audio helpers  ".to_owned(),
+            min_version: " 0.6.0 ".to_owned(),
+            needs_lila: true,
+        }).unwrap();
+
+        assert_eq!(result.path, fs::canonicalize(&destination).unwrap().join("audio_tools"));
+        for relative in ["src", "test", "CMakeLists.txt", "CMakePresets.json", "README.md", "audio_tools.cmake", "test/CMakeLists.txt", "test/test_audio_tools.cpp", ".gitignore", "community.json"] {
+            assert!(result.path.join(relative).exists(), "missing {relative}");
+        }
+        let presets: Value = serde_json::from_slice(&fs::read(result.path.join("CMakePresets.json")).unwrap()).unwrap();
+        assert!(presets["configurePresets"].as_array().unwrap().iter().any(|preset| preset["name"] == "release"));
+        assert!(presets["buildPresets"].as_array().unwrap().iter().any(|preset| preset["name"] == "release"));
+        assert!(!result.path.join("src/audio_tools.cpp").exists());
+        let manifest: Value = serde_json::from_slice(&fs::read(result.path.join("community.json")).unwrap()).unwrap();
+        assert_eq!(manifest["name"], "audio_tools");
+        assert_eq!(manifest["description"], "Audio helpers");
+        assert_eq!(manifest["min_version"], "0.6.0");
+        assert_eq!(manifest["needs_lila"], true);
+        assert!(fs::read_to_string(result.path.join("audio_tools.cmake")).unwrap().contains("set(MF_NEEDS_LILA ON)"));
+        assert!(fs::read_to_string(result.path.join("test/CMakeLists.txt")).unwrap().contains("set(MF_MIN_VERSION \"0.6.0\")"));
+        assert!(!fs::read_to_string(result.path.join("audio_tools.cmake")).unwrap().contains("@MODULE_NAME@"));
+        assert!(!fs::read_to_string(result.path.join("test/CMakeLists.txt")).unwrap().contains("@MODULE_NAME@"));
+        assert!(fs::read_to_string(result.path.join("README.md")).unwrap().contains("Audio helpers"));
+    }
+
+    #[test]
+    fn empty_minimum_uses_default_and_empty_description_uses_default_text() {
+        let temporary = TestDirectory::new();
+        let result = create_community_module("default_module", &temporary.0, &CommunityModuleOptions {
+            description: "  ".to_owned(),
+            min_version: "  ".to_owned(),
+            needs_lila: false,
+        }).unwrap();
+        let manifest: Value = serde_json::from_slice(&fs::read(result.path.join("community.json")).unwrap()).unwrap();
+        assert_eq!(manifest["min_version"], "0.5.0");
+        assert_eq!(manifest["description"], "");
+        assert_eq!(manifest["needs_lila"], false);
+        assert!(fs::read_to_string(result.path.join("README.md")).unwrap().contains("A MayaFlux community module."));
+        assert!(fs::read_to_string(result.path.join("default_module.cmake")).unwrap().contains("set(MF_NEEDS_LILA OFF)"));
+    }
+
+    #[test]
+    fn unsafe_names_and_invalid_versions_do_not_create_destinations() {
+        let temporary = TestDirectory::new();
+        for name in ["", "../escape", "Bad_Name", "con", "nul", "com1", "name/name"] {
+            assert!(create_community_module(name, &temporary.0, &CommunityModuleOptions::default()).is_err(), "accepted {name:?}");
+        }
+        for minimum in ["1.2", "01.2.3", "1.x.3", "1.2.3.4"] {
+            let destination = temporary.0.join(format!("bad-{}", minimum.replace('.', "_")));
+            let error = create_community_module("unsafe_test", &destination, &CommunityModuleOptions {
+                min_version: minimum.to_owned(), ..CommunityModuleOptions::default()
+            }).unwrap_err();
+            assert!(error.to_string().contains("major.minor.patch"));
+            assert!(!destination.exists());
+        }
+        assert_eq!(fs::read_dir(&temporary.0).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn existing_module_is_preserved() {
+        let temporary = TestDirectory::new();
+        let existing = temporary.0.join("audio_tools");
+        fs::create_dir(&existing).unwrap();
+        fs::write(existing.join("keep.txt"), "user file").unwrap();
+        assert!(create_community_module("audio_tools", &temporary.0, &CommunityModuleOptions::default()).is_err());
+        assert_eq!(fs::read_to_string(existing.join("keep.txt")).unwrap(), "user file");
+    }
+
+    #[test]
+    fn file_used_as_destination_is_preserved() {
+        let temporary = TestDirectory::new();
+        let destination = temporary.0.join("destination-file");
+        fs::write(&destination, "user file").unwrap();
+        let error = create_community_module("audio_tools", &destination, &CommunityModuleOptions::default()).unwrap_err();
+        assert!(!error.to_string().is_empty());
+        assert_eq!(fs::read_to_string(destination).unwrap(), "user file");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_destination_is_rejected_without_writing_through_it() {
+        use std::os::unix::fs::symlink;
+
+        let temporary = TestDirectory::new();
+        let target = temporary.0.join("target");
+        let link = temporary.0.join("link");
+        fs::create_dir(&target).unwrap();
+        symlink(&target, &link).unwrap();
+        assert!(create_community_module("audio_tools", &link, &CommunityModuleOptions::default()).is_err());
+        assert!(fs::read_dir(target).unwrap().next().is_none());
+    }
 }

@@ -1,6 +1,8 @@
 mod project;
 mod platform;
 mod community;
+mod git;
+mod update;
 
 use community::{CommunityModuleOptions, create_community_module};
 use project::{ProjectOptions, create_project};
@@ -22,7 +24,8 @@ slint::slint! {
         in-out property <string> module_min_version: "0.5.0";
         in-out property <string> destination: "";
         in-out property <string> status: "Ready";
-        in-out property <bool> community_mode: false;
+        in-out property <int> screen: 0;
+        in-out property <string> module_names: "";
         in-out property <bool> community_needs_lila: false;
         in-out property <bool> with_lila: false;
         in-out property <bool> with_vscode: true;
@@ -30,24 +33,23 @@ slint::slint! {
         callback choose_destination();
         callback create_project();
         callback create_community_module();
+        callback update_project();
 
         VerticalBox {
             padding: 24px;
             spacing: 12px;
 
-            HorizontalBox {
-                Button {
-                    text: "Project";
-                    clicked => { root.community_mode = false; }
-                }
-                Button {
-                    text: "Community Module";
-                    clicked => { root.community_mode = true; }
-                }
+            if root.screen == 0: VerticalBox {
+                spacing: 12px;
+                Text { text: "Projects"; font-size: 28px; }
+                Button { text: "Create Project"; clicked => { root.screen = 1; } }
+                Button { text: "Update Project (Community Modules)"; clicked => { root.screen = 2; } }
+                Button { text: "Create Community Module"; clicked => { root.screen = 3; } }
             }
 
-            if root.community_mode: VerticalBox {
+            if root.screen == 3: VerticalBox {
                 spacing: 12px;
+                Button { text: "Back to Projects"; clicked => { root.screen = 0; } }
                 Text {
                     text: "Create a MayaFlux community module";
                     font-size: 24px;
@@ -97,8 +99,9 @@ slint::slint! {
                 }
             }
 
-            if !root.community_mode: VerticalBox {
+            if root.screen == 1: VerticalBox {
                 spacing: 12px;
+                Button { text: "Back to Projects"; clicked => { root.screen = 0; } }
                 Text {
                     text: "Create a MayaFlux project";
                     font-size: 24px;
@@ -148,6 +151,20 @@ slint::slint! {
                 }
             }
 
+            if root.screen == 2: VerticalBox {
+                spacing: 12px;
+                Button { text: "Back to Projects"; clicked => { root.screen = 0; } }
+                Text { text: "Update a project with community modules"; font-size: 24px; }
+                HorizontalBox {
+                    spacing: 8px;
+                    Text { text: root.destination; vertical-alignment: center; overflow: elide; }
+                    Button { text: "Choose Project…"; clicked => { root.choose_destination(); } }
+                }
+                LineEdit { text <=> root.module_names; placeholder-text: "Module names (comma-separated)"; }
+                Text { text: "Modules are fetched from the MayaFlux community registry and registered in this project."; wrap: word-wrap; }
+                Button { text: "Update Project"; clicked => { root.update_project(); } }
+            }
+
             Text {
                 text: root.status;
                 wrap: word-wrap;
@@ -189,6 +206,13 @@ fn main() -> ExitCode {
         };
     }
 
+    if arguments[0] == "update" {
+        return match run_update(&arguments[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => { eprintln!("[Weave ERROR] {error}"); ExitCode::FAILURE }
+        };
+    }
+
     if arguments[0] != "new" {
         eprintln!("Unknown command: {}", arguments[0]);
         print_usage();
@@ -196,8 +220,9 @@ fn main() -> ExitCode {
     }
 
     match run_new(&arguments[1..]) {
-        Ok(path) => {
-            println!("Project created: {}", path.display());
+        Ok(result) => {
+            println!("Project created: {}", result.path.display());
+            if let Some(warning) = result.git_warning { eprintln!("[Weave WARNING] {warning}"); }
             ExitCode::SUCCESS
         }
         Err(error) => {
@@ -207,7 +232,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run_new(arguments: &[String]) -> Result<std::path::PathBuf, String> {
+fn run_new(arguments: &[String]) -> Result<project::ProjectCreationResult, String> {
     let mut name = None;
     let mut destination = None;
     let mut options = ProjectOptions::default();
@@ -230,6 +255,14 @@ fn run_new(arguments: &[String]) -> Result<std::path::PathBuf, String> {
         None => std::env::current_dir().map_err(|error| error.to_string())?,
     };
     create_project(name, &destination, options).map_err(|error| error.to_string())
+}
+
+fn run_update(arguments: &[String]) -> Result<(), String> {
+    if arguments.len() < 2 {
+        return Err("Usage: weave update <project-dir> <module-name>[,<module-name>...]".to_owned());
+    }
+    update::update_project(Path::new(&arguments[0]), &arguments[1..], |message| println!("{message}"))
+        .map_err(|error| error.to_string())
 }
 
 fn run_community(arguments: &[String]) -> Result<community::CommunityCreationResult, String> {
@@ -301,10 +334,33 @@ fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
             copy_shader_sources: window.get_copy_shader_sources(),
         };
         let status = match create_project(&name, Path::new(&destination), options) {
-            Ok(path) => format!("Project created: {}", path.display()),
+            Ok(result) => match result.git_warning {
+                Some(warning) => format!("Project created: {}\n{warning}", result.path.display()),
+                None => format!("Project created: {}", result.path.display()),
+            },
             Err(error) => format!("Could not create project: {error}"),
         };
         window.set_status(status.into());
+    });
+
+    let weak_window_for_update = window.as_weak();
+    window.on_update_project(move || {
+        let Some(window) = weak_window_for_update.upgrade() else { return; };
+        let project_path = window.get_destination().to_string();
+        let names = window.get_module_names().to_string();
+        window.set_status("Updating project…".into());
+        let weak = window.as_weak();
+        std::thread::spawn(move || {
+            let mut output = Vec::new();
+            let result = update::update_project(Path::new(&project_path), &[names], |line| output.push(line));
+            let status = match result {
+                Ok(()) => output.join("\n"),
+                Err(error) => format!("{}\n{error}", output.join("\n")),
+            };
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(window) = weak.upgrade() { window.set_status(status.into()); }
+            });
+        });
     });
 
     let weak_window_for_community = window.as_weak();
@@ -357,5 +413,5 @@ fn default_gui_destination() -> std::path::PathBuf {
 }
 
 fn print_usage() {
-    println!("Weave - MayaFlux project tool\n\nUsage:\n  weave                 Open the graphical creator\n  weave new <name> [destination] [options]\n  weave community <module-name> [destination-dir] [options]\n  weave --help\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila");
+    println!("Weave - MayaFlux project tool\n\nUsage:\n  weave                 Open the Projects screen\n  weave new <name> [destination] [options]\n  weave update <project-dir> <module-name>[,<module-name>...]\n  weave community <module-name> [destination-dir] [options]\n  weave --help\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila");
 }

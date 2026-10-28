@@ -41,6 +41,13 @@ fn cli_creates_a_project_with_requested_options_and_platform_scripts() {
     let project = temporary.0.join("CliDemo");
     assert!(project.join("src/main.cpp").is_file());
     assert!(project.join("cmake/mayaflux.cmake").is_file());
+    if Command::new("git").arg("--version").output().is_ok_and(|output| output.status.success()) {
+        let git_root = Command::new("git").args(["-C", project.to_str().unwrap(), "rev-parse", "--show-toplevel"]).output().unwrap();
+        assert!(git_root.status.success());
+        let staged = Command::new("git").args(["-C", project.to_str().unwrap(), "diff", "--cached", "--name-only"]).output().unwrap();
+        assert!(staged.status.success());
+        assert!(!String::from_utf8_lossy(&staged.stdout).trim().is_empty());
+    }
     assert!(!project.join(".vscode").exists());
     assert!(fs::read_to_string(project.join("cmake/mayaflux.cmake"))
         .unwrap()
@@ -87,6 +94,38 @@ fn cli_does_not_overwrite_an_existing_project() {
 }
 
 #[test]
+fn cli_help_exposes_the_three_project_operations() {
+    let result = Command::new(env!("CARGO_BIN_EXE_weave")).arg("--help").output().unwrap();
+    assert!(result.status.success());
+    let help = String::from_utf8_lossy(&result.stdout);
+    assert!(help.contains("weave new"));
+    assert!(help.contains("weave update"));
+    assert!(help.contains("weave community"));
+}
+
+#[test]
+fn cli_reports_project_update_validation_errors_without_network_access() {
+    let temporary = TestDirectory::new();
+    let missing = Command::new(env!("CARGO_BIN_EXE_weave")).arg("update").output().unwrap();
+    assert!(!missing.status.success());
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("Usage: weave update"));
+
+    let unsafe_name = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args(["update", temporary.0.to_str().unwrap(), "../escape"])
+        .output().unwrap();
+    assert!(!unsafe_name.status.success());
+    assert!(String::from_utf8_lossy(&unsafe_name.stderr).contains("Invalid module name"));
+    assert_eq!(fs::read_dir(&temporary.0).unwrap().count(), 0);
+
+    let invalid_project = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args(["update", temporary.0.to_str().unwrap(), "terrain_field"])
+        .output().unwrap();
+    assert!(!invalid_project.status.success());
+    assert!(String::from_utf8_lossy(&invalid_project.stderr).contains("Not a MayaFlux project"));
+    assert_eq!(fs::read_dir(&temporary.0).unwrap().count(), 0);
+}
+
+#[test]
 fn cli_creates_a_community_module_from_embedded_templates() {
     let temporary = TestDirectory::new();
     let result = Command::new(env!("CARGO_BIN_EXE_weave"))
@@ -111,6 +150,13 @@ fn cli_creates_a_community_module_from_embedded_templates() {
     assert!(module.join("README.md").is_file());
     assert!(module.join("test/test_audio_tools.cpp").is_file());
     assert!(module.join("audio_tools.cmake").is_file());
+    if Command::new("git").arg("--version").output().is_ok_and(|output| output.status.success()) {
+        let git_root = Command::new("git").args(["-C", module.to_str().unwrap(), "rev-parse", "--show-toplevel"]).output().unwrap();
+        assert!(git_root.status.success());
+        let staged = Command::new("git").args(["-C", module.to_str().unwrap(), "diff", "--cached", "--name-only"]).output().unwrap();
+        assert!(staged.status.success());
+        assert!(!String::from_utf8_lossy(&staged.stdout).trim().is_empty());
+    }
     let manifest_text = fs::read_to_string(module.join("community.json")).unwrap();
     let manifest: serde_json::Value = serde_json::from_str(&manifest_text).unwrap();
     assert_eq!(manifest["name"], "audio_tools");
@@ -172,4 +218,36 @@ fn cli_rejects_invalid_community_minimum_versions_without_writing_files() {
     assert!(!result.status.success());
     assert!(String::from_utf8_lossy(&result.stderr).contains("major.minor.patch"));
     assert_eq!(fs::read_dir(&temporary.0).unwrap().count(), 0);
+}
+
+#[test]
+fn cli_rejects_existing_community_module_without_overwriting_user_files() {
+    let temporary = TestDirectory::new();
+    let module = temporary.0.join("audio_tools");
+    fs::create_dir(&module).unwrap();
+    fs::write(module.join("keep.txt"), "user content").unwrap();
+    let result = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args(["community", "audio_tools", temporary.0.to_str().unwrap()])
+        .output().unwrap();
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("already exists"));
+    assert_eq!(fs::read_to_string(module.join("keep.txt")).unwrap(), "user content");
+}
+
+#[cfg(unix)]
+#[test]
+fn cli_rejects_symlinked_project_creation_destination() {
+    use std::os::unix::fs::symlink;
+
+    let temporary = TestDirectory::new();
+    let target = temporary.0.join("target");
+    let link = temporary.0.join("link");
+    fs::create_dir(&target).unwrap();
+    symlink(&target, &link).unwrap();
+    let result = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args(["new", "Demo", link.to_str().unwrap()])
+        .output().unwrap();
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("symbolic link"));
+    assert!(fs::read_dir(target).unwrap().next().is_none());
 }
