@@ -1,4 +1,4 @@
-name: Build and test Weave
+name: Build, test, and publish Weave
 
 on:
   workflow_dispatch:
@@ -8,11 +8,11 @@ on:
         type: boolean
         default: true
       windows:
-        description: Build and test Rust on Windows
+        description: Build, test, package, and validate Rust on Windows
         type: boolean
         default: true
       linux:
-        description: Build and test Rust on Linux
+        description: Build, test, package, and validate Rust on Linux
         type: boolean
         default: true
   push:
@@ -20,7 +20,17 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: read
+
 jobs:
+  test-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test release policy and publishing with controlled commands
+        run: bash tests/release.sh
+
   build-rust:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -83,8 +93,37 @@ jobs:
         run: cargo test --locked
 
       - name: Build Rust application
-        if: steps.platform-selection.outputs.enabled == 'true' && runner.os != 'macOS'
+        if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Linux'
         run: cargo build --release --locked
+
+      - name: Package self-contained Windows x64 executable
+        if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Windows'
+        shell: pwsh
+        run: ./packaging/windows/scripts/package.ps1 -OutputDirectory "$env:RUNNER_TEMP/weave-windows"
+
+      - name: Validate Windows portable package
+        if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem -LiteralPath "$env:RUNNER_TEMP/weave-windows" -Filter 'Weave-*-Windows-x64.zip'
+          if (@($package).Count -ne 1) { throw 'Expected exactly one Windows portable package.' }
+          ./packaging/windows/scripts/verify.ps1 -Package $package.FullName
+
+      - name: Test Windows package rejection paths
+        if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem -LiteralPath "$env:RUNNER_TEMP/weave-windows" -Filter 'Weave-*-Windows-x64.zip'
+          ./tests/windows-package.ps1 -Package $package.FullName
+
+      - name: Upload Windows portable package
+        if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Weave-windows-x64
+          path: ${{ runner.temp }}/weave-windows/Weave-*-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Package Linux AppImage
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Linux'
@@ -101,6 +140,7 @@ jobs:
           name: Weave-linux-x86_64
           path: ${{ runner.temp }}/weave-linux/Weave-*-Linux-x86_64.AppImage
           if-no-files-found: error
+          retention-days: 30
 
       - name: Install Apple Silicon Rust target
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'macOS'
@@ -121,3 +161,39 @@ jobs:
           name: Weave-macos-arm64
           path: ${{ runner.temp }}/weave-macos/Weave-*-macOS-arm64.dmg
           if-no-files-found: error
+          retention-days: 30
+
+  publish-release:
+    needs: [test-release, build-rust]
+    # Selective manual builds still upload their artifacts, but never publish
+    # a release that is missing another platform's package.
+    if: >-
+      needs.test-release.result == 'success' && needs.build-rust.result == 'success' &&
+      (github.event_name != 'workflow_dispatch' || (inputs.macos && inputs.windows && inputs.linux))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: weave-release-publishing
+      cancel-in-progress: false
+    steps:
+      - name: Check out the exact built commit and version tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Download validated platform packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: Weave-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/weave-packages
+
+      - name: Assemble release assets, current instructions, and SHA256 checksums
+        run: bash packaging/scripts/release.sh assemble "$RUNNER_TEMP/weave-packages" "$RUNNER_TEMP/weave-release"
+
+      - name: Publish stable or rolling development release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash packaging/scripts/release.sh publish "$RUNNER_TEMP/weave-release"

@@ -1,88 +1,108 @@
 # Weave
 
-Weave is MayaFlux's Rust application for creating CMake projects, creating community modules, and updating projects with community modules. The shared application lives at the repository root; the former Python, Swift, and .NET applications are archived under [`legacy/`](legacy/).
+**Installer and project tool for [MayaFlux](https://github.com/MayaFlux/MayaFlux).**
 
-## Run from source
+Weave installs MayaFlux, creates ready-to-build CMake projects, and helps you create and add community modules. Use the desktop app or the standalone CLI.
 
-Install the Rust toolchain for development, then run the GUI:
+## Download
 
-```sh
-cargo run --locked
-```
+Get the package for your platform from [Releases](https://github.com/MayaFlux/Weave/releases).
 
-The CLI runs independently without starting the GUI:
+| Platform | Package | Requirements |
+| --- | --- | --- |
+| Windows | Portable ZIP | x64, Windows 10 22H2 (build 19045) or later |
+| macOS | DMG | Apple Silicon, macOS 26 or later |
+| Linux | AppImage | x86_64, glibc 2.43 or later, FUSE |
 
-```sh
-cargo run --locked -- --help
-cargo run --locked -- new AudioDemo /path/to/projects --with-lila
-cargo run --locked -- update /path/to/AudioDemo terrain_field,audio_tools
-cargo run --locked -- community audio_tools /path/to/modules --description "Audio helpers"
-cargo run --locked -- install stable
-cargo run --locked -- install development --replace-conflict
-```
+- **Windows:** extract the ZIP and open **Weave.exe**. Launch normally; Weave requests administrator consent only when installing host software.
+- **macOS:** open the DMG and drag **Weave.app** to Applications. If Gatekeeper blocks the downloaded app, approve it through **System Settings > Privacy & Security > Open Anyway**.
+- **Linux:** make the AppImage executable and launch it:
 
-Project creation, community-module creation, and project updates use the same Rust operations from the GUI and CLI. Generated projects remain ordinary CMake directories; MayaFlux, CMake, compilers, and Git are host tools and are not bundled into projects.
+  ```sh
+  chmod +x Weave-linux.AppImage
+  ./Weave-linux.AppImage
+  ```
 
-Installation uses shared step pages with live output and standard Slint progress bars. Windows shows System check, Install MayaFlux, Dependencies, Environment, and Templates / CLI. macOS checks Apple developer tools and Homebrew, installs the formula with its dependencies, then configures the shell environment. Linux checks package-manager tools and installs the native package with its dependencies. Unix has no separate dependency page, and Linux has no environment page. Steps advance automatically; completed output remains available, and failures offer retry. Measured curl downloads show a percentage; operations without measured progress use an animated indicator.
+Weave includes its own executable, templates, and resources. You do not need Rust, Python, .NET, a separate GUI toolkit, or a Weave runtime to use it. Your operating system supplies the display and graphics driver. Building generated projects still requires MayaFlux, CMake, Ninja, and a C++ compiler.
 
-The final step verifies Weave's embedded templates and standalone CLI. Windows also deploys templates under the MayaFlux installation. Unix uses bundled resources without copying another Weave executable into package-managed locations; the portable executable is not automatically added to PATH.
+## Install MayaFlux
 
-Windows installation is available from both the GUI and `weave install <stable|development>`. It checks/acquires 7-Zip and Microsoft C++ prerequisites, downloads and verifies the selected MayaFlux x64 release, verifies/installs CMake 3.31+, Git, Ninja, LLVM, FFmpeg Shared and Vulkan SDK through winget, configures the machine environment, and deploys Weave's embedded templates and tools. Installation targets `C:\MayaFlux` and requires Windows 10 22H2 (build 19045) or later. Windows requests native UAC consent for this host installation; project and community operations stay non-elevated. Missing winget or other host tools produce a recoverable error.
+Open Weave and choose **Install MayaFlux**, then select **Stable** or **Development**. Weave checks your system, installs MayaFlux and its build dependencies, and configures the environment where needed.
 
-Switching stable/development streams asks for replacement approval in the GUI; the CLI uses `--replace-conflict`. Development builds use a 24-hour UTC freshness check. An already-current MayaFlux payload is verified, then the remaining setup stages still run. Installation logs append to `%LOCALAPPDATA%\weave_install.log`; completion reports any restart requirement. The Windows workflow has controlled Rust tests, but live installation and downloadable Windows package acceptance still require native validation.
+Installation uses winget on Windows, Homebrew on macOS, and your distribution's package manager on supported Linux distributions. Follow any authorization prompts and restart your terminal or Windows if requested. Weave asks before replacing another MayaFlux edition. If installation fails, review the reported error and retry; project operations remain available.
 
-## Build and test
+## Create a project
 
-```sh
-cargo build --locked --release
-cargo test --locked
-```
+Choose **Projects > Create Project**, enter a name, and select an existing destination folder. You can enable live coding with Lila, include VS Code configuration, and copy installed MayaFlux shader sources.
 
-The Slint UI and project templates are compiled into the executable during the build. `Cargo.lock` pins the application and UI compiler dependencies.
+Your project is an ordinary CMake directory. Write your code in `src/user_project.hpp`:
 
-On x86_64 Linux, build the AppImage on Ubuntu 26.04 (or an equivalent glibc 2.43 build environment), then validate the downloadable artifact. On Arch or another newer Linux host, the container wrapper uses Podman or Docker to provide that build environment:
+- `settings()` configures the engine before it starts.
+- `compose()` builds your audio and visual processing graph.
 
-```sh
-bash packaging/linux/scripts/package-container.sh
-bash packaging/linux/scripts/verify.sh target/packaging/linux/output/Weave-0.6.0-Linux-x86_64.AppImage
-```
-
-On Ubuntu 26.04 itself, `bash packaging/linux/scripts/package.sh /tmp/weave-linux` builds directly without a container.
-
-The AppImage includes the Weave executable and its resources. The host needs FUSE to launch it, plus a supported Linux display service and graphics driver for the GUI. It does not need Rust, Python, GTK, or a separate Weave runtime. The supported executable ABI baseline is glibc 2.43, matching Ubuntu 26.04 as MayaFlux's minimum Ubuntu release. Host tools such as Git, CMake, and compilers remain separate dependencies for the operations that use them.
-
-On an Apple Silicon Mac with the Rust target and Xcode tools installed, build and validate the macOS package with:
+Configure and build from the project folder:
 
 ```sh
-bash packaging/macos/scripts/package.sh /tmp/weave-macos
-bash packaging/macos/scripts/verify.sh /tmp/weave-macos/Weave-0.6.0-macOS-arm64.dmg
+cmake --preset release
+cmake --build --preset release
 ```
 
-The default app bundle is ad-hoc signed to seal its resources and allow integrity checks. It is not Developer ID signed or notarized, so this package is not a warning-free browser download; Gatekeeper may require the user to approve opening it.
+Run `build/YourProject` on Linux and macOS, or `build\YourProject.exe` on Windows. A `debug` preset is also included. You can open the folder in your preferred CMake-capable editor or IDE and edit `CMakeLists.txt` as your project grows.
 
-## Repository layout
+For live coding, enable **Live coding (Lila)** when creating the project, then connect [LilaCode](https://github.com/MayaFlux/LilaCode) for VS Code or [lila.nvim](https://github.com/MayaFlux/lila.nvim) for Neovim.
 
-- `src/lib.rs`: application library used by the GUI, CLI and tests
-- `src/operations/`: project/community/update operations and the shared installation workflow, release policy and dependency execution
-- `src/process.rs`, `src/download.rs`, `src/filesystem.rs`, `src/environment.rs`, `src/resources.rs`: shared infrastructure; native implementations supply only OS mechanisms and requirements
-- `src/platform/`: native package managers, authentication, discovery, environment persistence and process/path primitives
-- `ui/`: Slint theme, components, dialogs and screens
-- `resources/`: authoritative icons and project/community templates, including OS-specific generated-project scripts
-- `packaging/`: native package assembly/verification scripts and metadata; shared template staging lives in `packaging/scripts/`
-- `tests/`: Rust integration tests and shared fixtures
-- `legacy/`: former per-platform applications, their platform test suites, and archived development guides
-- `.github/`: CI and release workflows
-- `Agents.md`: current implementation, packaging, platform, and test requirements
+## Community modules
 
-Windows uses the shared installation and infrastructure modules with narrow native adapters. Linux and macOS installer implementations have only been relocated into consistent adapter directories; their existing behavior is retained until native development can migrate them to the shared engine. Generated compiler output, package staging, packaging tools and downloadable artifacts belong under `target/`; the workspace-local development toolchain, if used, remains under ignored `build/rust-tools/`.
+### Add modules to a project
 
-The active workflow builds and tests the Rust application on native Linux, macOS, and Windows runners. It packages and validates the Linux x86_64 AppImage and the Apple Silicon `.app` and `.dmg`, then uploads them as workflow artifacts. The workflow runs on pushes to `main` and version tags; `develop` remains manual through workflow dispatch. The Windows package and GitHub Release publishing are still in progress. The archived applications and CI helpers are retained for feature and packaging comparisons, but are not built or tested by active CI.
+Choose **Projects > Update Project**, select your project folder, and enter one or more module names. Weave looks them up in the [community registry](https://github.com/MayaFlux/community-sources-registry), checks their MayaFlux requirements, downloads them into `community/`, and registers them in `community.cmake`. Rebuild your project afterward.
 
-## Documentation
+Modules already present in the project are skipped. A module's `community.json` may also declare packages, manual installations, environment settings, and data assets. Weave validates these declarations but does not install the listed dependencies for you.
 
-- [Community manifest contract](docs/COMMUNITY_MANIFEST.md)
-- [Current development and distribution rules](Agents.md)
-- [Archived development guide](legacy/docs/DEVELOP.md)
+### Create a module
+
+Choose **Projects > Create Community Module**. Enter a snake_case name, description, minimum MayaFlux version, and whether the module needs Lila. Weave creates the source folder, CMake configuration, `community.json`, and a test project.
+
+Build and test from the generated module folder:
+
+```sh
+cmake --preset release
+cmake --build --preset release
+ctest --test-dir test/build
+```
+
+See the [community manifest contract](docs/COMMUNITY_MANIFEST.md) for the supported metadata and dependency declarations. To share a module, publish its repository and submit it to the community registry.
+
+## Command line
+
+The same executable provides a CLI without opening the desktop app. Use its full path if it is not on PATH. For help, run `.\Weave.exe --help` on Windows, `/Applications/Weave.app/Contents/MacOS/weave --help` on macOS, or `./Weave-linux.AppImage --help` on Linux.
+
+Examples below use `weave` as shorthand for that executable:
+
+```sh
+weave new AudioDemo /path/to/projects --with-lila
+weave community audio_tools /path/to/modules --description "Audio helpers"
+weave update /path/to/AudioDemo terrain_field,audio_tools
+weave install stable
+weave install development --replace-conflict
+```
+
+## Diagnostics and bug reports
+
+Generated projects include scripts for checking the project and collecting a report:
+
+| Task | Linux and macOS | Windows |
+| --- | --- | --- |
+| Check project and installation | `./validate.sh` | `.\validate.bat` |
+| Run a built project and collect logs | `./run-report.sh` | `.\run-report.bat` |
+
+Run these from the project folder. Build the project before using `run-report`, reproduce the problem, then close the application. Attach `mayaflux_run.txt` and `data/log/mayaflux_report.log` when reporting a runtime problem. The Windows `.bat` launchers call the accompanying PowerShell scripts.
+
+Report Weave problems through [Issues](https://github.com/MayaFlux/Weave/issues). For project runtime problems, use the [MayaFlux issue templates](https://github.com/MayaFlux/MayaFlux/issues/new/choose).
+
+## Development
+
+To build or contribute to Weave itself, see the [development guide](docs/DEVELOP.md).
 
 ## License
 
