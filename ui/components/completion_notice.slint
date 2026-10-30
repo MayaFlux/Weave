@@ -1,0 +1,49 @@
+import { HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { WeaveTheme } from "../theme.slint";
+
+export component CompletionNotice inherits Rectangle {
+    in property <int> kind;
+    in property <bool> busy: false;
+    in property <string> heading;
+    in property <string> message;
+    background: root.busy ? WeaveTheme.panel-background : root.kind == 2 ? WeaveTheme.error-background : root.kind == 1 ? WeaveTheme.warning-background : WeaveTheme.success-background;
+    border-radius: 6px;
+    min-height: content.min-height;
+    preferred-height: content.preferred-height;
+    vertical-stretch: 0;
+
+    content := HorizontalBox {
+        padding: 18px;
+        spacing: 16px;
+        Text {
+            text: root.busy ? "…" : root.kind == 0 ? "✓" : "!";
+            color: root.kind == 2 ? WeaveTheme.error-text : root.kind == 1 ? WeaveTheme.warning-text : WeaveTheme.success-text;
+            font-size: 36px;
+            font-weight: 700;
+            width: 42px;
+            vertical-alignment: center;
+        }
+        VerticalBox {
+            spacing: 6px;
+            Text {
+                text: root.busy ? "IN PROGRESS" : root.kind == 2 ? "FAILED" : root.kind == 1 ? "COMPLETED WITH WARNING" : "COMPLETED SUCCESSFULLY";
+                color: WeaveTheme.text-primary;
+                font-size: WeaveTheme.font-caption;
+                font-weight: 700;
+            }
+            Text {
+                text: root.heading;
+                color: WeaveTheme.text-primary;
+                font-size: WeaveTheme.font-heading;
+                font-weight: 700;
+                wrap: word-wrap;
+            }
+            if !root.message.is-empty: Text {
+                text: root.message;
+                color: WeaveTheme.text-primary;
+                font-size: WeaveTheme.font-description;
+                wrap: word-wrap;
+            }
+        }
+    }
+}

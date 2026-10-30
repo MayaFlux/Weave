@@ -1,0 +1,39 @@
+import { ProgressIndicator, TextEdit, VerticalBox } from "std-widgets.slint";
+import { WeaveTheme } from "../theme.slint";
+
+export component InstallStepPage inherits VerticalBox {
+    in property <string> heading;
+    in property <string> output;
+    // 0 pending, 1 running, 2 complete, 3 failed.
+    in property <int> status;
+    in property <float> fraction: -1;
+    spacing: 14px;
+
+    Text {
+        text: root.heading;
+        color: WeaveTheme.text-primary;
+        font-size: WeaveTheme.font-dialog-title;
+        font-weight: 650;
+    }
+    Text {
+        text: root.status == 1 ? (root.fraction >= 0 ? "Downloading " + round(root.fraction * 100) + "%" : "In progress") : root.status == 2 ? "Complete" : root.status == 3 ? "Needs attention" : "Waiting";
+        color: root.status == 3 ? WeaveTheme.error-text : WeaveTheme.text-secondary;
+        font-size: WeaveTheme.font-description;
+    }
+    ProgressIndicator {
+        indeterminate: root.status == 1 && root.fraction < 0;
+        progress: root.status == 2 ? 1 : max(0, root.fraction);
+        accessible-label: root.heading;
+    }
+    TextEdit {
+        vertical-stretch: 1;
+        read-only: true;
+        text: root.output;
+        font-family: WeaveTheme.font-family;
+        font-size: WeaveTheme.font-small;
+        wrap: word-wrap;
+        content-y: min(0px, self.visible-height - self.content-height);
+        placeholder-text: "This step will start automatically.";
+        accessible-label: "Installation output";
+    }
+}

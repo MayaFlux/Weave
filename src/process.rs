@@ -19,6 +19,40 @@ pub trait ProcessRuntime {
         output.status.success()
     }
 }
+
+#[derive(Default)]
+struct Lines {
+    pending: Vec<u8>,
+}
+
+impl Lines {
+    fn push(&mut self, bytes: &[u8], log: &mut impl FnMut(&str)) {
+        for byte in bytes {
+            if matches!(byte, b'\r' | b'\n') {
+                self.finish(log);
+            } else {
+                self.pending.push(*byte);
+                // A tool may produce unbounded output without a newline. Keep
+                // memory bounded while retaining an incomplete UTF-8 character.
+                if self.pending.len() >= 16 * 1024 {
+                    let ready = match std::str::from_utf8(&self.pending) {
+                        Err(error) if error.error_len().is_none() => error.valid_up_to(),
+                        _ => self.pending.len(),
+                    };
+                    log(&String::from_utf8_lossy(&self.pending[..ready]));
+                    self.pending.drain(..ready);
+                }
+            }
+        }
+    }
+
+    fn finish(&mut self, log: &mut impl FnMut(&str)) {
+        if !self.pending.is_empty() {
+            log(&String::from_utf8_lossy(&self.pending));
+            self.pending.clear();
+        }
+    }
+}
 #[cfg(target_os = "windows")]
 pub fn run(
     command: &mut Command,
@@ -117,13 +151,20 @@ pub fn run_with<R: ProcessRuntime>(
         drop(sender);
         let mut output = Vec::new();
         let mut errors = Vec::new();
+        let mut stdout_lines = Lines::default();
+        let mut stderr_lines = Lines::default();
+        let mut logger = |line: &str| log(line);
         let mut status = None;
         let start = std::time::Instant::now();
         let mut timed_out = false;
         loop {
             match receiver.recv_timeout(Duration::from_millis(50)) {
                 Ok((error, bytes)) => {
-                    log(&String::from_utf8_lossy(&bytes));
+                    if error {
+                        stderr_lines.push(&bytes, &mut logger);
+                    } else {
+                        stdout_lines.push(&bytes, &mut logger);
+                    }
                     let target = if error { &mut errors } else { &mut output };
                     target.extend(bytes);
                     if target.len() > 262144 {
@@ -155,6 +196,8 @@ pub fn run_with<R: ProcessRuntime>(
                 }
             }
         }
+        stdout_lines.finish(&mut logger);
+        stderr_lines.finish(&mut logger);
         if timed_out {
             return Err(format!(
                 "{label} exceeded its reporting deadline; the operation has ended. Retry to verify the resulting host state"
@@ -166,6 +209,37 @@ pub fn run_with<R: ProcessRuntime>(
             stderr: errors,
         })
     })
+}
+
+#[cfg(test)]
+mod framing_tests {
+    use super::*;
+    #[test]
+    fn pipe_framing_preserves_split_unicode_and_coalesced_events() {
+        let mut frames = Lines::default();
+        let mut output = Vec::new();
+        let mut log = |line: &str| output.push(line.to_owned());
+        let message = "@weave-progress:{\"stage\":\"install\",\"detail\":\"MayaFlux…\"}\r\nnext\n";
+        for byte in message.as_bytes() {
+            frames.push(&[*byte], &mut log);
+        }
+        frames.push(b"final", &mut log);
+        frames.finish(&mut log);
+        assert_eq!(
+            output,
+            [
+                "@weave-progress:{\"stage\":\"install\",\"detail\":\"MayaFlux…\"}",
+                "next",
+                "final"
+            ]
+        );
+        let mut coalesced = Lines::default();
+        let mut combined = Vec::new();
+        coalesced.push(message.as_bytes(), &mut |line| {
+            combined.push(line.to_owned())
+        });
+        assert_eq!(combined, output[..2]);
+    }
 }
 
 #[cfg(all(test, target_os = "windows"))]

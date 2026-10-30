@@ -1,6 +1,6 @@
-import { HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
+import { Button, HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
 import { WeaveTheme } from "../theme.slint";
-import { AppButton } from "../components/mod.slint";
+import { CompletionNotice } from "../components/completion_notice.slint";
 
 export component ResultDialog inherits Rectangle {
     in property <int> result_kind;
@@ -19,37 +19,24 @@ export component ResultDialog inherits Rectangle {
     Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        width: 700px;
-        height: root.result_busy ? 520px : 300px;
+        width: min(720px, parent.width - 32px);
+        height: min(root.result_busy ? 520px : 420px, parent.height - 32px);
         border-radius: 6px;
         border-width: 1px;
         border-color: WeaveTheme.border-strong;
         background: WeaveTheme.panel-background;
         VerticalBox {
             x: 28px; y: 26px; width: parent.width - 56px; height: parent.height - 52px; spacing: 12px;
-            HorizontalBox {
-                spacing: 14px;
-                Rectangle {
-                    width: 34px; height: 34px; border-radius: 4px;
-                    background: root.result_kind == 2 ? WeaveTheme.error-background : root.result_kind == 1 ? WeaveTheme.warning-background : WeaveTheme.success-background;
-                    Text {
-                    text: root.result_busy ? "…" : root.result_kind == 2 ? "!" : root.result_kind == 1 ? "!" : "✓";
-                        color: root.result_kind == 2 ? WeaveTheme.error-text : root.result_kind == 1 ? WeaveTheme.warning-text : WeaveTheme.success-text;
-                        font-size: WeaveTheme.font-icon; font-weight: 700;
-                        horizontal-alignment: center; vertical-alignment: center;
-                    }
-                }
-                VerticalBox {
-                    spacing: 2px;
-                    Text { text: root.result_busy ? "IN PROGRESS" : root.result_kind == 2 ? "FAILED" : root.result_kind == 1 ? "COMPLETED WITH WARNING" : "COMPLETED"; color: root.result_busy ? WeaveTheme.accent : root.result_kind == 2 ? WeaveTheme.error-text : root.result_kind == 1 ? WeaveTheme.warning-text : WeaveTheme.success-text; font-size: WeaveTheme.font-tiny; font-weight: 700; }
-                    Text { text: root.result_title; color: WeaveTheme.text-primary; font-size: WeaveTheme.font-dialog-title; font-weight: 650; wrap: word-wrap; }
-                }
+            CompletionNotice {
+                kind: root.result_kind;
+                busy: root.result_busy;
+                heading: root.result_title;
             }
             Rectangle { height: 1px; background: WeaveTheme.border; }
             ScrollView {
                 vertical-stretch: 1;
                 content-height: log_text.preferred-height + 16px;
-                content-y: min(0px, self.visible-height - self.content-height);
+                content-y: root.result_busy ? min(0px, self.visible-height - self.content-height) : 0px;
                 Rectangle {
                     width: parent.width;
                     height: log_text.preferred-height + 16px;
@@ -67,7 +54,7 @@ export component ResultDialog inherits Rectangle {
             }
             HorizontalBox {
                 Rectangle { horizontal-stretch: 1; background: transparent; }
-                AppButton { text: "Close"; primary: true; enabled: !root.result_busy; clicked => { root.close(); } }
+                Button { text: "Close"; primary: true; enabled: !root.result_busy; clicked => { root.close(); } }
             }
         }
     }

@@ -151,7 +151,21 @@ pub const RESOURCES: &[(&str, &str)] = &[
     ),
 ];
 
+pub fn verify_embedded() -> Result<(), String> {
+    let mut seen = std::collections::BTreeSet::new();
+    for (relative, contents) in RESOURCES {
+        crate::filesystem::validate_relative(Path::new(relative))?;
+        if contents.is_empty() || !seen.insert(relative) {
+            return Err(format!(
+                "Bundled resource is empty or duplicated: {relative}. Restore the Weave package and retry."
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn deploy_resources(root: &Path) -> Result<(), String> {
+    verify_embedded()?;
     safe_directory(root)?;
     let templates = root.join("share/weave/templates");
     for (relative, contents) in RESOURCES {

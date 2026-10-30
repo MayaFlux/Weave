@@ -1,10 +1,12 @@
 use crate::MainWindow;
 use crate::operations::community::{CommunityModuleOptions, create_community_module};
 use crate::operations::install;
+use crate::operations::install::progress::{Event, Platform, Progress, Status};
 use crate::operations::project::{ProjectOptions, create_project};
 use crate::operations::update;
-use slint::ComponentHandle;
+use slint::{ComponentHandle, Model};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
     let window = MainWindow::new()?;
@@ -39,6 +41,29 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
         };
         let replace_conflict = window.get_install_replace_confirmed();
         start_mayaflux_install(&window, channel.to_string(), replace_conflict);
+    });
+
+    let weak_window_for_retry = window.as_weak();
+    window.on_retry_install(move || {
+        let Some(window) = weak_window_for_retry.upgrade() else {
+            return;
+        };
+        if window.get_busy() {
+            return;
+        }
+        window.set_install_progress_open(false);
+        #[cfg(target_os = "linux")]
+        {
+            window.set_install_replace_confirmed(window.get_install_retry_replace_confirmed());
+            window.set_install_password("".into());
+            window.set_install_step(2);
+        }
+        #[cfg(not(target_os = "linux"))]
+        start_mayaflux_install(
+            &window,
+            window.get_install_channel().to_string(),
+            window.get_install_retry_replace_confirmed(),
+        );
     });
 
     #[cfg(target_os = "linux")]
@@ -204,6 +229,9 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn start_mayaflux_install(window: &MainWindow, channel: String, replace_conflict: bool) {
+    if window.get_busy() {
+        return;
+    }
     #[cfg(target_os = "linux")]
     let mut password = window.get_install_password().to_string();
     #[cfg(not(target_os = "linux"))]
@@ -219,17 +247,24 @@ fn start_mayaflux_install(window: &MainWindow, channel: String, replace_conflict
         return;
     }
     window.set_install_password("".into());
+    window.set_install_retry_replace_confirmed(replace_conflict);
     window.set_install_replace_confirmed(false);
     window.set_busy(true);
-    window.set_result_busy(true);
-    window.set_result_kind(1);
-    window.set_result_title("Installing MayaFlux".into());
-    window.set_result_message("Starting the MayaFlux installation…".into());
-    window.set_result_open(true);
+    window.set_install_channel(channel.clone().into());
+    window.set_result_open(false);
+    window.set_install_failed(false);
+    window.set_install_selected_page(0);
+    window.set_install_active_page(0);
+    let mut initial = Progress::new(Platform::current());
+    initial.receive(Event::Output("Starting MayaFlux installation…".into()));
+    sync_install_progress(window, &initial);
+    let progress = Arc::new(Mutex::new(initial));
+    window.set_install_progress_open(true);
     let weak = window.as_weak();
     std::thread::spawn(move || {
         let log_window = weak.clone();
-        let result = install::install_mayaflux(
+        let log_progress = progress.clone();
+        let result = install::install_with_events(
             &channel,
             replace_conflict,
             if password.is_empty() {
@@ -237,13 +272,14 @@ fn start_mayaflux_install(window: &MainWindow, channel: String, replace_conflict
             } else {
                 Some(&password)
             },
-            move |line| {
-                let line = line.to_owned();
+            move |event| {
                 let weak = log_window.clone();
+                let progress = log_progress.clone();
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(window) = weak.upgrade() {
-                        let previous = window.get_result_message().to_string();
-                        window.set_result_message(format!("{previous}\n{line}").into());
+                        let mut progress = progress.lock().unwrap();
+                        progress.receive(event);
+                        sync_install_progress(&window, &progress);
                     }
                 });
             },
@@ -256,36 +292,68 @@ fn start_mayaflux_install(window: &MainWindow, channel: String, replace_conflict
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(window) = weak.upgrade() {
                         window.set_busy(false);
-                        window.set_result_busy(false);
-                        window.set_result_open(false);
+                        window.set_install_progress_open(false);
                         show_install_conflict(&window, &channel, &installed_formula);
                     }
                 });
             }
             result => {
-                let (kind, title, message) = match result {
-                    Ok(message) => (0, "MayaFlux installed", message),
-                    Err(error) => (2, "MayaFlux installation failed", error.to_string()),
-                };
+                let failed = result.is_err();
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(window) = weak.upgrade() {
                         window.set_busy(false);
-                        window.set_result_busy(false);
                         window.set_install_password("".into());
-                        #[cfg(target_os = "linux")]
-                        if kind == 0 {
-                            window.set_install_step(3);
+                        if !failed {
+                            window.set_install_retry_replace_confirmed(false);
+                            window.set_install_step(1);
+                            window.set_screen(0);
                         }
-                        window.set_result_kind(kind);
-                        window.set_result_title(title.into());
-                        let previous = window.get_result_message().to_string();
-                        window.set_result_message(format!("{previous}\n\n{message}").into());
-                        window.set_result_open(true);
+                        let mut progress = progress.lock().unwrap();
+                        progress.finish(result.map_err(|error| error.to_string()));
+                        window.set_install_failed(failed);
+                        sync_install_progress(&window, &progress);
+                        window.set_install_selected_page(progress.active as i32);
                     }
                 });
             }
         }
     });
+}
+
+fn sync_install_progress(window: &MainWindow, progress: &Progress) {
+    let previous = window.get_install_active_page();
+    let follow = window.get_install_selected_page() == previous;
+    let rows: Vec<_> = progress
+        .steps
+        .iter()
+        .map(|step| crate::InstallationStep {
+            title: step.stage.title().into(),
+            status: match step.status {
+                Status::Pending => 0,
+                Status::Running => 1,
+                Status::Complete => 2,
+                Status::Failed => 3,
+            },
+            output: step.output.clone().into(),
+        })
+        .collect();
+    let model = window.get_install_progress_steps();
+    if let Some(existing) = model
+        .as_any()
+        .downcast_ref::<slint::VecModel<crate::InstallationStep>>()
+    {
+        for (index, row) in rows.into_iter().enumerate() {
+            existing.set_row_data(index, row);
+        }
+    } else {
+        window.set_install_progress_steps(std::rc::Rc::new(slint::VecModel::from(rows)).into());
+    }
+    window.set_install_active_page(progress.active as i32);
+    if follow {
+        window.set_install_selected_page(progress.active as i32);
+    }
+    window.set_install_summary(progress.summary.clone().into());
+    window.set_install_fraction(progress.fraction.unwrap_or(-1.0));
 }
 
 fn show_install_conflict(window: &MainWindow, channel: &str, installed_package: &str) {

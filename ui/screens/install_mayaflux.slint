@@ -1,6 +1,5 @@
-import { HorizontalBox, LineEdit, VerticalBox } from "std-widgets.slint";
+import { Button, GroupBox, HorizontalBox, LineEdit, ProgressIndicator, VerticalBox } from "std-widgets.slint";
 import { WeaveTheme } from "../theme.slint";
-import { ActionCard, AppButton } from "../components/mod.slint";
 
 export component InstallMayaFluxScreen inherits VerticalBox {
     in property <bool> busy;
@@ -13,57 +12,96 @@ export component InstallMayaFluxScreen inherits VerticalBox {
     callback install_mayaflux(string);
     callback prepare_install_mayaflux(string);
 
-    spacing: 14px;
-    AppButton { text: "←  Projects"; enabled: !root.busy; clicked => { root.back(); } }
+    spacing: 18px;
     Text { text: "Install MayaFlux"; color: WeaveTheme.accent; font-size: WeaveTheme.font-heading; font-weight: 650; }
-    if root.windows_install: Text { text: "Install MayaFlux and its full build environment: Microsoft C++ tools and Windows SDK, 7-Zip, CMake, Git, Ninja, LLVM, FFmpeg Shared and Vulkan SDK. Weave configures the environment and installs templates and tools. Windows requests administrator consent for installation. Internet access and several GB of free space are required."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-description; wrap: word-wrap; }
-    if !root.linux_install && !root.windows_install: Text { text: "Install MayaFlux through Homebrew. The install runs as your logged-in user. If Homebrew is missing, its signed Apple Silicon package opens in macOS Installer for authorization."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-description; wrap: word-wrap; }
-    if root.linux_install && root.install_step == 1: VerticalBox {
-        spacing: 18px;
-        Text { text: "Select Release Channel"; color: WeaveTheme.text-primary; font-size: WeaveTheme.font-heading; font-weight: 650; }
-        Text { text: "Choose the MayaFlux edition to install."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-description; }
-        HorizontalBox {
-            spacing: 18px;
-            ActionCard { eyebrow: root.install_channel == "stable" ? "SELECTED" : "RECOMMENDED RELEASE"; heading: "Stable"; detail: "Current stable MayaFlux release."; accent: WeaveTheme.action-accent; clicked => { root.install_channel = "stable"; } }
-            ActionCard { eyebrow: root.install_channel == "development" ? "SELECTED" : "LATEST DEVELOPMENT"; heading: "Development"; detail: "Latest development build."; accent: WeaveTheme.action-accent; clicked => { root.install_channel = "development"; } }
+    Text {
+        text: root.windows_install
+            ? "Install MayaFlux and its build environment. Windows requests administrator consent for installation. Internet access and several GB of free space are required."
+            : root.linux_install
+            ? "Install MayaFlux using your distribution's package manager. Package dependencies are handled by the package manager."
+            : "Check Apple developer tools and Homebrew, then install MayaFlux and its dependencies through Homebrew. Missing prerequisites may open a native macOS installer.";
+        color: WeaveTheme.text-secondary;
+        font-size: WeaveTheme.font-description;
+        wrap: word-wrap;
+    }
+    if !root.linux_install || root.install_step == 1: GroupBox {
+        title: "Release channel";
+        vertical-stretch: 0;
+        VerticalBox {
+            spacing: 16px;
+            HorizontalBox {
+                spacing: 18px;
+                VerticalBox {
+                    preferred-width: 0px;
+                    horizontal-stretch: 1;
+                    spacing: 10px;
+                    Button {
+                        text: root.install_channel == "stable" ? "Stable (selected)" : "Stable";
+                        primary: root.install_channel == "stable";
+                        enabled: !root.busy;
+                        clicked => { root.install_channel = "stable"; }
+                    }
+                    Text { text: "Current stable release. Recommended for most projects."; color: WeaveTheme.text-body; font-size: WeaveTheme.font-description; wrap: word-wrap; }
+                }
+                VerticalBox {
+                    preferred-width: 0px;
+                    horizontal-stretch: 1;
+                    spacing: 10px;
+                    Button {
+                        text: root.install_channel == "development" ? "Development (selected)" : "Development";
+                        primary: root.install_channel == "development";
+                        enabled: !root.busy;
+                        clicked => { root.install_channel = "development"; }
+                    }
+                    Text { text: "Latest development build."; color: WeaveTheme.text-body; font-size: WeaveTheme.font-description; wrap: word-wrap; }
+                }
+            }
+            Button {
+                text: root.linux_install ? "Continue" : "Install";
+                primary: true;
+                enabled: !root.busy;
+                clicked => {
+                    if root.linux_install { root.prepare_install_mayaflux(root.install_channel); }
+                    else { root.install_mayaflux(root.install_channel); }
+                }
+            }
         }
-        Rectangle { vertical-stretch: 1; background: transparent; }
-        AppButton { text: root.busy ? "Checking…" : "Next"; primary: true; enabled: !root.busy; clicked => { root.prepare_install_mayaflux(root.install_channel); } }
     }
-    if root.linux_install && root.install_step == 2: VerticalBox {
-        spacing: 16px;
-        Text { text: "Install MayaFlux"; color: WeaveTheme.text-primary; font-size: WeaveTheme.font-heading; font-weight: 650; }
-        Text { text: "Enter your sudo password. Weave uses it for package manager authorization during this installation and clears it when the operation ends."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-description; wrap: word-wrap; }
-        LineEdit { text <=> root.install_password; input-type: InputType.password; placeholder-text: "sudo password"; enabled: !root.busy; }
-        Text { text: "Installation uses your distribution's package manager. Your password is cleared when this operation ends."; color: WeaveTheme.text-muted; font-size: WeaveTheme.font-caption; wrap: word-wrap; }
-        Rectangle { vertical-stretch: 1; background: transparent; }
-        AppButton { text: "Install"; primary: true; enabled: !root.busy && !root.install_password.is-empty; clicked => { root.install_mayaflux(root.install_channel); } }
+    if root.linux_install && root.install_step == 2: GroupBox {
+        title: "Package-manager authorization";
+        vertical-stretch: 0;
+        VerticalBox {
+            spacing: 16px;
+            Text {
+                text: "Enter your sudo password for this installation. It is cleared when the operation ends. Project and community operations do not need it.";
+                color: WeaveTheme.text-body;
+                font-size: WeaveTheme.font-description;
+                wrap: word-wrap;
+            }
+            LineEdit { text <=> root.install_password; input-type: InputType.password; placeholder-text: "sudo password"; enabled: !root.busy; }
+            HorizontalBox {
+                Button { text: "Change channel"; enabled: !root.busy; clicked => { root.install_password = ""; root.install_step = 1; } }
+                Button { text: "Install"; primary: true; enabled: !root.busy && !root.install_password.is-empty; clicked => { root.install_mayaflux(root.install_channel); } }
+            }
+        }
     }
-    if root.linux_install && root.install_step == 3: VerticalBox {
-        spacing: 18px;
-        Text { text: "Installation Complete!"; color: WeaveTheme.text-primary; font-size: WeaveTheme.font-heading; font-weight: 650; }
-        Text { text: "MayaFlux was installed and verified. Restart your terminal before building a new project. The same Weave executable provides both the GUI and CLI."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-description; wrap: word-wrap; }
-        Rectangle { vertical-stretch: 1; background: transparent; }
-    }
+    if root.busy: ProgressIndicator { indeterminate: true; }
     Rectangle { vertical-stretch: 1; background: transparent; }
-    if !root.linux_install: HorizontalBox {
-        spacing: 18px;
-        ActionCard {
-            eyebrow: "RECOMMENDED RELEASE";
-            heading: "Stable";
-            detail: root.busy ? "Installation is in progress…" : "Install the current stable MayaFlux release.";
-            accent: WeaveTheme.action-accent;
-            clicked => { if (!root.busy) { root.install_mayaflux("stable"); } }
-        }
-        ActionCard {
-            eyebrow: "LATEST DEVELOPMENT";
-            heading: "Development";
-            detail: root.busy ? "Installation is in progress…" : "Install the latest development build.";
-            accent: WeaveTheme.action-accent;
-            clicked => { if (!root.busy) { root.install_mayaflux("development"); } }
-        }
+    Text {
+        text: root.windows_install
+            ? "System check → MayaFlux → Dependencies → Environment → Templates / CLI"
+            : root.linux_install
+            ? "System check → MayaFlux → Templates / CLI"
+            : "System check → MayaFlux → Environment → Templates / CLI";
+        color: WeaveTheme.text-secondary;
+        font-size: WeaveTheme.font-caption;
+        wrap: word-wrap;
     }
-    Rectangle { vertical-stretch: 1; background: transparent; }
-    if !root.linux_install: Text { text: root.windows_install ? "MayaFlux installs at C:\\MayaFlux. Weave asks before switching streams. Existing build tools are verified and reused. Restart Windows if requested after installation." : "If the other edition is installed, Weave will ask before replacing it."; color: WeaveTheme.text-muted; font-size: WeaveTheme.font-caption; wrap: word-wrap; horizontal-alignment: center; }
-    AppButton { text: "Back to Projects"; enabled: !root.busy; clicked => { root.back(); } }
+    Text {
+        text: "Weave asks before replacing another MayaFlux edition. Templates are built into Weave; the same executable provides the GUI and CLI.";
+        color: WeaveTheme.text-muted;
+        font-size: WeaveTheme.font-caption;
+        wrap: word-wrap;
+    }
+    Button { text: "Back"; enabled: !root.busy; clicked => { root.back(); } }
 }

@@ -12,6 +12,8 @@ pub fn install_windows(
     replace_conflict: bool,
     log: &(impl Fn(&str) + Sync),
 ) -> Result<String, InstallError> {
+    crate::operations::install::progress::Stage::Prerequisites
+        .report("Checking Windows installation access…", log);
     install_windows_worker(channel, replace_conflict, None, log)
 }
 
@@ -99,7 +101,11 @@ pub fn install_windows_worker(
             let _ = writeln!(pipe, "{line}");
         }
         if let Ok(mut file) = file.lock()
-            && let Err(error) = writeln!(file, "{line}")
+            && let Err(error) = writeln!(
+                file,
+                "{}",
+                crate::operations::install::progress::Event::decode(line).text()
+            )
         {
             log(&format!("Warning: installation log write failed: {error}"));
         }
@@ -150,7 +156,11 @@ fn elevate(
     let logger = |line: &str| {
         log(line);
         if let Ok(mut file) = file.lock() {
-            let _ = writeln!(file, "{line}");
+            let _ = writeln!(
+                file,
+                "{}",
+                crate::operations::install::progress::Event::decode(line).text()
+            );
         }
     };
     let mut request = process::powershell(include_str!("scripts/elevate.ps1"));
@@ -261,8 +271,9 @@ $client=[IO.Pipes.NamedPipeClientStream]::new('.', $env:WEAVE_INSTALL_PIPE, [IO.
 $client.Connect(3000)
 $writer=[IO.StreamWriter]::new($client)
 $writer.AutoFlush=$true
-for ($stage=1; $stage -le 6; $stage++) {
-    $writer.WriteLine("Step $stage/6: controlled installation progress")
+foreach ($stage in @('system','install','dependencies','environment','resources','complete')) {
+    $event = @{stage=$stage; detail='controlled installation progress'} | ConvertTo-Json -Compress
+    $writer.WriteLine('@weave-progress:' + $event)
     Start-Sleep -Milliseconds 100
 }
 $writer.WriteLine('Different administrator profile: Restart Windows before building projects.')
@@ -288,17 +299,25 @@ $writer.Dispose()
             .env("WEAVE_INSTALL_EXECUTABLE", r"D:\User Tools\Weave.exe")
             .env("WEAVE_INSTALL_ARGUMENTS", "install development")
             .env("WEAVE_TEST_COMPLETED_MARKER", &completed_marker);
-        let progress = std::sync::Mutex::new(String::new());
+        let progress = std::sync::Mutex::new(Vec::new());
         let received_while_running = std::sync::atomic::AtomicBool::new(false);
         let result = process::run(
             &mut command,
             false,
             std::time::Duration::from_secs(15),
             &|line| {
-                if line.contains("Step 1/6:") && !completed_marker.exists() {
+                let event = crate::operations::install::progress::Event::decode(line);
+                if matches!(
+                    event,
+                    crate::operations::install::progress::Event::Step(
+                        crate::operations::install::progress::Stage::Prerequisites,
+                        _
+                    )
+                ) && !completed_marker.exists()
+                {
                     received_while_running.store(true, std::sync::atomic::Ordering::Relaxed);
                 }
-                progress.lock().unwrap().push_str(line);
+                progress.lock().unwrap().push(event);
             },
         )
         .unwrap();
@@ -316,10 +335,20 @@ $writer.Dispose()
             received_while_running.load(std::sync::atomic::Ordering::Relaxed),
             "Progress was buffered until installation finished"
         );
-        for stage in 1..=6 {
+        use crate::operations::install::progress::{Event, Stage};
+        for stage in [
+            Stage::Prerequisites,
+            Stage::Framework,
+            Stage::Dependencies,
+            Stage::Environment,
+            Stage::Resources,
+            Stage::Completion,
+        ] {
             assert!(
-                progress.contains(&format!("Step {stage}/6:")),
-                "Missing live popup progress for stage {stage}: {progress}"
+                progress
+                    .iter()
+                    .any(|event| matches!(event, Event::Step(actual, _) if *actual == stage)),
+                "Missing live popup progress for stage {stage:?}: {progress:?}"
             );
         }
     }

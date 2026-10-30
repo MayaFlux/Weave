@@ -1,4 +1,4 @@
-import { HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { HorizontalBox, Palette, VerticalBox } from "std-widgets.slint";
 import { WeaveTheme } from "./theme.slint";
 import { ProjectsScreen } from "./screens/projects.slint";
 import { LandingScreen } from "./screens/landing.slint";
@@ -8,6 +8,7 @@ import { CreateCommunityModuleScreen } from "./screens/create_community_module.s
 import { InstallMayaFluxScreen } from "./screens/install_mayaflux.slint";
 import { ResultDialog } from "./dialogs/result_dialog.slint";
 import { ConfirmationDialog } from "./dialogs/confirmation_dialog.slint";
+import { InstallDialog, InstallationStep } from "./dialogs/install_dialog.slint";
 
 export component MainWindow inherits Window {
     title: "Weave";
@@ -15,6 +16,7 @@ export component MainWindow inherits Window {
     height: 760px;
     default-font-family: WeaveTheme.font-family;
     background: WeaveTheme.window-background;
+    init => { Palette.color-scheme = ColorScheme.dark; }
 
     in-out property <string> project_name: "MyProject";
     in-out property <string> module_name: "my_module";
@@ -33,10 +35,18 @@ export component MainWindow inherits Window {
     in-out property <string> conflict_confirmation_message: "";
     in-out property <string> pending_install_channel: "";
     in-out property <bool> install_replace_confirmed: false;
+    in-out property <bool> install_retry_replace_confirmed: false;
     in-out property <string> install_password: "";
     in-out property <string> install_channel: "stable";
     in-out property <int> install_step: 1;
     in-out property <bool> busy: false;
+    in-out property <bool> install_progress_open: false;
+    in-out property <[InstallationStep]> install_progress_steps;
+    in-out property <int> install_active_page: 0;
+    in-out property <int> install_selected_page: 0;
+    in-out property <bool> install_failed: false;
+    in-out property <string> install_summary;
+    in-out property <float> install_fraction: -1;
     in property <bool> install_available: false;
     in property <bool> linux_install: false;
     in property <bool> windows_install: false;
@@ -52,6 +62,7 @@ export component MainWindow inherits Window {
     callback prepare_install_mayaflux(string);
     callback confirm_install_replacement();
     callback cancel_install_replacement();
+    callback retry_install();
 
     Rectangle {
         width: 100%;
@@ -128,6 +139,18 @@ export component MainWindow inherits Window {
                 choose_destination => { root.choose_destination(); }
                 create_community_module => { root.create_community_module(); }
             }
+        }
+        if root.install_progress_open: InstallDialog {
+            steps: root.install_progress_steps;
+            active: root.install_active_page;
+            selected <=> root.install_selected_page;
+            busy: root.busy;
+            failed: root.install_failed;
+            channel: root.install_channel;
+            summary: root.install_summary;
+            fraction: root.install_fraction;
+            close => { root.install_progress_open = false; }
+            retry => { root.retry_install(); }
         }
         if root.result_open: ResultDialog {
             result_busy: root.result_busy;

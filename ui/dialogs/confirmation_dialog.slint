@@ -1,6 +1,5 @@
-import { HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
 import { WeaveTheme } from "../theme.slint";
-import { AppButton } from "../components/mod.slint";
 
 export component ConfirmationDialog inherits Rectangle {
     in property <string> title;
@@ -31,9 +30,9 @@ export component ConfirmationDialog inherits Rectangle {
             Text { text: root.message; color: WeaveTheme.text-body; font-size: WeaveTheme.font-small; wrap: word-wrap; vertical-stretch: 1; }
             HorizontalBox {
                 spacing: 12px;
-                AppButton { text: "Cancel"; clicked => { root.cancel(); } }
+                Button { text: "Cancel"; clicked => { root.cancel(); } }
                 Rectangle { horizontal-stretch: 1; background: transparent; }
-                AppButton { text: "Replace and Install"; primary: true; clicked => { root.confirm(); } }
+                Button { text: "Replace and Install"; primary: true; clicked => { root.confirm(); } }
             }
         }
     }

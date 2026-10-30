@@ -1,3 +1,4 @@
+use crate::operations::install::progress::Stage;
 use crate::operations::install::run_command_with_log;
 use std::fs;
 use std::path::PathBuf;
@@ -51,6 +52,62 @@ mod install_tests {
     fn maps_supported_channels_to_exact_mayaflux_formulas() {
         assert_eq!(formula_for_channel("stable").unwrap(), "mayaflux");
         assert_eq!(formula_for_channel("development").unwrap(), "mayaflux-dev");
+    }
+
+    #[test]
+    fn developer_tool_check_only_requests_native_installation_when_missing() {
+        use std::cell::RefCell;
+        for installed in [true, false] {
+            let calls = RefCell::new(Vec::new());
+            let result = super::check_developer_tools_with(|args| {
+                calls.borrow_mut().push(args.join(" "));
+                Ok(args == ["--install"] || installed)
+            });
+            if installed {
+                assert!(result.is_ok());
+                assert_eq!(*calls.borrow(), ["-p"]);
+            } else {
+                assert!(result.unwrap_err().contains("retry"));
+                assert_eq!(*calls.borrow(), ["-p", "--install"]);
+            }
+        }
+        assert!(
+            super::check_developer_tools_with(|_| Ok(false))
+                .unwrap_err()
+                .contains("Software Update")
+        );
+        assert!(
+            super::check_developer_tools_with(|_| Err("cancelled".into()))
+                .unwrap_err()
+                .contains("cancelled")
+        );
+    }
+
+    #[test]
+    fn formula_install_reports_environment_separately_and_stops_on_shell_failure() {
+        use crate::operations::install::progress::{Event, Stage};
+        let (root, brew, _) = fake_brew(false, false);
+        let events = std::sync::Mutex::new(Vec::new());
+        let error = install_formula_with_brew(
+            &brew,
+            "mayaflux",
+            false,
+            &|line| events.lock().unwrap().push(Event::decode(line)),
+            |_, _| Err("controlled shell failure".into()),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("installed and verified"));
+        let stages: Vec<_> = events
+            .into_inner()
+            .unwrap()
+            .into_iter()
+            .filter_map(|event| match event {
+                Event::Step(stage, _) => Some(stage),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(stages, [Stage::Framework, Stage::Environment]);
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
@@ -186,6 +243,15 @@ pub fn install_macos(
 ) -> Result<String, crate::operations::install::InstallError> {
     let formula =
         formula_for_channel(channel).map_err(crate::operations::install::InstallError::Failed)?;
+    Stage::Prerequisites.report("Checking Apple developer tools and Homebrew…", log);
+    check_developer_tools_with(|arguments| {
+        let output = Command::new("/usr/bin/xcode-select")
+            .args(arguments)
+            .output()
+            .map_err(|error| format!("Could not run xcode-select: {error}"))?;
+        Ok(output.status.success())
+    })?;
+    log("Apple developer tools are selected.");
     log(&format!("Selected MayaFlux edition: {formula}"));
     let brew = match find_brew() {
         Some(path) => {
@@ -202,13 +268,29 @@ pub fn install_macos(
             path
         }
     };
-    install_formula_with_brew(
+    let message = install_formula_with_brew(
         &brew,
         formula,
         replace_conflict,
         log,
         configure_shell_environment,
-    )
+    )?;
+    crate::operations::install::verify_weave_resources(log).map_err(|error| {
+        crate::operations::install::InstallError::Failed(format!("MayaFlux is installed and the shell is configured, but Weave resource verification failed: {error}"))
+    })?;
+    Ok(message)
+}
+
+fn check_developer_tools_with(run: impl Fn(&[&str]) -> Result<bool, String>) -> Result<(), String> {
+    if run(&["-p"])? {
+        return Ok(());
+    }
+    let requested = run(&["--install"])?;
+    Err(if requested {
+        "Apple Command Line Tools are missing. Complete the native installation dialog, then retry Install MayaFlux. No Homebrew formula was changed."
+    } else {
+        "Apple Command Line Tools are unavailable and their installer could not be opened. Install them through Xcode or macOS Software Update, then retry. No Homebrew formula was changed."
+    }.into())
 }
 
 fn install_formula_with_brew(
@@ -218,6 +300,10 @@ fn install_formula_with_brew(
     log: &(impl Fn(&str) + Sync),
     configure_environment: impl FnOnce(&std::path::Path, &str) -> Result<(), String>,
 ) -> Result<String, crate::operations::install::InstallError> {
+    Stage::Framework.report(
+        "Installing and verifying the selected Homebrew formula and its dependencies…",
+        log,
+    );
     let conflicting = if formula == "mayaflux" {
         "mayaflux-dev"
     } else {
@@ -266,6 +352,7 @@ fn install_formula_with_brew(
         )));
     }
     log("Homebrew confirms the formula is installed.");
+    Stage::Environment.report("Configuring the managed MayaFlux shell environment…", log);
     log("Resolving zsh configuration (login-shell ZDOTDIR first)…");
     configure_environment(brew, formula).map_err(|error| {
         crate::operations::install::InstallError::Failed(format!("{formula} is installed and verified, but zsh environment setup failed: {error}\nThe formula can be used directly with Homebrew while this is repaired."))
@@ -307,7 +394,13 @@ fn bootstrap_homebrew(log: &(impl Fn(&str) + Sync)) -> Result<(), String> {
         ])
         .arg(&package)
         .arg(PACKAGE_URL);
-    let download_status = run_command_with_log(&mut download, "curl", log)
+    let download_status = run_command_with_log(&mut download, "curl", &|line| {
+        crate::download::report_progress(line, log)
+    });
+    log(&crate::operations::install::progress::Event::Transfer(None)
+        .encode()
+        .expect("transfer is encodable"));
+    let download_status = download_status
         .map_err(|error| format!("Could not download Homebrew's official installer: {error}"))?;
     if !download_status.success() {
         let _ = fs::remove_file(&package);

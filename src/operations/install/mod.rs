@@ -8,6 +8,51 @@ pub mod workflow;
 #[cfg(target_os = "macos")]
 use std::process::{Command, Stdio};
 
+/// GUI and CLI consume the same event stream. The native implementation keeps
+/// its line transport so elevated Windows workers can forward events unchanged.
+pub fn install_with_events(
+    channel: &str,
+    replace_conflict: bool,
+    password: Option<&str>,
+    events: impl Fn(progress::Event) + Sync,
+) -> Result<String, InstallError> {
+    native_install(channel, replace_conflict, password, |line| {
+        events(progress::Event::decode(line));
+    })
+}
+
+pub fn install_mayaflux(
+    channel: &str,
+    replace_conflict: bool,
+    password: Option<&str>,
+    log: impl Fn(&str) + Sync,
+) -> Result<String, InstallError> {
+    install_with_events(channel, replace_conflict, password, |event| {
+        log(&event.text())
+    })
+}
+
+pub(crate) fn verify_weave_resources(log: &(impl Fn(&str) + Sync)) -> Result<(), String> {
+    progress::Stage::Resources.report("Verifying bundled Weave templates and CLI…", log);
+    crate::resources::verify_embedded()?;
+    let executable =
+        std::env::current_exe().map_err(|e| format!("Cannot locate Weave CLI: {e}"))?;
+    if !executable.is_file() {
+        return Err(
+            "Weave executable is missing. Restore the downloaded Weave package and retry.".into(),
+        );
+    }
+    log(&format!(
+        "Verified {} embedded templates and scripts. No template copy is required for project creation.",
+        crate::resources::RESOURCES.len()
+    ));
+    log(&format!(
+        "The same executable provides the GUI and standalone CLI: {}. Its location is not automatically added to PATH.",
+        executable.display()
+    ));
+    Ok(())
+}
+
 #[derive(Debug)]
 pub enum InstallError {
     Conflict { installed_formula: String },
@@ -79,7 +124,7 @@ pub(crate) fn stream_output(mut output: impl Read, log: &(impl Fn(&str) + Sync))
 }
 
 #[cfg(target_os = "macos")]
-pub fn install_mayaflux(
+fn native_install(
     channel: &str,
     replace_conflict: bool,
     _password: Option<&str>,
@@ -94,7 +139,7 @@ pub fn check_mayaflux_conflict(channel: &str) -> Result<Option<String>, InstallE
 }
 
 #[cfg(target_os = "linux")]
-pub fn install_mayaflux(
+fn native_install(
     channel: &str,
     replace_conflict: bool,
     password: Option<&str>,
@@ -104,7 +149,7 @@ pub fn install_mayaflux(
 }
 
 #[cfg(target_os = "windows")]
-pub fn install_mayaflux(
+fn native_install(
     channel: &str,
     replace_conflict: bool,
     _password: Option<&str>,

@@ -217,7 +217,7 @@ impl<L: Fn(&str) + Sync> Host for WindowsHost<'_, L> {
             "Installed and verified {} Weave templates and tools.",
             resources::RESOURCES.len()
         ));
-        Ok(())
+        crate::operations::install::verify_weave_resources(self.log)
     }
     fn now(&self) -> u64 {
         std::time::SystemTime::now()

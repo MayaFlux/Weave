@@ -1,4 +1,4 @@
-use crate::operations::install::InstallError;
+use crate::operations::install::{InstallError, progress::Stage};
 use std::io::{self, Read, Write};
 use std::os::fd::{AsRawFd, FromRawFd};
 use std::os::unix::process::CommandExt;
@@ -258,7 +258,13 @@ pub fn install_linux(
     password: Option<&str>,
     log: &(impl Fn(&str) + Sync),
 ) -> Result<String, InstallError> {
-    install_linux_with_host(channel, replace_conflict, password, log, &SystemHost)
+    let message = install_linux_with_host(channel, replace_conflict, password, log, &SystemHost)?;
+    crate::operations::install::verify_weave_resources(log).map_err(|error| {
+        InstallError::Failed(format!(
+            "MayaFlux is installed, but Weave resource verification failed: {error}"
+        ))
+    })?;
+    Ok(message)
 }
 
 pub fn check_linux_conflict(channel: &str) -> Result<Option<String>, InstallError> {
@@ -280,6 +286,10 @@ fn install_linux_with_host(
     log: &(impl Fn(&str) + Sync),
     host: &impl InstallHost,
 ) -> Result<String, InstallError> {
+    Stage::Prerequisites.report(
+        "Detecting the distribution and checking package-manager tools…",
+        log,
+    );
     let (plan, installed_conflicts) = prepare_linux_install(channel, host)?;
     let distro = plan.distribution;
     log(&format!(
@@ -291,6 +301,10 @@ fn install_linux_with_host(
             installed_formula: installed_conflicts.join(", "),
         });
     }
+    Stage::Framework.report(
+        "Installing the selected MayaFlux package and its native dependencies…",
+        log,
+    );
     let checkout = if distro == Distribution::Arch {
         Some(TempCheckout::create().map_err(InstallError::Failed)?)
     } else {

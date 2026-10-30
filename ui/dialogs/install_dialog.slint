@@ -1,0 +1,106 @@
+import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { WeaveTheme } from "../theme.slint";
+import { InstallStepPage } from "../components/install_step.slint";
+import { CompletionNotice } from "../components/completion_notice.slint";
+
+export struct InstallationStep {
+    title: string,
+    status: int,
+    output: string,
+}
+
+export component InstallDialog inherits Rectangle {
+    in property <[InstallationStep]> steps;
+    in property <int> active;
+    in-out property <int> selected;
+    in property <bool> busy;
+    in property <bool> failed;
+    in property <string> channel;
+    in property <string> summary;
+    in property <float> fraction;
+    callback close;
+    callback retry;
+
+    width: 100%;
+    height: 100%;
+    z: 100;
+    background: WeaveTheme.overlay.with-alpha(0.78);
+    TouchArea { }
+    Rectangle {
+        width: min(820px, parent.width - 32px);
+        height: min(660px, parent.height - 32px);
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        background: WeaveTheme.panel-background;
+        border-color: WeaveTheme.border-strong;
+        border-width: 1px;
+        border-radius: 6px;
+        VerticalBox {
+            padding: 24px;
+            spacing: 18px;
+            if root.busy: Text {
+                text: "Install MayaFlux (" + (root.channel == "development" ? "Development" : "Stable") + ")";
+                color: WeaveTheme.text-primary;
+                font-size: WeaveTheme.font-dialog-title;
+                font-weight: 650;
+            }
+            if root.busy: Text {
+                text: "Step " + (root.active + 1) + " of " + root.steps.length;
+                color: WeaveTheme.accent;
+                font-size: WeaveTheme.font-description;
+            }
+            if !root.busy: CompletionNotice {
+                kind: root.failed ? 2 : 0;
+                heading: root.failed ? "Installation needs attention" : "MayaFlux installed";
+                message: root.failed ? "Review the details below. You can retry or return to other operations." : (root.channel == "development" ? "Development" : "Stable") + " installation completed and verified.";
+            }
+            HorizontalBox {
+                spacing: 20px;
+                vertical-stretch: 1;
+                VerticalBox {
+                    width: 190px;
+                    spacing: 8px;
+                    for step[index] in root.steps: Button {
+                        text: (step.status == 2 ? "✓  " : step.status == 3 ? "!  " : step.status == 1 ? "…  " : "") + step.title;
+                        primary: index == root.selected;
+                        enabled: step.status != 0;
+                        clicked => { root.selected = index; }
+                    }
+                    Rectangle { vertical-stretch: 1; background: transparent; }
+                    if root.busy && root.selected != root.active: Button {
+                        text: "Follow current step";
+                        clicked => { root.selected = root.active; }
+                    }
+                }
+                InstallStepPage {
+                    horizontal-stretch: 1;
+                    heading: root.steps[root.selected].title;
+                    status: root.steps[root.selected].status;
+                    output: root.steps[root.selected].output;
+                    fraction: root.selected == root.active ? root.fraction : -1;
+                }
+            }
+            if !root.busy: Text {
+                text: root.summary;
+                color: root.failed ? WeaveTheme.error-text : WeaveTheme.text-body;
+                font-size: WeaveTheme.font-small;
+                wrap: word-wrap;
+                overflow: elide;
+                max-height: 90px;
+            }
+            HorizontalBox {
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+                if !root.busy && root.failed: Button {
+                    text: "Retry";
+                    primary: true;
+                    clicked => { root.retry(); }
+                }
+                Button {
+                    text: root.failed ? "Close" : "Done";
+                    enabled: !root.busy;
+                    clicked => { root.close(); }
+                }
+            }
+        }
+    }
+}
