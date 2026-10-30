@@ -66,8 +66,8 @@ pub fn run_cli(arguments: &[String]) -> ExitCode {
         };
     }
 
-    if arguments[0] == "update" {
-        return match run_update(&arguments[1..]) {
+    if arguments[0] == "manage" {
+        return match run_manage(&arguments[1..]) {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
                 eprintln!("[Weave ERROR] {error}");
@@ -155,10 +155,10 @@ fn run_new(arguments: &[String]) -> Result<ProjectCreationResult, String> {
     create_project(name, &destination, options).map_err(|error| error.to_string())
 }
 
-fn run_update(arguments: &[String]) -> Result<(), String> {
+fn run_manage(arguments: &[String]) -> Result<(), String> {
     if arguments.len() < 2 {
         return Err(
-            "Usage: weave update <project-dir> <module-name>[,<module-name>...]".to_owned(),
+            "Usage: weave manage <project-dir> <module-name>[,<module-name>...]".to_owned(),
         );
     }
     update::update_project(Path::new(&arguments[0]), &arguments[1..], |message| {
@@ -204,7 +204,21 @@ fn run_community(arguments: &[String]) -> Result<CommunityCreationResult, String
 }
 
 fn print_usage() {
-    println!(
-        "Weave: MayaFlux project tool\n\nUsage:\n  weave                 Open the Projects screen\n  weave new <name> [destination] [options]\n  weave update <project-dir> <module-name>[,<module-name>...]\n  weave community <module-name> [destination-dir] [options]\n  weave install <stable|development> [--replace-conflict]\n  weave --help\n  weave --license         Show the embedded license\n  weave --package-info    Show build and package metadata\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila"
-    );
+    println!("{}", usage_text());
+}
+
+fn usage_text() -> &'static str {
+    "Weave: MayaFlux project tool\n\nUsage:\n  weave                 Open the Projects screen\n  weave new <name> [destination] [options]\n  weave manage <project-dir> <module-name>[,<module-name>...]\n  weave community <module-name> [destination-dir] [options]\n  weave install <stable|development> [--replace-conflict]\n  weave --help\n  weave --license         Show the embedded license\n  weave --package-info    Show build and package metadata\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::usage_text;
+
+    #[test]
+    fn usage_advertises_manage_instead_of_update() {
+        let usage = usage_text();
+        assert!(usage.contains("weave manage <project-dir> <module-name>[,<module-name>...]"));
+        assert!(!usage.contains("weave update"));
+    }
 }

@@ -191,7 +191,8 @@ fn cli_help_exposes_project_and_install_operations() {
     assert!(result.status.success());
     let help = String::from_utf8_lossy(&result.stdout);
     assert!(help.contains("weave new"));
-    assert!(help.contains("weave update"));
+    assert!(help.contains("weave manage"));
+    assert!(!help.contains("weave update"));
     assert!(help.contains("weave community"));
     assert!(help.contains("weave install <stable|development>"));
 }
@@ -395,17 +396,24 @@ fn cli_reports_missing_host_tool_before_package_query_or_change() {
 }
 
 #[test]
-fn cli_reports_project_update_validation_errors_without_network_access() {
+fn cli_reports_project_manage_validation_errors_without_network_access() {
     let temporary = TestDirectory::new();
-    let missing = Command::new(env!("CARGO_BIN_EXE_weave"))
+    let old_command = Command::new(env!("CARGO_BIN_EXE_weave"))
         .arg("update")
         .output()
         .unwrap();
+    assert!(!old_command.status.success());
+    assert!(String::from_utf8_lossy(&old_command.stderr).contains("Unknown command: update"));
+
+    let missing = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .arg("manage")
+        .output()
+        .unwrap();
     assert!(!missing.status.success());
-    assert!(String::from_utf8_lossy(&missing.stderr).contains("Usage: weave update"));
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("Usage: weave manage"));
 
     let unsafe_name = Command::new(env!("CARGO_BIN_EXE_weave"))
-        .args(["update", temporary.0.to_str().unwrap(), "../escape"])
+        .args(["manage", temporary.0.to_str().unwrap(), "../escape"])
         .output()
         .unwrap();
     assert!(!unsafe_name.status.success());
@@ -413,7 +421,7 @@ fn cli_reports_project_update_validation_errors_without_network_access() {
     assert_eq!(fs::read_dir(&temporary.0).unwrap().count(), 0);
 
     let invalid_project = Command::new(env!("CARGO_BIN_EXE_weave"))
-        .args(["update", temporary.0.to_str().unwrap(), "terrain_field"])
+        .args(["manage", temporary.0.to_str().unwrap(), "terrain_field"])
         .output()
         .unwrap();
     assert!(!invalid_project.status.success());

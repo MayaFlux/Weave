@@ -34,6 +34,17 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
+    let weak_window_for_manage_picker = window.as_weak();
+    window.on_choose_manage_project(move || {
+        let Some(window) = weak_window_for_manage_picker.upgrade() else {
+            return;
+        };
+        if let Some(project_path) = rfd::FileDialog::new().pick_folder() {
+            window.set_managed_project_path(project_path.display().to_string().into());
+            window.set_screen(3);
+        }
+    });
+
     let weak_window_for_install = window.as_weak();
     window.on_install_mayaflux(move |channel| {
         let Some(window) = weak_window_for_install.upgrade() else {
@@ -165,12 +176,12 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
         publish_result(&window, kind, title, message);
     });
 
-    let weak_window_for_update = window.as_weak();
-    window.on_update_project(move || {
-        let Some(window) = weak_window_for_update.upgrade() else {
+    let weak_window_for_add_modules = window.as_weak();
+    window.on_add_community_modules(move || {
+        let Some(window) = weak_window_for_add_modules.upgrade() else {
             return;
         };
-        let project_path = window.get_destination().to_string();
+        let project_path = window.get_managed_project_path().to_string();
         let names = window.get_module_names().to_string();
         window.set_busy(true);
         let weak = window.as_weak();
@@ -181,9 +192,15 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
             });
             let output = output.join("\n");
             let (kind, title, message) = match result {
-                Ok(()) => (0, "Project updated", output),
-                Err(error) if output.is_empty() => (2, "Project update failed", error.to_string()),
-                Err(error) => (2, "Project update failed", format!("{output}\n\n{error}")),
+                Ok(()) => (0, "Community modules added", output),
+                Err(error) if output.is_empty() => {
+                    (2, "Could not add community modules", error.to_string())
+                }
+                Err(error) => (
+                    2,
+                    "Could not add community modules",
+                    format!("{output}\n\n{error}"),
+                ),
             };
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(window) = weak.upgrade() {

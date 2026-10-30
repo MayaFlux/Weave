@@ -3,7 +3,7 @@ import { WeaveTheme } from "./theme.slint";
 import { ProjectsScreen } from "./screens/projects.slint";
 import { LandingScreen } from "./screens/landing.slint";
 import { CreateProjectScreen } from "./screens/create_project.slint";
-import { UpdateProjectScreen } from "./screens/update_project.slint";
+import { ManageProjectScreen } from "./screens/manage_project.slint";
 import { CreateCommunityModuleScreen } from "./screens/create_community_module.slint";
 import { InstallMayaFluxScreen } from "./screens/install_mayaflux.slint";
 import { ResultDialog } from "./dialogs/result_dialog.slint";
@@ -24,6 +24,7 @@ export component MainWindow inherits Window {
     in-out property <string> module_description: "";
     in-out property <string> module_min_version: "0.5.0";
     in-out property <string> destination: "";
+    in-out property <string> managed_project_path: "";
     in-out property <int> screen: 0;
     in-out property <string> module_names: "";
     in-out property <bool> result_open: false;
@@ -58,7 +59,8 @@ export component MainWindow inherits Window {
     callback choose_destination();
     callback create_project();
     callback create_community_module();
-    callback update_project();
+    callback choose_manage_project();
+    callback add_community_modules();
     callback install_mayaflux(string);
     callback prepare_install_mayaflux(string);
     callback confirm_install_replacement();
@@ -98,7 +100,7 @@ export component MainWindow inherits Window {
             if root.screen == 1: ProjectsScreen {
                 back => { root.screen = 0; }
                 create_project => { root.screen = 2; }
-                update_project => { root.screen = 3; }
+                manage_project => { root.choose_manage_project(); }
                 create_community_module => { root.screen = 4; }
             }
             if root.screen == 2: CreateProjectScreen {
@@ -111,13 +113,12 @@ export component MainWindow inherits Window {
                 choose_destination => { root.choose_destination(); }
                 create_project => { root.create_project(); }
             }
-            if root.screen == 3: UpdateProjectScreen {
-                destination <=> root.destination;
+            if root.screen == 3: ManageProjectScreen {
+                project_path <=> root.managed_project_path;
                 module_names <=> root.module_names;
                 busy: root.busy;
                 back => { root.screen = 1; }
-                choose_destination => { root.choose_destination(); }
-                update_project => { root.update_project(); }
+                add_community_modules => { root.add_community_modules(); }
             }
             if root.screen == 5: InstallMayaFluxScreen {
                 busy: root.busy;

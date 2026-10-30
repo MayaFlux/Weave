@@ -55,7 +55,7 @@ For live coding, enable **Live coding (Lila)** when creating the project, then c
 
 ### Add modules to a project
 
-Choose **Projects > Update Project**, select your project folder, and enter one or more module names. Weave looks them up in the [community registry](https://github.com/MayaFlux/community-sources-registry), checks their MayaFlux requirements, downloads them into `community/`, and registers them in `community.cmake`. Rebuild your project afterward.
+Choose **Projects > Manage Project**, select your project folder, and enter one or more module names under **Add Community Modules**. Weave looks them up in the [community registry](https://github.com/MayaFlux/community-sources-registry), checks their MayaFlux requirements, downloads them into `community/`, and registers them in `community.cmake`. Rebuild your project afterward.
 
 Modules already present in the project are skipped. A module's `community.json` may also declare packages, manual installations, environment settings, and data assets. Weave validates these declarations but does not install the listed dependencies for you.
 
@@ -82,7 +82,7 @@ Examples below use `weave` as shorthand for that executable:
 ```sh
 weave new AudioDemo /path/to/projects --with-lila
 weave community audio_tools /path/to/modules --description "Audio helpers"
-weave update /path/to/AudioDemo terrain_field,audio_tools
+weave manage /path/to/AudioDemo terrain_field,audio_tools
 weave install stable
 weave install development --replace-conflict
 ```

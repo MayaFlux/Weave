@@ -5,7 +5,7 @@ import { ActionCard, AppButton } from "../components/mod.slint";
 export component ProjectsScreen inherits VerticalBox {
     callback back;
     callback create_project;
-    callback update_project;
+    callback manage_project;
     callback create_community_module;
 
     spacing: 16px;
@@ -21,11 +21,11 @@ export component ProjectsScreen inherits VerticalBox {
         clicked => { root.create_project(); }
     }
     ActionCard {
-        eyebrow: "COMMUNITY MODULES";
-        heading: "Update Project";
-        detail: "Add and validate community modules in an existing MayaFlux project.";
+        eyebrow: "EXISTING PROJECTS";
+        heading: "Manage Project";
+        detail: "Select an existing project to add community modules.";
         accent: WeaveTheme.action-accent;
-        clicked => { root.update_project(); }
+        clicked => { root.manage_project(); }
     }
     ActionCard {
         eyebrow: "SHARE YOUR WORK";
