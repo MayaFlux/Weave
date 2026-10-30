@@ -6,8 +6,9 @@ framework installation route. Projects remain ordinary CMake directories.
 
 The structural contract is [community.schema.json](community.schema.json)
 using JSON Schema Draft 2020-12. Native parsers also check declaration rules
-that the schema cannot express. Module creation uses those parsers to validate
-metadata.
+that the schema cannot express. Rust project updates use the shared parser
+before accepting a cloned community module. Community-module creation writes
+the basic metadata fields and does not execute or acquire declared requirements.
 
 Module installation and acquisition execution are later phases. Weave reads and
 validates these declarations and reports that a module declares them, but it does
@@ -19,12 +20,12 @@ The parser entry points are:
 
 | Platform | File | API |
 | -------- | ---- | --- |
-| Rust (current) | `src/update.rs` | `read_manifest(path, name)` |
+| Rust (current) | `src/operations/community_manifest.rs` | `parse_manifest(source, expected_name)` |
 | Linux (legacy) | `legacy/linux/lib/community_manifest.py` | `parse_manifest(source, expected_name=None)` |
 | macOS (legacy) | `legacy/macos/CommunityManifest.swift` | `CommunityManifest.parse(_:expectedName:)` |
 | Windows (legacy) | `legacy/windows/Shared/CommunityManifest.cs` | `CommunityManifest.Parse(source, expectedName)` |
 
-Each parser receives JSON text and an optional expected module name. It returns
+Each parser receives JSON text and the expected module name. It returns
 a validated document with explicit defaults, or reports a field path and reason.
 
 Parsing does not access the filesystem, inspect installed packages, perform

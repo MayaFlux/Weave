@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "name": "vector_module",
+  "min_version": "0.5.0",
+  "packages": {
+    "macos": {
+      "brew": {
+        "taps": [
+          "author/tools"
+        ],
+        "formulae": [
+          "openimageio",
+          "author/tools/fastnoise"
+        ]
+      }
+    }
+  }
+}

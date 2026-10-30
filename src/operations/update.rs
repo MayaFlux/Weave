@@ -260,19 +260,10 @@ fn read_manifest(path: &Path, name: &str) -> Result<([u64; 3], Value), UpdateErr
     let manifest_path = path.join("community.json");
     let source = fs::read_to_string(&manifest_path)
         .map_err(|error| fail(format!("Could not read manifest for {name}: {error}")))?;
-    let source = source.trim_start_matches('\u{FEFF}');
-    let manifest: Value = serde_json::from_str(source)
+    let manifest = crate::operations::community_manifest::parse_manifest(&source, name)
         .map_err(|error| fail(format!("Invalid manifest for {name}: {error}")))?;
-    if manifest.get("name").and_then(Value::as_str) != Some(name) {
-        return Err(fail(format!(
-            "Invalid manifest for {name}: name does not match"
-        )));
-    }
-    let minimum = manifest
-        .get("min_version")
-        .and_then(Value::as_str)
-        .ok_or_else(|| fail(format!("Module {name} has no minimum version")))?;
-    Ok((version(minimum, &format!("manifest for {name}"))?, manifest))
+    let minimum = version(&manifest.minimum_version, &format!("manifest for {name}"))?;
+    Ok((minimum, manifest.data))
 }
 
 trait UpdateServices {
@@ -888,7 +879,7 @@ mod tests {
     #[test]
     fn utf8_bom_manifest_is_accepted_and_declared_requirements_are_reported() {
         let fixture = ProjectFixture::new(&["terrain_field"]);
-        fixture.module("terrain_field", "\u{FEFF}{\"name\":\"terrain_field\",\"min_version\":\"0.5.0\",\"packages\":{\"macos\":{\"brew\":{\"formulae\":[\"example\"]}}}}");
+        fixture.module("terrain_field", "\u{FEFF}{\"schema_version\":1,\"name\":\"terrain_field\",\"min_version\":\"0.5.0\",\"packages\":{\"macos\":{\"brew\":{\"formulae\":[\"example\"]}}}}");
         let mut output = Vec::new();
         fixture.run(&["terrain_field"], &mut output).unwrap();
         assert!(
@@ -950,8 +941,10 @@ mod tests {
             "missing-src",
             "missing-manifest",
             "bad-json",
+            "duplicate-key",
             "wrong-name",
             "bad-version",
+            "unknown-field",
         ] {
             let fixture = ProjectFixture::new(&["terrain_field"]);
             let module = fixture.module(
@@ -963,6 +956,11 @@ mod tests {
                 "missing-src" => fs::remove_dir(module.join("src")).unwrap(),
                 "missing-manifest" => fs::remove_file(module.join("community.json")).unwrap(),
                 "bad-json" => fs::write(module.join("community.json"), "{bad").unwrap(),
+                "duplicate-key" => fs::write(
+                    module.join("community.json"),
+                    "{\"name\":\"terrain_field\",\"name\":\"terrain_field\",\"min_version\":\"0.5.0\"}",
+                )
+                .unwrap(),
                 "wrong-name" => fs::write(
                     module.join("community.json"),
                     "{\"name\":\"other\",\"min_version\":\"0.5.0\"}",
@@ -971,6 +969,11 @@ mod tests {
                 "bad-version" => fs::write(
                     module.join("community.json"),
                     "{\"name\":\"terrain_field\",\"min_version\":\"0.5\"}",
+                )
+                .unwrap(),
+                "unknown-field" => fs::write(
+                    module.join("community.json"),
+                    "{\"name\":\"terrain_field\",\"min_version\":\"0.5.0\",\"unexpected\":true}",
                 )
                 .unwrap(),
                 _ => unreachable!(),
