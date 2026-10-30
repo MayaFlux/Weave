@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 . (Join-Path $root 'packaging/windows/scripts/pe.ps1')
+. (Join-Path $root 'packaging/windows/scripts/gui.ps1')
 $work = Join-Path ([IO.Path]::GetTempPath()) "weave-package-negative-$([Guid]::NewGuid().ToString('N'))"
 $entries = @{}
 $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $Package).Path)
@@ -23,6 +24,15 @@ function Assert-Rejected([scriptblock]$Action, [string]$Reason) {
     }
     if (!$rejected) { throw "Invalid package was accepted; expected $Reason" }
 }
+
+$missingGpu = "Weave could not start: Winit backend failed to find a suitable renderer:`nWGPU: No GPU adapters found`n"
+Assert-Rejected { Get-WeaveGuiExitOutcome -ExitCode 1 -ErrorText $missingGpu } 'No GPU adapters found'
+if ((Get-WeaveGuiExitOutcome -ExitCode 1 -ErrorText $missingGpu -AllowMissingGpu) -ne 'Unavailable') { throw 'The known missing GPU was not classified as unavailable.' }
+if ((Get-WeaveGuiExitOutcome -ExitCode 1 -ErrorText ($missingGpu.Replace("`n", "`r`n")) -AllowMissingGpu) -ne 'Unavailable') { throw 'The Windows newline variant was not classified as unavailable.' }
+foreach ($errorText in @('', 'VCRUNTIME140.dll is missing', 'WGPU: Failed to create device', 'Weave could not start: panic', "$missingGpu`nUnrelated startup failure")) {
+    Assert-Rejected { Get-WeaveGuiExitOutcome -ExitCode 1 -ErrorText $errorText -AllowMissingGpu } 'Packaged GUI exited'
+}
+Assert-Rejected { Get-WeaveGuiExitOutcome -ExitCode 0 -ErrorText $missingGpu -AllowMissingGpu } 'Packaged GUI exited'
 
 try {
     New-Item -ItemType Directory -Path $work | Out-Null
@@ -60,7 +70,7 @@ try {
         }
     } finally { $zip.Dispose() }
     Assert-Rejected { & (Join-Path $root 'packaging/windows/scripts/verify.ps1') -Package $unsafeZip -SkipGui } 'Unexpected or missing archive entries'
-    Write-Host 'Windows package architecture, runtime-dependency, and unsafe-archive rejection tests passed.'
+    Write-Host 'Windows package GPU classification, architecture, runtime-dependency, and unsafe-archive rejection tests passed.'
 } finally {
     $resolvedWork = [IO.Path]::GetFullPath($work)
     $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\')

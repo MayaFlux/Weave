@@ -1,8 +1,10 @@
-param([Parameter(Mandatory)][string]$Package, [switch]$SkipGui)
+param([Parameter(Mandatory)][string]$Package, [switch]$SkipGui, [switch]$AllowMissingGpu)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if (!$IsWindows) { throw 'Package validation requires Windows and PowerShell 7.' }
 . (Join-Path $PSScriptRoot 'pe.ps1')
+. (Join-Path $PSScriptRoot 'gui.ps1')
+if ($SkipGui -and $AllowMissingGpu) { throw 'Choose either SkipGui or AllowMissingGpu.' }
 $Package = (Resolve-Path -LiteralPath $Package).Path
 $work = Join-Path ([IO.Path]::GetTempPath()) "weave-package-check-$([Guid]::NewGuid().ToString('N'))"
 $unpacked = Join-Path $work 'portable package'
@@ -114,7 +116,18 @@ public static class WeavePackageWindow {
         $opened = $false
         for ($attempt = 0; $attempt -lt 40; $attempt++) {
             Start-Sleep -Milliseconds 200
-            if ($gui.HasExited) { throw "Packaged GUI exited during startup: $($guiErrors.GetAwaiter().GetResult())" }
+            if ($gui.HasExited) {
+                $outcome = Get-WeaveGuiExitOutcome -ExitCode $gui.ExitCode -ErrorText ($guiErrors.GetAwaiter().GetResult()) -AllowMissingGpu:$AllowMissingGpu
+                if ($outcome -eq 'Unavailable') {
+                    $notice = 'Windows package CLI, resources, architecture and runtime checks passed. GUI startup coverage is unavailable because the runner has no GPU adapter. Validate GUI startup on a Windows host with a supported GPU.'
+                    Write-Warning $notice
+                    if ($env:GITHUB_ACTIONS -eq 'true') {
+                        Write-Host "::warning::$notice"
+                        if ($env:GITHUB_STEP_SUMMARY) { Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $notice }
+                    }
+                    return
+                }
+            }
             if ([WeavePackageWindow]::Exists($gui.Id)) { $opened = $true; break }
         }
         if (!$opened) { throw 'The packaged GUI did not create its main window.' }
@@ -124,7 +137,8 @@ public static class WeavePackageWindow {
         $gui.WaitForExit()
         Write-Host 'Packaged GUI launched with its normal GPU backend.'
     }
-    Write-Host "Windows portable package validation passed: $Package"
+    if ($SkipGui) { Write-Host "Windows portable package validation passed with GUI explicitly skipped: $Package" }
+    else { Write-Host "Windows portable package validation passed: $Package" }
 } finally {
     if ($null -ne $gui) { if (!$gui.HasExited) { $gui.Kill($true); $gui.WaitForExit() }; $gui.Dispose() }
     $resolvedWork = [IO.Path]::GetFullPath($work)

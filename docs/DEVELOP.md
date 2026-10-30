@@ -27,7 +27,7 @@ Use PowerShell 7:
 ./tests/windows-package.ps1 -Package ./target/packaging/windows/output/Weave-0.6.0-Windows-x64.zip
 ```
 
-Use this packaging build for distribution. It selects the x64 target and static MSVC runtime; an ordinary development build is not a substitute for the portable package. The verifier runs the extracted executable and generated-project checks outside the checkout, then launches the GUI. `-SkipGui` is available for CLI-only local checks; CI runs the full verifier.
+Use this packaging build for distribution. It selects the x64 target and static MSVC runtime; an ordinary development build is not a substitute for the portable package. The verifier runs the extracted executable and generated-project checks outside the checkout, then launches the GUI. `-SkipGui` is available for CLI-only local checks. CI attempts GUI startup with `-AllowMissingGpu`: only the exact backend error reporting no GPU adapters is recorded as unavailable coverage. Other startup errors fail validation. Local verification requires successful GPU startup by default; test it on a Windows host with a supported GPU before release.
 
 ### macOS
 
@@ -58,6 +58,8 @@ bash packaging/linux/scripts/verify.sh target/packaging/linux/output/Weave-0.6.0
 ## CI and releases
 
 [The workflow](../.github/workflows/build.yml) runs native tests and package validation. Pushes to `main` and version tags trigger builds. Other branches, including `develop`, use workflow dispatch; its platform checkboxes allow selective artifact builds.
+
+Rust dependencies and compiled workspace artifacts are cached even when later checks fail. Downloaded Linux packaging tools are saved once both tool files exist, independently of subsequent package validation.
 
 Full successful builds publish all three platforms. Versions come from `Cargo.toml`; release tags are `v<version>` and `v<version>-dev`. Main publishes stable versions, while manual builds of other branches refresh the development prerelease and force-move its tag. Stable tags and published stable assets are preserved. Partial platform builds upload CI artifacts without publishing a release.
 

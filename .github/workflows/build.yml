@@ -74,6 +74,9 @@ jobs:
       - name: Cache Rust dependencies and build artifacts
         if: steps.platform-selection.outputs.enabled == 'true'
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          cache-workspace-crates: true
 
       - name: Install Linux GUI build dependencies
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Linux'
@@ -81,9 +84,10 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev libxcursor-dev libfontconfig1-dev libfreetype-dev file binutils
 
-      - name: Cache Linux AppImage packaging tools
+      - name: Restore Linux AppImage packaging tools
+        id: linux-tools-cache
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Linux'
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: target/packaging/linux/tools
           key: weave-linux-appimage-tools-x86_64-v1
@@ -107,7 +111,7 @@ jobs:
         run: |
           $package = Get-ChildItem -LiteralPath "$env:RUNNER_TEMP/weave-windows" -Filter 'Weave-*-Windows-x64.zip'
           if (@($package).Count -ne 1) { throw 'Expected exactly one Windows portable package.' }
-          ./packaging/windows/scripts/verify.ps1 -Package $package.FullName
+          ./packaging/windows/scripts/verify.ps1 -Package $package.FullName -AllowMissingGpu
 
       - name: Test Windows package rejection paths
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Windows'
@@ -128,6 +132,18 @@ jobs:
       - name: Package Linux AppImage
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Linux'
         run: bash packaging/linux/scripts/package.sh "$RUNNER_TEMP/weave-linux"
+
+      - name: Save downloaded Linux AppImage packaging tools
+        if: >-
+          always() && runner.os == 'Linux' &&
+          steps.linux-tools-cache.outcome == 'success' &&
+          steps.linux-tools-cache.outputs.cache-hit != 'true' &&
+          hashFiles('target/packaging/linux/tools/linuxdeploy-x86_64.AppImage') != '' &&
+          hashFiles('target/packaging/linux/tools/appimagetool-x86_64.AppImage') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: target/packaging/linux/tools
+          key: ${{ steps.linux-tools-cache.outputs.cache-primary-key }}
 
       - name: Validate Linux AppImage
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Linux'
