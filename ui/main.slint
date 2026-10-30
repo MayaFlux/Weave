@@ -8,6 +8,7 @@ import { CreateCommunityModuleScreen } from "./screens/create_community_module.s
 import { InstallMayaFluxScreen } from "./screens/install_mayaflux.slint";
 import { ResultDialog } from "./dialogs/result_dialog.slint";
 import { ConfirmationDialog } from "./dialogs/confirmation_dialog.slint";
+import { PasswordDialog } from "./dialogs/password_dialog.slint";
 import { InstallDialog, InstallationStep } from "./dialogs/install_dialog.slint";
 
 export component MainWindow inherits Window {
@@ -28,6 +29,7 @@ export component MainWindow inherits Window {
     in-out property <bool> result_open: false;
     in-out property <bool> result_busy: false;
     in-out property <bool> conflict_confirmation_open: false;
+    in-out property <bool> password_dialog_open: false;
     in-out property <int> result_kind: 0;
     in-out property <string> result_title: "";
     in-out property <string> result_message: "";
@@ -38,7 +40,6 @@ export component MainWindow inherits Window {
     in-out property <bool> install_retry_replace_confirmed: false;
     in-out property <string> install_password: "";
     in-out property <string> install_channel: "stable";
-    in-out property <int> install_step: 1;
     in-out property <bool> busy: false;
     in-out property <bool> install_progress_open: false;
     in-out property <[InstallationStep]> install_progress_steps;
@@ -87,8 +88,8 @@ export component MainWindow inherits Window {
                 linux_install: root.linux_install;
                 windows_install: root.windows_install;
                 install_mayaflux => {
-                    root.install_step = 1;
                     root.install_password = "";
+                    root.password_dialog_open = false;
                     root.install_replace_confirmed = false;
                     root.screen = 5;
                 }
@@ -122,10 +123,8 @@ export component MainWindow inherits Window {
                 busy: root.busy;
                 linux_install: root.linux_install;
                 windows_install: root.windows_install;
-                install_step <=> root.install_step;
                 install_channel <=> root.install_channel;
-                install_password <=> root.install_password;
-                back => { root.install_password = ""; root.screen = 0; }
+                back => { root.install_password = ""; root.password_dialog_open = false; root.screen = 0; }
                 install_mayaflux(channel) => { root.install_mayaflux(channel); }
                 prepare_install_mayaflux(channel) => { root.prepare_install_mayaflux(channel); }
             }
@@ -164,6 +163,12 @@ export component MainWindow inherits Window {
             message: root.conflict_confirmation_message;
             confirm => { root.confirm_install_replacement(); }
             cancel => { root.cancel_install_replacement(); }
+        }
+        if root.password_dialog_open: PasswordDialog {
+            password <=> root.install_password;
+            channel: root.install_channel;
+            confirm => { root.install_mayaflux(root.install_channel); }
+            cancel => { root.install_password = ""; root.password_dialog_open = false; }
         }
     }
 }

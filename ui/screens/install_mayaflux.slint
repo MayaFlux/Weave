@@ -1,13 +1,11 @@
-import { Button, GroupBox, HorizontalBox, LineEdit, ProgressIndicator, VerticalBox } from "std-widgets.slint";
+import { Button, GroupBox, HorizontalBox, ProgressIndicator, VerticalBox } from "std-widgets.slint";
 import { WeaveTheme } from "../theme.slint";
 
 export component InstallMayaFluxScreen inherits VerticalBox {
     in property <bool> busy;
     in property <bool> linux_install;
     in property <bool> windows_install;
-    in-out property <int> install_step;
     in-out property <string> install_channel;
-    in-out property <string> install_password;
     callback back;
     callback install_mayaflux(string);
     callback prepare_install_mayaflux(string);
@@ -24,7 +22,7 @@ export component InstallMayaFluxScreen inherits VerticalBox {
         font-size: WeaveTheme.font-description;
         wrap: word-wrap;
     }
-    if !root.linux_install || root.install_step == 1: GroupBox {
+    GroupBox {
         title: "Release channel";
         vertical-stretch: 0;
         VerticalBox {
@@ -64,24 +62,6 @@ export component InstallMayaFluxScreen inherits VerticalBox {
                     if root.linux_install { root.prepare_install_mayaflux(root.install_channel); }
                     else { root.install_mayaflux(root.install_channel); }
                 }
-            }
-        }
-    }
-    if root.linux_install && root.install_step == 2: GroupBox {
-        title: "Package-manager authorization";
-        vertical-stretch: 0;
-        VerticalBox {
-            spacing: 16px;
-            Text {
-                text: "Enter your sudo password for this installation. It is cleared when the operation ends. Project and community operations do not need it.";
-                color: WeaveTheme.text-body;
-                font-size: WeaveTheme.font-description;
-                wrap: word-wrap;
-            }
-            LineEdit { text <=> root.install_password; input-type: InputType.password; placeholder-text: "sudo password"; enabled: !root.busy; }
-            HorizontalBox {
-                Button { text: "Change channel"; enabled: !root.busy; clicked => { root.install_password = ""; root.install_step = 1; } }
-                Button { text: "Install"; primary: true; enabled: !root.busy && !root.install_password.is-empty; clicked => { root.install_mayaflux(root.install_channel); } }
             }
         }
     }

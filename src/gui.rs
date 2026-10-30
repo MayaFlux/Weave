@@ -56,7 +56,7 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
         {
             window.set_install_replace_confirmed(window.get_install_retry_replace_confirmed());
             window.set_install_password("".into());
-            window.set_install_step(2);
+            window.set_password_dialog_open(true);
         }
         #[cfg(not(target_os = "linux"))]
         start_mayaflux_install(
@@ -87,7 +87,7 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
                             Ok(Some(installed_package)) => {
                                 show_install_conflict(&window, &channel, &installed_package);
                             }
-                            Ok(None) => window.set_install_step(2),
+                            Ok(None) => window.set_password_dialog_open(true),
                             Err(error) => publish_result(
                                 &window,
                                 2,
@@ -112,7 +112,7 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(target_os = "linux")]
         {
             window.set_install_replace_confirmed(true);
-            window.set_install_step(2);
+            window.set_password_dialog_open(true);
             return;
         }
         #[cfg(not(target_os = "linux"))]
@@ -127,6 +127,7 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
         window.set_conflict_confirmation_open(false);
         window.set_install_replace_confirmed(false);
         window.set_install_password("".into());
+        window.set_password_dialog_open(false);
         publish_result(
             &window,
             1,
@@ -247,6 +248,7 @@ fn start_mayaflux_install(window: &MainWindow, channel: String, replace_conflict
         return;
     }
     window.set_install_password("".into());
+    window.set_password_dialog_open(false);
     window.set_install_retry_replace_confirmed(replace_conflict);
     window.set_install_replace_confirmed(false);
     window.set_busy(true);
@@ -305,7 +307,6 @@ fn start_mayaflux_install(window: &MainWindow, channel: String, replace_conflict
                         window.set_install_password("".into());
                         if !failed {
                             window.set_install_retry_replace_confirmed(false);
-                            window.set_install_step(1);
                             window.set_screen(0);
                         }
                         let mut progress = progress.lock().unwrap();
