@@ -5,7 +5,7 @@ It does not describe MayaFlux's own dependencies or change the established
 framework installation route. Projects remain ordinary CMake directories.
 
 The structural contract is [community.schema.json](community.schema.json)
-using JSON Schema Draft 2020-12. Native parsers also check declaration rules
+using JSON Schema Draft 2020-12. The shared Rust parser also checks declaration rules
 that the schema cannot express. Rust project updates use the shared parser
 before accepting a cloned community module. Community-module creation writes
 the basic metadata fields and does not execute or acquire declared requirements.
@@ -16,16 +16,9 @@ not install packages, run installers or download assets in this release. Module
 users install the requirements themselves. Passing validation does not mean
 requirements have been installed.
 
-The parser entry points are:
-
-| Platform | File | API |
-| -------- | ---- | --- |
-| Rust (current) | `src/operations/community_manifest.rs` | `parse_manifest(source, expected_name)` |
-| Linux (legacy) | `legacy/linux/lib/community_manifest.py` | `parse_manifest(source, expected_name=None)` |
-| macOS (legacy) | `legacy/macos/CommunityManifest.swift` | `CommunityManifest.parse(_:expectedName:)` |
-| Windows (legacy) | `legacy/windows/Shared/CommunityManifest.cs` | `CommunityManifest.Parse(source, expectedName)` |
-
-Each parser receives JSON text and the expected module name. It returns
+All platforms use `parse_manifest(source, expected_name)` in
+[src/operations/community_manifest.rs](../src/operations/community_manifest.rs).
+The parser receives JSON text and the expected module name. It returns
 a validated document with explicit defaults, or reports a field path and reason.
 
 Parsing does not access the filesystem, inspect installed packages, perform

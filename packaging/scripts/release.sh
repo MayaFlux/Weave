@@ -39,8 +39,8 @@ assemble() {
     cat > "$destination/release-notes.md" <<EOF
 # Weave $TAG
 
-One Rust application for installing MayaFlux, creating projects and community
-modules, and updating projects. Built from commit \`$GITHUB_SHA\`.
+Install MayaFlux, create projects and community modules, and update your projects.
+Use the desktop app or the standalone CLI.
 
 ## Downloads
 
@@ -65,9 +65,8 @@ compilers and other project tools remain separate host dependencies. Host
 installation requests native authorization when needed; project and community
 operations do not require elevation.
 
-Development releases roll forward: each successful full development build moves
-its \`-dev\` tag and replaces that prerelease's assets. Stable version tags are
-kept at their release commit. Platform packages are also available as CI artifacts.
+Choose a stable release for regular use or a development prerelease to try
+the latest changes. Development prereleases are refreshed with successful builds.
 
 ## SHA256
 
@@ -76,6 +75,8 @@ Download [SHA256SUMS]($download/SHA256SUMS) to verify the files:
 \`\`\`text
 $(cat "$destination/SHA256SUMS")
 \`\`\`
+
+Built from commit \`$GITHUB_SHA\`.
 EOF
 }
 

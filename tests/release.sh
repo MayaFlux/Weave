@@ -60,7 +60,7 @@ grep -Fq '[Executable]' "$WORK/release/release-notes.md"
 grep -Fq 'Weave-windows.exe' "$WORK/release/SHA256SUMS"
 if grep -Eiq 'windows\.zip|Portable ZIP|extract the ZIP' "$WORK/release/release-notes.md"; then echo 'Obsolete Windows ZIP instructions leaked into release notes' >&2; exit 1; fi
 grep -Fq 'Open Anyway' "$WORK/release/release-notes.md"
-if grep -Eiq '\.NET|as administrator|no CLI' "$WORK/release/release-notes.md"; then echo 'Legacy distribution instructions leaked into release notes' >&2; exit 1; fi
+if grep -Eiq '\.NET|as administrator|no CLI|legacy|pre-removal|pre-migration|former implementations' "$WORK/release/release-notes.md"; then echo 'Release notes contain unsupported instructions or historical implementation references' >&2; exit 1; fi
 
 # A rolling development build advances its tag and replaces assets as a draft,
 # then publishes only after every upload succeeds. These commands are fakes.

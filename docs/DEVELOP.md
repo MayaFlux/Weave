@@ -1,6 +1,6 @@
 # Developing Weave
 
-The current application is Rust with a Slint GUI. Install the Rust toolchain and the native build tools for your platform. Development dependencies are separate from the downloadable packages that users run.
+Weave is written in Rust and uses Slint for its GUI. Install the Rust toolchain and the native build tools for your platform. Development dependencies are separate from the downloadable packages that users run.
 
 ## Run and test
 
@@ -72,5 +72,3 @@ bash tests/release.sh
 ```
 
 These tests use controlled artifacts and fake Git/GitHub commands. The publishing command in `packaging/scripts/release.sh` is for the release job and changes remote releases and tags.
-
-The former implementations and their guides are archived under `legacy/` for reference.

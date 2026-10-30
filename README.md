@@ -23,7 +23,7 @@ Get the package for your platform from [Releases](https://github.com/MayaFlux/We
   ./Weave-linux.AppImage
   ```
 
-Weave includes its own executable, templates, and resources. You do not need Rust, Python, .NET, a separate GUI toolkit, or a Weave runtime to use it. Your operating system supplies the display and graphics driver. Building generated projects still requires MayaFlux, CMake, Ninja, and a C++ compiler.
+Each download includes the executable, templates, and resources needed to run Weave. Your operating system supplies the display and graphics driver. Building generated projects requires MayaFlux, CMake, Ninja, and a C++ compiler.
 
 ## Install MayaFlux
 
