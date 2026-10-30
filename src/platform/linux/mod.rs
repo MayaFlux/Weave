@@ -1041,6 +1041,57 @@ mod install_tests {
     }
 
     #[test]
+    fn cancelled_package_authorization_stops_install_and_allows_retry() {
+        struct CancelAuthorization {
+            inner: FakeHost,
+            cancelled: std::sync::atomic::AtomicBool,
+        }
+        impl InstallHost for CancelAuthorization {
+            fn available(&self, name: &str) -> bool {
+                self.inner.available(name)
+            }
+            fn installed(&self, distro: Distribution, package: &str) -> Result<bool, String> {
+                self.inner.installed(distro, package)
+            }
+            fn execute(
+                &self,
+                command: &[String],
+                password: Option<&str>,
+                log: &(impl Fn(&str) + Sync),
+            ) -> Result<(), String> {
+                if command.iter().any(|part| part == "add-apt-repository")
+                    && self
+                        .cancelled
+                        .swap(false, std::sync::atomic::Ordering::SeqCst)
+                {
+                    self.inner.commands.lock().unwrap().push(command.to_vec());
+                    return Err("authorization cancelled".to_owned());
+                }
+                self.inner.execute(command, password, log)
+            }
+        }
+        let host = CancelAuthorization {
+            inner: FakeHost::new(Distribution::Ubuntu, &[]),
+            cancelled: std::sync::atomic::AtomicBool::new(true),
+        };
+        let error = install_linux_with_host("stable", false, Some("secret"), &|_| {}, &host)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("authorization cancelled"));
+        assert_eq!(host.inner.commands.lock().unwrap().len(), 1);
+        assert!(host.inner.installed.lock().unwrap().is_empty());
+
+        install_linux_with_host("stable", false, Some("secret"), &|_| {}, &host).unwrap();
+        assert!(
+            host.inner
+                .installed
+                .lock()
+                .unwrap()
+                .contains(&"mayaflux".to_owned())
+        );
+    }
+
+    #[test]
     fn conflict_preflight_reports_existing_edition_without_mutation() {
         let host = FakeHost::new(Distribution::Ubuntu, &["mayaflux"]);
         assert_eq!(
