@@ -5,7 +5,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-const SHADER_EXTENSIONS: &[&str] = &[
+pub(crate) const SHADER_EXTENSIONS: &[&str] = &[
     "glsl", "vert", "frag", "comp", "geom", "tesc", "tese", "mesh", "task", "rgen", "rchit",
     "rahit", "rmiss", "rint", "rcall",
 ];
@@ -150,35 +150,34 @@ fn populate_project(
     fs::create_dir(project_path.join("cmake"))?;
     fs::create_dir_all(project_path.join("data/shaders"))?;
 
-    let lila_link = if options.with_lila {
-        "target_link_libraries(${PROJECT_NAME} PRIVATE MayaFlux::MayaFluxHost)"
-    } else {
-        ""
-    };
-    let lila_debugger = if options.with_lila {
-        "$<TARGET_FILE_DIR:MayaFlux::MayaFluxHost>;"
-    } else {
-        ""
-    };
-    let lila_dll_copy = if options.with_lila {
-        r#"if(EXISTS "$ENV{MAYAFLUX_ROOT}/bin/MayaFluxHost.dll")
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "$ENV{MAYAFLUX_ROOT}/bin/MayaFluxHost.dll"
-                $<TARGET_FILE_DIR:${PROJECT_NAME}>
-        )
-    endif()"#
-    } else {
-        ""
-    };
-
     let mayaflux_cmake = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/resources/templates/project/cmake/mayaflux.cmake"
     ))
-    .replace("@LILA_LINK_BLOCK@", lila_link)
-    .replace("@LILA_DEBUGGER_PATH@", lila_debugger)
-    .replace("@LILA_DLL_COPY@", lila_dll_copy);
+    .replace(
+        "@LILA_LINK_BLOCK@",
+        if options.with_lila {
+            lila_link_block()
+        } else {
+            ""
+        },
+    )
+    .replace(
+        "@LILA_DEBUGGER_PATH@",
+        if options.with_lila {
+            lila_debugger_path()
+        } else {
+            ""
+        },
+    )
+    .replace(
+        "@LILA_DLL_COPY@",
+        if options.with_lila {
+            lila_dll_copy_block()
+        } else {
+            ""
+        },
+    );
     let mut files = vec![
         (
             "CMakeLists.txt",
@@ -390,12 +389,40 @@ fn project_readme(name: &str) -> String {
     )
 }
 
-fn read_shader_sources() -> Result<Vec<(PathBuf, Vec<u8>)>, ProjectCreationError> {
-    let root = crate::platform::shader_source_root().map_err(ProjectCreationError)?;
-    read_shader_sources_at(&root)
+pub(crate) fn lila_link_block() -> &'static str {
+    "target_link_libraries(${PROJECT_NAME} PRIVATE MayaFlux::MayaFluxHost)"
 }
 
-fn read_shader_sources_at(root: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>, ProjectCreationError> {
+pub(crate) fn lila_debugger_path() -> &'static str {
+    "$<TARGET_FILE_DIR:MayaFlux::MayaFluxHost>;"
+}
+
+pub(crate) fn lila_dll_copy_block() -> &'static str {
+    r#"if(DEFINED ENV{MAYAFLUX_ROOT})
+    if(EXISTS "$ENV{MAYAFLUX_ROOT}/bin/MayaFluxHost.dll")
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$ENV{MAYAFLUX_ROOT}/bin/MayaFluxHost.dll"
+                $<TARGET_FILE_DIR:${PROJECT_NAME}>
+        )
+    endif()
+endif()"#
+}
+
+pub(crate) fn read_shader_sources_at(
+    root: &Path,
+) -> Result<Vec<(PathBuf, Vec<u8>)>, ProjectCreationError> {
+    read_shader_sources_from_root(root)
+}
+
+fn read_shader_sources() -> Result<Vec<(PathBuf, Vec<u8>)>, ProjectCreationError> {
+    let root = crate::platform::shader_source_root().map_err(ProjectCreationError)?;
+    read_shader_sources_from_root(&root)
+}
+
+fn read_shader_sources_from_root(
+    root: &Path,
+) -> Result<Vec<(PathBuf, Vec<u8>)>, ProjectCreationError> {
     crate::filesystem::no_links(root).map_err(ProjectCreationError)?;
     let canonical_root = fs::canonicalize(&root).map_err(|error| {
         ProjectCreationError(format!(

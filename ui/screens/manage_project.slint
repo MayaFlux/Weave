@@ -1,4 +1,4 @@
-import { HorizontalBox, LineEdit, VerticalBox } from "std-widgets.slint";
+import { CheckBox, HorizontalBox, LineEdit, VerticalBox } from "std-widgets.slint";
 import { WeaveTheme } from "../theme.slint";
 import { AppButton } from "../components/mod.slint";
 
@@ -6,31 +6,61 @@ export component ManageProjectScreen inherits VerticalBox {
     in-out property <string> project_path;
     in-out property <string> module_names;
     in property <bool> busy;
+    in property <string> lila_status;
+    in property <string> shader_status;
+    in property <bool> can_add_lila;
+    in property <bool> can_copy_shader_sources;
+    in-out property <bool> add_lila;
+    in-out property <bool> add_shader_sources;
     callback back;
     callback add_community_modules;
+    callback apply_options;
 
-    spacing: 14px;
+    spacing: 12px;
     AppButton { text: "←  Projects"; clicked => { root.back(); } }
     Text { text: "Manage Project"; color: WeaveTheme.accent; font-size: WeaveTheme.font-heading; font-weight: 650; }
-    Text { text: "Manage this existing project and add community modules."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-description; }
+    Text { text: "Selected project: " + root.project_path; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-small; overflow: elide; }
     Rectangle {
-        height: 250px;
+        height: 260px;
         background: WeaveTheme.panel-background;
         border-width: 1px;
         border-color: WeaveTheme.border;
         border-radius: 6px;
         VerticalBox {
-            x: 24px; y: 22px; width: parent.width - 48px; height: parent.height - 44px; spacing: 12px;
-            Text { text: "PROJECT FOLDER"; color: WeaveTheme.accent; font-size: WeaveTheme.font-tiny; font-weight: 700; }
-            Text { text: root.project_path; color: WeaveTheme.text-primary; vertical-alignment: center; overflow: elide; }
-            Text { text: "COMMUNITY MODULES"; color: WeaveTheme.accent; font-size: WeaveTheme.font-tiny; font-weight: 700; }
-            LineEdit { text <=> root.module_names; placeholder-text: "terrain_field, audio_tools"; }
-            Text { text: "Weave checks registry and MayaFlux compatibility, validates module files, then registers the modules in community.cmake."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-small; wrap: word-wrap; }
+            x: 22px; y: 16px; width: parent.width - 44px; height: parent.height - 32px; spacing: 7px;
+            Text { text: "PROJECT OPTIONS"; color: WeaveTheme.accent; font-size: WeaveTheme.font-tiny; font-weight: 700; }
+            VerticalBox {
+                spacing: 3px;
+                CheckBox { text: "Add Lila live coding"; checked <=> root.add_lila; enabled: !root.busy && root.can_add_lila; }
+                Text { text: root.lila_status; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; wrap: word-wrap; }
+            }
+            VerticalBox {
+                spacing: 3px;
+                CheckBox { text: "Copy MayaFlux shader sources"; checked <=> root.add_shader_sources; enabled: !root.busy && root.can_copy_shader_sources; }
+                Text { text: root.shader_status; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; wrap: word-wrap; }
+            }
+            Text { text: "Lila updates the project's MayaFlux CMake integration. Existing shader files are checked before copying."; color: WeaveTheme.text-muted; font-size: WeaveTheme.font-caption; wrap: word-wrap; }
+            Rectangle { vertical-stretch: 1; background: transparent; }
+            HorizontalBox {
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+                AppButton { text: root.busy ? "Applying…" : "Apply Selected Options"; primary: true; enabled: !root.busy && (root.add_lila || root.add_shader_sources); clicked => { root.apply_options(); } }
+            }
         }
     }
-    HorizontalBox {
-        AppButton { text: "Back"; clicked => { root.back(); } }
-        Rectangle { horizontal-stretch: 1; background: transparent; }
-        AppButton { text: root.busy ? "Adding…" : "Add Community Modules"; primary: true; enabled: !root.busy; clicked => { root.add_community_modules(); } }
+    Rectangle {
+        height: 190px;
+        background: WeaveTheme.panel-background;
+        border-width: 1px;
+        border-color: WeaveTheme.border;
+        border-radius: 6px;
+        VerticalBox {
+            x: 22px; y: 16px; width: parent.width - 44px; height: parent.height - 32px; spacing: 10px;
+            Text { text: "ADD COMMUNITY MODULES"; color: WeaveTheme.accent; font-size: WeaveTheme.font-tiny; font-weight: 700; }
+            LineEdit { text <=> root.module_names; placeholder-text: "terrain_field, audio_tools"; }
+            Text { text: "Weave checks registry and MayaFlux compatibility, validates module files, then registers the modules in community.cmake."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-small; wrap: word-wrap; }
+            Rectangle { vertical-stretch: 1; background: transparent; }
+            AppButton { text: root.busy ? "Working…" : "Add Community Modules"; enabled: !root.busy; clicked => { root.add_community_modules(); } }
+        }
     }
+    Rectangle { vertical-stretch: 1; background: transparent; }
 }

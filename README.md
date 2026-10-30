@@ -51,6 +51,8 @@ Run `build/YourProject` on Linux and macOS, or `build\YourProject.exe` on Window
 
 For live coding, enable **Live coding (Lila)** when creating the project, then connect [LilaCode](https://github.com/MayaFlux/LilaCode) for VS Code or [lila.nvim](https://github.com/MayaFlux/lila.nvim) for Neovim.
 
+If the project was created without Lila or copied MayaFlux shader sources, choose **Projects > Manage Project** to inspect and add those options later. Weave preserves project CMake changes, skips identical shader files, and asks before replacing shader files with different contents. Customized Lila CMake layouts that cannot be identified safely are reported for manual review.
+
 ## Community modules
 
 ### Add modules to a project
@@ -83,6 +85,8 @@ Examples below use `weave` as shorthand for that executable:
 weave new AudioDemo /path/to/projects --with-lila
 weave community audio_tools /path/to/modules --description "Audio helpers"
 weave manage /path/to/AudioDemo terrain_field,audio_tools
+weave manage /path/to/AudioDemo --with-lila --copy-shader-sources
+weave manage /path/to/AudioDemo --copy-shader-sources --replace-shader-conflicts
 weave install stable
 weave install development --replace-conflict
 ```

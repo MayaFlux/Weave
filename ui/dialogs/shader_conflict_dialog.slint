@@ -1,0 +1,57 @@
+import { Button, HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
+import { WeaveTheme } from "../theme.slint";
+
+export component ShaderConflictDialog inherits Rectangle {
+    in property <string> files;
+    callback replace_conflicts;
+    callback skip_conflicts;
+    callback cancel;
+
+    x: 0px;
+    y: 0px;
+    width: 100%;
+    height: 100%;
+    z: 110;
+    background: WeaveTheme.overlay.with-alpha(0.82);
+    TouchArea { }
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: min(620px, parent.width - 32px);
+        height: min(520px, parent.height - 32px);
+        border-radius: 6px;
+        border-width: 1px;
+        border-color: WeaveTheme.border-strong;
+        background: WeaveTheme.panel-background;
+        VerticalBox {
+            x: 24px; y: 22px; width: parent.width - 48px; height: parent.height - 44px; spacing: 12px;
+            Text { text: "EXISTING SHADER FILES"; color: WeaveTheme.warning-text; font-size: WeaveTheme.font-tiny; font-weight: 700; }
+            Text { text: "Add non-conflicting shaders. Choose how to handle these existing project files:"; color: WeaveTheme.text-primary; font-size: WeaveTheme.font-dialog-title; font-weight: 650; wrap: word-wrap; }
+            ScrollView {
+                vertical-stretch: 1;
+                content-height: files_text.preferred-height + 16px;
+                Rectangle {
+                    width: parent.width;
+                    height: files_text.preferred-height + 16px;
+                    background: WeaveTheme.window-background;
+                    files_text := Text {
+                        x: 10px; y: 8px; width: parent.width - 20px;
+                        height: self.preferred-height;
+                        text: root.files;
+                        color: WeaveTheme.text-body;
+                        font-size: WeaveTheme.font-small;
+                        wrap: word-wrap;
+                        vertical-alignment: top;
+                    }
+                }
+            }
+            Text { text: "Other project changes will not be replaced."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-small; }
+            HorizontalBox {
+                spacing: 12px;
+                Button { text: "Cancel"; clicked => { root.cancel(); } }
+                Button { text: "Skip Listed Files"; clicked => { root.skip_conflicts(); } }
+                Button { text: "Replace Listed Files"; primary: true; clicked => { root.replace_conflicts(); } }
+            }
+        }
+    }
+}

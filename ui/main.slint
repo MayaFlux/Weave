@@ -8,6 +8,7 @@ import { CreateCommunityModuleScreen } from "./screens/create_community_module.s
 import { InstallMayaFluxScreen } from "./screens/install_mayaflux.slint";
 import { ResultDialog } from "./dialogs/result_dialog.slint";
 import { ConfirmationDialog } from "./dialogs/confirmation_dialog.slint";
+import { ShaderConflictDialog } from "./dialogs/shader_conflict_dialog.slint";
 import { PasswordDialog } from "./dialogs/password_dialog.slint";
 import { InstallDialog, InstallationStep } from "./dialogs/install_dialog.slint";
 
@@ -25,6 +26,14 @@ export component MainWindow inherits Window {
     in-out property <string> module_min_version: "0.5.0";
     in-out property <string> destination: "";
     in-out property <string> managed_project_path: "";
+    in-out property <string> lila_option_status: "Choose a project to inspect its options.";
+    in-out property <string> shader_option_status: "Choose a project to inspect its options.";
+    in-out property <bool> can_add_lila: false;
+    in-out property <bool> can_copy_shader_sources: false;
+    in-out property <bool> add_lila_option: false;
+    in-out property <bool> add_shader_sources_option: false;
+    in-out property <bool> shader_conflict_open: false;
+    in-out property <string> shader_conflict_files: "";
     in-out property <int> screen: 0;
     in-out property <string> module_names: "";
     in-out property <bool> result_open: false;
@@ -61,6 +70,10 @@ export component MainWindow inherits Window {
     callback create_community_module();
     callback choose_manage_project();
     callback add_community_modules();
+    callback apply_project_options();
+    callback replace_shader_conflicts();
+    callback skip_shader_conflicts();
+    callback cancel_shader_conflicts();
     callback install_mayaflux(string);
     callback prepare_install_mayaflux(string);
     callback confirm_install_replacement();
@@ -117,8 +130,15 @@ export component MainWindow inherits Window {
                 project_path <=> root.managed_project_path;
                 module_names <=> root.module_names;
                 busy: root.busy;
+                lila_status: root.lila_option_status;
+                shader_status: root.shader_option_status;
+                can_add_lila: root.can_add_lila;
+                can_copy_shader_sources: root.can_copy_shader_sources;
+                add_lila <=> root.add_lila_option;
+                add_shader_sources <=> root.add_shader_sources_option;
                 back => { root.screen = 1; }
                 add_community_modules => { root.add_community_modules(); }
+                apply_options => { root.apply_project_options(); }
             }
             if root.screen == 5: InstallMayaFluxScreen {
                 busy: root.busy;
@@ -164,6 +184,12 @@ export component MainWindow inherits Window {
             message: root.conflict_confirmation_message;
             confirm => { root.confirm_install_replacement(); }
             cancel => { root.cancel_install_replacement(); }
+        }
+        if root.shader_conflict_open: ShaderConflictDialog {
+            files: root.shader_conflict_files;
+            replace_conflicts => { root.replace_shader_conflicts(); }
+            skip_conflicts => { root.skip_shader_conflicts(); }
+            cancel => { root.cancel_shader_conflicts(); }
         }
         if root.password_dialog_open: PasswordDialog {
             password <=> root.install_password;

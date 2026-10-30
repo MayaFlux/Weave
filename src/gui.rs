@@ -3,6 +3,10 @@ use crate::operations::community::{CommunityModuleOptions, create_community_modu
 use crate::operations::install;
 use crate::operations::install::progress::{Event, Platform, Progress, Status};
 use crate::operations::project::{ProjectOptions, create_project};
+use crate::operations::project_options::{
+    FeatureStatus, ProjectOptionError, ShaderConflictPolicy, apply_project_options,
+    inspect_project_options,
+};
 use crate::operations::update;
 use slint::{ComponentHandle, Model};
 use std::path::Path;
@@ -42,6 +46,9 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(project_path) = rfd::FileDialog::new().pick_folder() {
             window.set_managed_project_path(project_path.display().to_string().into());
             window.set_screen(3);
+            window.set_add_lila_option(false);
+            window.set_add_shader_sources_option(false);
+            start_manage_option_inspection(&window);
         }
     });
 
@@ -211,6 +218,47 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
         });
     });
 
+    let weak_window_for_options = window.as_weak();
+    window.on_apply_project_options(move || {
+        let Some(window) = weak_window_for_options.upgrade() else {
+            return;
+        };
+        start_project_option_application(&window, ShaderConflictPolicy::Reject);
+    });
+
+    let weak_window_for_replace_shaders = window.as_weak();
+    window.on_replace_shader_conflicts(move || {
+        let Some(window) = weak_window_for_replace_shaders.upgrade() else {
+            return;
+        };
+        window.set_shader_conflict_open(false);
+        start_project_option_application(&window, ShaderConflictPolicy::Replace);
+    });
+
+    let weak_window_for_skip_shaders = window.as_weak();
+    window.on_skip_shader_conflicts(move || {
+        let Some(window) = weak_window_for_skip_shaders.upgrade() else {
+            return;
+        };
+        window.set_shader_conflict_open(false);
+        start_project_option_application(&window, ShaderConflictPolicy::Skip);
+    });
+
+    let weak_window_for_cancel_shaders = window.as_weak();
+    window.on_cancel_shader_conflicts(move || {
+        let Some(window) = weak_window_for_cancel_shaders.upgrade() else {
+            return;
+        };
+        window.set_shader_conflict_open(false);
+        window.set_shader_conflict_files("".into());
+        publish_result(
+            &window,
+            1,
+            "Shader copy cancelled",
+            "No project files were changed. Select the option again if you want to review the conflicts later.".to_owned(),
+        );
+    });
+
     let weak_window_for_community = window.as_weak();
     window.on_create_community_module(move || {
         let Some(window) = weak_window_for_community.upgrade() else {
@@ -372,6 +420,97 @@ fn sync_install_progress(window: &MainWindow, progress: &Progress) {
     }
     window.set_install_summary(progress.summary.clone().into());
     window.set_install_fraction(progress.fraction.unwrap_or(-1.0));
+}
+
+fn start_manage_option_inspection(window: &MainWindow) {
+    window.set_busy(true);
+    window.set_lila_option_status("Checking Lila integration…".into());
+    window.set_shader_option_status("Checking MayaFlux shaders…".into());
+    window.set_can_add_lila(false);
+    window.set_can_copy_shader_sources(false);
+    let project_path = window.get_managed_project_path().to_string();
+    let weak = window.as_weak();
+    std::thread::spawn(move || {
+        let result = inspect_project_options(Path::new(&project_path));
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(window) = weak.upgrade() {
+                window.set_busy(false);
+                match result {
+                    Ok(inspection) => {
+                        window.set_lila_option_status(feature_status_text(&inspection.lila).into());
+                        window.set_shader_option_status(
+                            feature_status_text(&inspection.shader_sources).into(),
+                        );
+                        window.set_can_add_lila(inspection.can_add_lila);
+                        window.set_can_copy_shader_sources(inspection.can_copy_shader_sources);
+                    }
+                    Err(error) => {
+                        window.set_lila_option_status("Project could not be inspected.".into());
+                        window.set_shader_option_status(error.to_string().into());
+                    }
+                }
+            }
+        });
+    });
+}
+
+fn feature_status_text(status: &FeatureStatus) -> String {
+    match status {
+        FeatureStatus::Enabled => "Already enabled".to_owned(),
+        FeatureStatus::Available => "Available to add".to_owned(),
+        FeatureStatus::Unknown(reason) => format!("Cannot determine reliably: {reason}"),
+    }
+}
+
+fn start_project_option_application(window: &MainWindow, conflict_policy: ShaderConflictPolicy) {
+    let with_lila = window.get_add_lila_option();
+    let copy_shader_sources = window.get_add_shader_sources_option();
+    if !with_lila && !copy_shader_sources {
+        return;
+    }
+    let project_path = window.get_managed_project_path().to_string();
+    window.set_busy(true);
+    let weak = window.as_weak();
+    std::thread::spawn(move || {
+        let result = apply_project_options(
+            Path::new(&project_path),
+            with_lila,
+            copy_shader_sources,
+            conflict_policy,
+        );
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(window) = weak.upgrade() {
+                window.set_busy(false);
+                match result {
+                    Ok(messages) => {
+                        window.set_add_lila_option(false);
+                        window.set_add_shader_sources_option(false);
+                        publish_result(&window, 0, "Project options applied", messages.join("\n"));
+                        start_manage_option_inspection(&window);
+                    }
+                    Err(ProjectOptionError::ShaderConflicts(paths)) => {
+                        window.set_shader_conflict_files(
+                            paths
+                                .iter()
+                                .map(|path| path.display().to_string())
+                                .collect::<Vec<_>>()
+                                .join("\n")
+                                .into(),
+                        );
+                        window.set_shader_conflict_open(true);
+                    }
+                    Err(error) => {
+                        publish_result(
+                            &window,
+                            2,
+                            "Could not apply project options",
+                            error.to_string(),
+                        );
+                    }
+                }
+            }
+        });
+    });
 }
 
 fn show_install_conflict(window: &MainWindow, channel: &str, installed_package: &str) {

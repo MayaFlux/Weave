@@ -110,10 +110,12 @@ elseif(PLATFORM_WINDOWS)
                 )
             endif()
 
-            @LILA_DLL_COPY@
         endif()
     endif()
-    
+
+    # WEAVE: Lila Windows runtime integration
+    @LILA_DLL_COPY@
+
     # Windows subsystem configuration
     if(CMAKE_BUILD_TYPE STREQUAL "Release")
         # Release builds hide console window (optional - comment out if you want console)

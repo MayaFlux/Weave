@@ -1,7 +1,5 @@
 use std::fs;
-#[cfg(target_os = "linux")]
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -65,6 +63,22 @@ impl Drop for TestDirectory {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.0);
     }
+}
+
+fn create_manage_project(root: &Path) -> PathBuf {
+    let project = root.join("Project with spaces");
+    fs::create_dir_all(project.join("cmake")).unwrap();
+    fs::create_dir_all(project.join("data/shaders")).unwrap();
+    fs::write(project.join("CMakeLists.txt"), "project(ManageFixture)\n").unwrap();
+    let cmake = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/resources/templates/project/cmake/mayaflux.cmake"
+    ))
+    .replace("@LILA_LINK_BLOCK@", "")
+    .replace("@LILA_DEBUGGER_PATH@", "")
+    .replace("@LILA_DLL_COPY@", "");
+    fs::write(project.join("cmake/mayaflux.cmake"), cmake).unwrap();
+    project
 }
 
 #[cfg(target_os = "linux")]
@@ -193,6 +207,8 @@ fn cli_help_exposes_project_and_install_operations() {
     assert!(help.contains("weave new"));
     assert!(help.contains("weave manage"));
     assert!(!help.contains("weave update"));
+    assert!(help.contains("--with-lila             Add Lila live-coding integration"));
+    assert!(help.contains("--replace-shader-conflicts"));
     assert!(help.contains("weave community"));
     assert!(help.contains("weave install <stable|development>"));
 }
@@ -427,6 +443,101 @@ fn cli_reports_project_manage_validation_errors_without_network_access() {
     assert!(!invalid_project.status.success());
     assert!(String::from_utf8_lossy(&invalid_project.stderr).contains("Not a MayaFlux project"));
     assert_eq!(fs::read_dir(&temporary.0).unwrap().count(), 0);
+}
+
+#[test]
+fn cli_manage_adds_lila_idempotently_to_project_paths_with_spaces() {
+    let temporary = TestDirectory::new();
+    let project = create_manage_project(&temporary.0);
+    for _ in 0..2 {
+        let result = Command::new(env!("CARGO_BIN_EXE_weave"))
+            .args(["manage", project.to_str().unwrap(), "--with-lila"])
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+    let cmake = fs::read_to_string(project.join("cmake/mayaflux.cmake")).unwrap();
+    assert_eq!(cmake.matches("MayaFlux::MayaFluxHost)").count(), 1);
+    assert!(cmake.contains("$<TARGET_FILE_DIR:MayaFlux::MayaFluxHost>"));
+    assert!(cmake.contains("MayaFluxHost.dll"));
+}
+
+#[test]
+fn cli_manage_copies_shader_sources_from_a_controlled_installation() {
+    let temporary = TestDirectory::new();
+    let project = create_manage_project(&temporary.0);
+    let install = temporary
+        .0
+        .join("fake MayaFlux")
+        .join("share/MayaFlux/src/shaders");
+    fs::create_dir_all(install.join("nested")).unwrap();
+    fs::write(install.join("nested/effect.frag"), "installed shader").unwrap();
+    fs::write(project.join("data/shaders/custom.frag"), "user shader").unwrap();
+
+    let result = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args(["manage", project.to_str().unwrap(), "--copy-shader-sources"])
+        .env("MAYAFLUX_ROOT", temporary.0.join("fake MayaFlux"))
+        .output()
+        .unwrap();
+
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(
+        fs::read(project.join("data/shaders/nested/effect.frag")).unwrap(),
+        b"installed shader"
+    );
+    assert_eq!(
+        fs::read(project.join("data/shaders/custom.frag")).unwrap(),
+        b"user shader"
+    );
+}
+
+#[test]
+fn cli_manage_requires_explicit_shader_conflict_replacement() {
+    let temporary = TestDirectory::new();
+    let project = create_manage_project(&temporary.0);
+    let install = temporary
+        .0
+        .join("fake MayaFlux")
+        .join("share/MayaFlux/src/shaders");
+    fs::create_dir_all(&install).unwrap();
+    fs::write(install.join("effect.frag"), "installed shader").unwrap();
+    let destination = project.join("data/shaders/effect.frag");
+    fs::write(&destination, "user shader").unwrap();
+    let install_root = temporary.0.join("fake MayaFlux");
+
+    let refused = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args(["manage", project.to_str().unwrap(), "--copy-shader-sources"])
+        .env("MAYAFLUX_ROOT", &install_root)
+        .output()
+        .unwrap();
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("explicit replacement choice"));
+    assert_eq!(fs::read(&destination).unwrap(), b"user shader");
+
+    let replaced = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args([
+            "manage",
+            project.to_str().unwrap(),
+            "--copy-shader-sources",
+            "--replace-shader-conflicts",
+        ])
+        .env("MAYAFLUX_ROOT", install_root)
+        .output()
+        .unwrap();
+    assert!(
+        replaced.status.success(),
+        "{}",
+        String::from_utf8_lossy(&replaced.stderr)
+    );
+    assert_eq!(fs::read(destination).unwrap(), b"installed shader");
 }
 
 #[test]
