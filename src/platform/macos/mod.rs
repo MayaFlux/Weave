@@ -111,16 +111,220 @@ mod install_tests {
     }
 
     #[test]
+    fn successful_homebrew_bootstrap_rediscovers_the_installed_executable() {
+        let root = temp_dir();
+        let brew = root.join("bin/brew");
+        let mut discoveries = 0;
+        let mut bootstraps = 0;
+        let selected = super::ensure_brew_with(
+            &|_| {},
+            || {
+                discoveries += 1;
+                (discoveries > 1).then(|| brew.clone())
+            },
+            || {
+                bootstraps += 1;
+                Ok(())
+            },
+        )
+        .unwrap();
+
+        assert_eq!(selected, brew);
+        assert_eq!(discoveries, 2);
+        assert_eq!(bootstraps, 1);
+    }
+
+    #[test]
+    fn homebrew_bootstrap_cancellation_stops_before_discovery_retry() {
+        let mut discoveries = 0;
+        let mut bootstraps = 0;
+        let error = super::ensure_brew_with(
+            &|_| {},
+            || {
+                discoveries += 1;
+                None
+            },
+            || {
+                bootstraps += 1;
+                Err("Installer authorization was cancelled".to_owned())
+            },
+        )
+        .unwrap_err();
+
+        assert!(error.contains("cancelled"));
+        assert_eq!(discoveries, 1);
+        assert_eq!(bootstraps, 1);
+    }
+
+    #[test]
+    fn successful_installer_without_discoverable_brew_reports_recovery() {
+        let mut discoveries = 0;
+        let error = super::ensure_brew_with(
+            &|_| {},
+            || {
+                discoveries += 1;
+                None
+            },
+            || Ok(()),
+        )
+        .unwrap_err();
+
+        assert!(error.contains("installer finished, but Homebrew was not found"));
+        assert!(error.contains("retry"));
+        assert_eq!(discoveries, 2);
+    }
+
+    #[test]
+    fn cancelled_homebrew_installer_removes_package_and_stops_the_flow() {
+        let root = temp_dir();
+        fs::create_dir_all(&root).unwrap();
+        let package = root.join("Homebrew.pkg");
+        let mut verified = false;
+        let mut opened = false;
+        let error = super::bootstrap_homebrew_package(
+            &package,
+            &|_| {},
+            |path| {
+                fs::write(path, "controlled package").map_err(|error| error.to_string())?;
+                Ok(())
+            },
+            |_| {
+                verified = true;
+                Ok(())
+            },
+            |_| {
+                opened = true;
+                Err("Installer authorization was cancelled".to_owned())
+            },
+        )
+        .unwrap_err();
+
+        assert!(error.contains("cancelled"));
+        assert!(verified);
+        assert!(opened);
+        assert!(!package.exists());
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 0);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn successful_homebrew_bootstrap_verifies_opens_and_removes_package() {
+        use std::cell::RefCell;
+
+        let root = temp_dir();
+        fs::create_dir_all(&root).unwrap();
+        let package = root.join("Homebrew.pkg");
+        let events = RefCell::new(Vec::new());
+        super::bootstrap_homebrew_package(
+            &package,
+            &|_| {},
+            |path| {
+                events.borrow_mut().push("download");
+                fs::write(path, "signed package").map_err(|error| error.to_string())
+            },
+            |path| {
+                events.borrow_mut().push("verify");
+                if fs::read_to_string(path).ok().as_deref() == Some("signed package") {
+                    Ok(())
+                } else {
+                    Err("downloaded package was missing".to_owned())
+                }
+            },
+            |path| {
+                events.borrow_mut().push("authorize");
+                if path.is_file() {
+                    Ok(())
+                } else {
+                    Err("package was missing before authorization".to_owned())
+                }
+            },
+        )
+        .unwrap();
+
+        assert_eq!(*events.borrow(), ["download", "verify", "authorize"]);
+        assert!(!package.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn failed_homebrew_download_cleans_partial_package_and_stops() {
+        use std::cell::Cell;
+
+        let root = temp_dir();
+        fs::create_dir_all(&root).unwrap();
+        let package = root.join("Homebrew.pkg");
+        let later_stage_called = Cell::new(false);
+        let error = super::bootstrap_homebrew_package(
+            &package,
+            &|_| {},
+            |path| {
+                fs::write(path, "partial").map_err(|error| error.to_string())?;
+                Err("download failed".to_owned())
+            },
+            |_| {
+                later_stage_called.set(true);
+                Ok(())
+            },
+            |_| {
+                later_stage_called.set(true);
+                Ok(())
+            },
+        )
+        .unwrap_err();
+
+        assert!(error.contains("download failed"));
+        assert!(!later_stage_called.get());
+        assert!(!package.exists());
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 0);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn signature_failure_removes_package_without_opening_installer() {
+        let root = temp_dir();
+        fs::create_dir_all(&root).unwrap();
+        let package = root.join("Homebrew.pkg");
+        let mut opened = false;
+        let error = super::bootstrap_homebrew_package(
+            &package,
+            &|_| {},
+            |path| fs::write(path, "unsigned package").map_err(|error| error.to_string()),
+            |_| Err("signature rejected".to_owned()),
+            |_| {
+                opened = true;
+                Ok(())
+            },
+        )
+        .unwrap_err();
+
+        assert!(error.contains("signature rejected"));
+        assert!(!opened);
+        assert!(!package.exists());
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 0);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn uses_verified_zdotdir_before_home_fallback() {
         let root = temp_dir();
         let home = root.join("home");
         let zdot = root.join("dotfiles");
         fs::create_dir_all(&home).unwrap();
         fs::create_dir_all(&zdot).unwrap();
+        let home_file = home.join(".zshenv");
+        let zdot_file = zdot.join(".zshenv");
+        fs::write(&home_file, "export HOME_VALUE=preserve\n").unwrap();
+        fs::write(&zdot_file, "export ZDOT_VALUE=preserve\n").unwrap();
+        let selected = resolve_zshenv_path(&home, Some(zdot.to_str().unwrap()));
+        assert_eq!(selected, zdot_file);
+        update_shell_environment(&selected, "/opt/homebrew").unwrap();
         assert_eq!(
-            resolve_zshenv_path(&home, Some(zdot.to_str().unwrap())),
-            zdot.join(".zshenv")
+            fs::read_to_string(home_file).unwrap(),
+            "export HOME_VALUE=preserve\n"
         );
+        let configured = fs::read_to_string(zdot_file).unwrap();
+        assert!(configured.starts_with("export ZDOT_VALUE=preserve\n"));
+        assert!(configured.contains("source '/opt/homebrew/env.sh'"));
         assert_eq!(
             resolve_zshenv_path(&home, Some(root.join("missing").to_str().unwrap())),
             home.join(".zshenv")
@@ -141,6 +345,51 @@ mod install_tests {
         assert_eq!(
             fs::read_to_string(PathBuf::from(format!("{}.weave-backup", file.display()))).unwrap(),
             "export EDITOR=vim\n"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn replaces_existing_managed_block_without_changing_user_path_entries() {
+        let root = temp_dir();
+        fs::create_dir_all(&root).unwrap();
+        let file = root.join(".zshenv");
+        fs::write(
+            &file,
+            "export USER_VALUE=yes\nexport PATH=\"$HOME/.local/bin:$PATH\"\n".to_owned()
+                + "# MayaFlux (installed via Homebrew)\nsource '/opt/old/env.sh'\n",
+        )
+        .unwrap();
+
+        update_shell_environment(&file, "/opt/Home brew/opt/mayaflux").unwrap();
+
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(
+            text.starts_with("export USER_VALUE=yes\nexport PATH=\"$HOME/.local/bin:$PATH\"\n")
+        );
+        assert_eq!(text.matches("$HOME/.local/bin").count(), 1);
+        assert_eq!(text.matches("# MayaFlux").count(), 1);
+        assert!(!text.contains("/opt/old/env.sh"));
+        assert!(text.contains("source '/opt/Home brew/opt/mayaflux/env.sh'"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn malformed_shell_file_is_preserved_and_can_be_retried() {
+        let root = temp_dir();
+        fs::create_dir_all(&root).unwrap();
+        let file = root.join(".zshenv");
+        let original = [0x65, 0x78, 0x70, 0x6f, 0x72, 0x74, 0xff];
+        fs::write(&file, original).unwrap();
+
+        assert!(update_shell_environment(&file, "/opt/homebrew").is_err());
+        assert_eq!(fs::read(&file).unwrap(), original);
+        fs::write(&file, "export USER_VALUE=yes\n").unwrap();
+        update_shell_environment(&file, "/opt/homebrew").unwrap();
+        assert!(
+            fs::read_to_string(&file)
+                .unwrap()
+                .contains("source '/opt/homebrew/env.sh'")
         );
         let _ = fs::remove_dir_all(root);
     }
@@ -253,21 +502,7 @@ pub fn install_macos(
     })?;
     log("Apple developer tools are selected.");
     log(&format!("Selected MayaFlux edition: {formula}"));
-    let brew = match find_brew() {
-        Some(path) => {
-            log(&format!("Homebrew found at {}", path.display()));
-            path
-        }
-        None => {
-            log("Homebrew was not found; starting its signed Apple Silicon package installer.");
-            bootstrap_homebrew(log)?;
-            let path = find_brew().ok_or_else(|| {
-                "Homebrew's installer finished, but Homebrew was not found. If you cancelled the installer, retry; otherwise use Homebrew's installation troubleshooting guide: https://docs.brew.sh/Installation".to_owned()
-            })?;
-            log(&format!("Homebrew installed at {}", path.display()));
-            path
-        }
-    };
+    let brew = ensure_brew_with(log, find_brew, || bootstrap_homebrew(log))?;
     let message = install_formula_with_brew(
         &brew,
         formula,
@@ -369,6 +604,24 @@ fn find_brew() -> Option<PathBuf> {
         .find(|candidate| candidate.is_file())
 }
 
+fn ensure_brew_with(
+    log: &(impl Fn(&str) + Sync),
+    mut discover: impl FnMut() -> Option<PathBuf>,
+    bootstrap: impl FnOnce() -> Result<(), String>,
+) -> Result<PathBuf, String> {
+    if let Some(path) = discover() {
+        log(&format!("Homebrew found at {}", path.display()));
+        return Ok(path);
+    }
+    log("Homebrew was not found; starting its signed Apple Silicon package installer.");
+    bootstrap()?;
+    let path = discover().ok_or_else(|| {
+        "Homebrew's installer finished, but Homebrew was not found. If you cancelled the installer, retry; otherwise use Homebrew's installation troubleshooting guide: https://docs.brew.sh/Installation".to_owned()
+    })?;
+    log(&format!("Homebrew installed at {}", path.display()));
+    Ok(path)
+}
+
 fn bootstrap_homebrew(log: &(impl Fn(&str) + Sync)) -> Result<(), String> {
     const PACKAGE_URL: &str =
         "https://github.com/Homebrew/brew/releases/latest/download/Homebrew.pkg";
@@ -380,59 +633,92 @@ fn bootstrap_homebrew(log: &(impl Fn(&str) + Sync)) -> Result<(), String> {
             .map_err(|error| error.to_string())?
             .as_nanos()
     ));
-    log("Downloading Homebrew.pkg from Homebrew's latest official release…");
-    let mut download = Command::new("/usr/bin/curl");
-    download
-        .args([
-            "--fail",
-            "--location",
-            "--show-error",
-            "--progress-bar",
-            "--retry",
-            "2",
-            "--output",
-        ])
-        .arg(&package)
-        .arg(PACKAGE_URL);
-    let download_status = run_command_with_log(&mut download, "curl", &|line| {
-        crate::download::report_progress(line, log)
-    });
-    log(&crate::operations::install::progress::Event::Transfer(None)
-        .encode()
-        .expect("transfer is encodable"));
-    let download_status = download_status
-        .map_err(|error| format!("Could not download Homebrew's official installer: {error}"))?;
-    if !download_status.success() {
-        let _ = fs::remove_file(&package);
-        return Err("Could not download Homebrew's official Apple Silicon installer. Check network access and retry.".to_owned());
-    }
-    log("Download complete; checking the macOS package signature…");
-    let signature = Command::new("/usr/sbin/pkgutil")
-        .args(["--check-signature"])
-        .arg(&package)
-        .output()
-        .map_err(|error| format!("Could not verify the Homebrew installer signature: {error}"))?;
-    if !signature.status.success() {
-        let _ = fs::remove_file(&package);
-        return Err(format!(
-            "Homebrew's downloaded package did not pass macOS package signature verification: {}",
-            String::from_utf8_lossy(&signature.stderr).trim()
-        ));
-    }
-    log("Package signature verified. Opening macOS Installer for authorization…");
-    // Installer.app owns the native authorization and cancellation flow.
-    let opened = Command::new("/usr/bin/open")
-        .args(["-W", "-a", "Installer"])
-        .arg(&package)
-        .status()
-        .map_err(|error| format!("Could not open Homebrew's package in Installer.app: {error}"));
-    let _ = fs::remove_file(&package);
-    let status = opened?;
-    if !status.success() {
-        return Err("Homebrew's native installer did not complete successfully.".to_owned());
-    }
-    log("macOS Installer closed; checking for Homebrew…");
-    Ok(())
+    bootstrap_homebrew_package(
+        &package,
+        log,
+        |path| {
+            log("Downloading Homebrew.pkg from Homebrew's latest official release…");
+            let mut download = Command::new("/usr/bin/curl");
+            download
+                .args([
+                    "--fail",
+                    "--location",
+                    "--show-error",
+                    "--progress-bar",
+                    "--retry",
+                    "2",
+                    "--output",
+                ])
+                .arg(path)
+                .arg(PACKAGE_URL);
+            let status = run_command_with_log(&mut download, "curl", &|line| {
+                crate::download::report_progress(line, log)
+            });
+            log(&crate::operations::install::progress::Event::Transfer(None)
+                .encode()
+                .expect("transfer is encodable"));
+            let status = status.map_err(|error| {
+                format!("Could not download Homebrew's official installer: {error}")
+            })?;
+            if status.success() {
+                Ok(())
+            } else {
+                Err("Could not download Homebrew's official Apple Silicon installer. Check network access and retry.".to_owned())
+            }
+        },
+        |path| {
+            let signature = Command::new("/usr/sbin/pkgutil")
+                .args(["--check-signature"])
+                .arg(path)
+                .output()
+                .map_err(|error| {
+                    format!("Could not verify the Homebrew installer signature: {error}")
+                })?;
+            if signature.status.success() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "Homebrew's downloaded package did not pass macOS package signature verification: {}",
+                    String::from_utf8_lossy(&signature.stderr).trim()
+                ))
+            }
+        },
+        |path| {
+            // Installer.app owns the native authorization and cancellation flow.
+            let status = Command::new("/usr/bin/open")
+                .args(["-W", "-a", "Installer"])
+                .arg(path)
+                .status()
+                .map_err(|error| {
+                    format!("Could not open Homebrew's package in Installer.app: {error}")
+                })?;
+            if status.success() {
+                Ok(())
+            } else {
+                Err("Homebrew's native installer did not complete successfully.".to_owned())
+            }
+        },
+    )
+}
+
+fn bootstrap_homebrew_package(
+    package: &std::path::Path,
+    log: &(impl Fn(&str) + Sync),
+    download: impl FnOnce(&std::path::Path) -> Result<(), String>,
+    verify_signature: impl FnOnce(&std::path::Path) -> Result<(), String>,
+    open_installer: impl FnOnce(&std::path::Path) -> Result<(), String>,
+) -> Result<(), String> {
+    let result = (|| {
+        download(package)?;
+        log("Download complete; checking the macOS package signature…");
+        verify_signature(package)?;
+        log("Package signature verified. Opening macOS Installer for authorization…");
+        open_installer(package)?;
+        log("macOS Installer closed; checking for Homebrew…");
+        Ok(())
+    })();
+    let _ = fs::remove_file(package);
+    result
 }
 
 fn formula_for_channel(channel: &str) -> Result<&'static str, String> {
@@ -578,5 +864,5 @@ fn update_shell_environment(path: &std::path::Path, brew_prefix: &str) -> std::i
         content.push_str("\n\n");
     }
     content.push_str(&block);
-    fs::write(path, content)
+    crate::filesystem::atomic_write(path, content.as_bytes())
 }

@@ -49,17 +49,9 @@ fi
 if [ -f "$zshenv" ]; then
     ok "zsh startup file: $zshenv"
     grep -Fq '# MayaFlux (installed via Homebrew)' "$zshenv" \
-        || fix "The MayaFlux setup block is missing from $zshenv. Run environment setup in Weave."
-    grep -Fq 'export PATH="$HOME/.local/bin:$PATH"' "$zshenv" \
-        || fix "The zsh startup file does not add $HOME/.local/bin to PATH. Run environment setup in Weave."
+        || fix "The MayaFlux setup block is missing from $zshenv. Use Install MayaFlux in Weave to configure it."
 else
-    fix "zsh startup file is missing: $zshenv. Run environment setup in Weave."
-fi
-
-if [[ ":${PATH:-}:" == *":$HOME/.local/bin:"* ]]; then
-    ok 'The current PATH includes $HOME/.local/bin.'
-else
-    fix 'The current PATH does not include $HOME/.local/bin. Restart the terminal after running environment setup in Weave.'
+    fix "zsh startup file is missing: $zshenv. Use Install MayaFlux in Weave to configure it."
 fi
 
 if [ -n "$brew_cmd" ] && [ -x "$brew_cmd" ]; then
@@ -84,7 +76,7 @@ if [ -n "$brew_cmd" ] && [ -x "$brew_cmd" ]; then
             if [ -f "$zshenv" ] && grep -Fq "source '$expected_env'" "$zshenv"; then
                 ok 'The zsh startup file sources the installed MayaFlux environment.'
             else
-                fix "The zsh startup file does not source $expected_env. Run environment setup in Weave."
+                fix "The zsh startup file does not source $expected_env. Use Weave's Install MayaFlux operation to restore the shell configuration."
             fi
         else
             fix "Homebrew reported a MayaFlux prefix without env.sh: $prefix"
@@ -110,7 +102,7 @@ if [ -n "${MAYAFLUX_ROOT:-}" ]; then
             ;;
     esac
 else
-    fix 'MAYAFLUX_ROOT is not set in this terminal. Restart the terminal after running environment setup in Weave.'
+    fix 'MAYAFLUX_ROOT is not set in this terminal. Open a new terminal after installing MayaFlux with Weave.'
 fi
 
 printf '\nBuild tools\n'

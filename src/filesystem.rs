@@ -1,8 +1,90 @@
 //! Shared path, payload, temporary-directory and filesystem operations.
 use std::{
-    fs,
+    fs, io,
     path::{Path, PathBuf},
 };
+
+/// Replace a file through a sibling temporary file so readers never see a partial write.
+pub fn atomic_write(path: &Path, contents: &[u8]) -> io::Result<()> {
+    atomic_write_with(
+        path,
+        contents,
+        |file, contents| {
+            use std::io::Write;
+            file.write_all(contents)?;
+            file.sync_all()
+        },
+        |temporary, destination| fs::rename(temporary, destination),
+    )
+}
+
+fn atomic_write_with(
+    path: &Path,
+    contents: &[u8],
+    write_contents: impl FnOnce(&mut fs::File, &[u8]) -> io::Result<()>,
+    replace: impl FnOnce(&Path, &Path) -> io::Result<()>,
+) -> io::Result<()> {
+    let parent = path.parent().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "destination has no parent directory",
+        )
+    })?;
+    let existing = match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "refusing to replace a symbolic link",
+            ));
+        }
+        Ok(metadata) => Some(metadata),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error),
+    };
+    static NEXT_TEMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let mut temporary = None;
+    for _ in 0..100 {
+        let id = NEXT_TEMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let candidate = parent.join(format!(".weave-{}-{id}.tmp", std::process::id()));
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(mut file) => {
+                let result = write_contents(&mut file, contents);
+                drop(file);
+                if let Err(error) = result {
+                    let _ = fs::remove_file(&candidate);
+                    return Err(error);
+                }
+                if let Some(metadata) = &existing {
+                    if let Err(error) = fs::set_permissions(&candidate, metadata.permissions()) {
+                        let _ = fs::remove_file(&candidate);
+                        return Err(error);
+                    }
+                }
+                temporary = Some(candidate);
+                break;
+            }
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
+    let temporary = temporary.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "could not allocate a temporary file",
+        )
+    })?;
+    match replace(&temporary, path) {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            let _ = fs::remove_file(temporary);
+            Err(error)
+        }
+    }
+}
 pub fn verify_payload(root: &Path, required: &[&str]) -> Result<(), String> {
     safe_directory(root)?;
     for relative in required {
@@ -154,6 +236,85 @@ pub fn numeric_version(text: &str) -> Option<Vec<u64>> {
         .ok()?;
     (values.len() >= 2).then_some(values)
 }
+#[cfg(test)]
+mod atomic_write_tests {
+    use super::*;
+    use std::io;
+
+    fn temporary_directory() -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "weave-atomic-write-{}-{}",
+            std::process::id(),
+            unique_id()
+        ));
+        fs::create_dir(&path).unwrap();
+        path
+    }
+
+    #[test]
+    fn replacement_failure_preserves_original_cleans_temporary_and_allows_retry() {
+        let root = temporary_directory();
+        let destination = root.join("settings");
+        fs::write(&destination, "original").unwrap();
+
+        let error = atomic_write_with(
+            &destination,
+            b"replacement",
+            |file, contents| {
+                use std::io::Write;
+                file.write_all(contents)
+            },
+            |_, _| Err(io::Error::other("controlled replacement failure")),
+        )
+        .unwrap_err();
+
+        assert_eq!(error.to_string(), "controlled replacement failure");
+        assert_eq!(fs::read_to_string(&destination).unwrap(), "original");
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+        atomic_write(&destination, b"replacement").unwrap();
+        assert_eq!(fs::read_to_string(&destination).unwrap(), "replacement");
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn write_failure_preserves_original_and_cleans_temporary() {
+        let root = temporary_directory();
+        let destination = root.join("settings");
+        fs::write(&destination, "original").unwrap();
+
+        let error = atomic_write_with(
+            &destination,
+            b"replacement",
+            |_, _| Err(io::Error::other("controlled write failure")),
+            |temporary, destination| fs::rename(temporary, destination),
+        )
+        .unwrap_err();
+
+        assert_eq!(error.to_string(), "controlled write failure");
+        assert_eq!(fs::read_to_string(&destination).unwrap(), "original");
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn refuses_symlink_destination_without_modifying_target() {
+        use std::os::unix::fs::symlink;
+
+        let root = temporary_directory();
+        let target = root.join("target");
+        let destination = root.join("settings");
+        fs::write(&target, "user data").unwrap();
+        symlink(&target, &destination).unwrap();
+
+        assert!(atomic_write(&destination, b"replacement").is_err());
+        assert_eq!(fs::read_to_string(&target).unwrap(), "user data");
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 2);
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
 pub fn version_directories(root: &Path) -> Vec<PathBuf> {
     let mut directories: Vec<_> = fs::read_dir(root)
         .into_iter()

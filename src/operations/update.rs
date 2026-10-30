@@ -473,7 +473,7 @@ fn update_project_with(
                 updated.push_str(name);
                 updated.push('\n');
             }
-            fs::write(&registration, updated)
+            crate::filesystem::atomic_write(&registration, updated.as_bytes())
                 .map_err(|error| fail(format!("Could not update community.cmake: {error}")))?;
         }
         for name in &names {
