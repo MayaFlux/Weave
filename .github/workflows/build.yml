@@ -75,7 +75,7 @@ jobs:
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Linux'
         uses: actions/cache@v4
         with:
-          path: build/linux/rust-package/tools
+          path: target/packaging/linux/tools
           key: weave-linux-appimage-tools-x86_64-v1
 
       - name: Test Rust application
@@ -88,11 +88,11 @@ jobs:
 
       - name: Package Linux AppImage
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Linux'
-        run: bash linux/scripts/package_weave_linux.sh "$RUNNER_TEMP/weave-linux"
+        run: bash packaging/linux/scripts/package.sh "$RUNNER_TEMP/weave-linux"
 
       - name: Validate Linux AppImage
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Linux'
-        run: bash linux/scripts/verify_weave_linux_package.sh "$RUNNER_TEMP"/weave-linux/Weave-*-Linux-x86_64.AppImage
+        run: bash packaging/linux/scripts/verify.sh "$RUNNER_TEMP"/weave-linux/Weave-*-Linux-x86_64.AppImage
 
       - name: Upload Linux AppImage
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Linux'
@@ -108,11 +108,11 @@ jobs:
 
       - name: Package macOS app and DMG
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'macOS'
-        run: bash macos/scripts/package_weave_macos.sh "$RUNNER_TEMP/weave-macos"
+        run: bash packaging/macos/scripts/package.sh "$RUNNER_TEMP/weave-macos"
 
       - name: Validate macOS DMG
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'macOS'
-        run: bash macos/scripts/verify_weave_macos_package.sh "$RUNNER_TEMP"/weave-macos/Weave-*-macOS-arm64.dmg
+        run: bash packaging/macos/scripts/verify.sh "$RUNNER_TEMP"/weave-macos/Weave-*-macOS-arm64.dmg
 
       - name: Upload macOS package
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'macOS'

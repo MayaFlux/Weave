@@ -5,14 +5,14 @@ mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "windows")]
-mod windows;
+pub(crate) mod windows;
 
 #[cfg(target_os = "windows")]
 pub fn install_windows(
     channel: &str,
     replace_conflict: bool,
     log: &(impl Fn(&str) + Sync),
-) -> Result<String, crate::install::InstallError> {
+) -> Result<String, crate::operations::install::InstallError> {
     windows::install_windows(channel, replace_conflict, log)
 }
 
@@ -22,7 +22,7 @@ pub fn install_windows_worker(
     replace_conflict: bool,
     pipe: &str,
     log: &(impl Fn(&str) + Sync),
-) -> Result<String, crate::install::InstallError> {
+) -> Result<String, crate::operations::install::InstallError> {
     windows::install_windows_worker(channel, replace_conflict, Some(pipe), log)
 }
 
@@ -31,7 +31,7 @@ pub fn install_macos(
     channel: &str,
     replace_conflict: bool,
     log: &(impl Fn(&str) + Sync),
-) -> Result<String, crate::install::InstallError> {
+) -> Result<String, crate::operations::install::InstallError> {
     macos::install_macos(channel, replace_conflict, log)
 }
 
@@ -41,12 +41,14 @@ pub fn install_linux(
     replace_conflict: bool,
     password: Option<&str>,
     log: &(impl Fn(&str) + Sync),
-) -> Result<String, crate::install::InstallError> {
+) -> Result<String, crate::operations::install::InstallError> {
     linux::install_linux(channel, replace_conflict, password, log)
 }
 
 #[cfg(target_os = "linux")]
-pub fn check_linux_conflict(channel: &str) -> Result<Option<String>, crate::install::InstallError> {
+pub fn check_linux_conflict(
+    channel: &str,
+) -> Result<Option<String>, crate::operations::install::InstallError> {
     linux::check_linux_conflict(channel)
 }
 
@@ -72,3 +74,10 @@ pub fn shader_source_root() -> Result<PathBuf, String> {
 
     Err("MayaFlux shader sources could not be located. Set MAYAFLUX_ROOT or omit --copy-shader-sources.".to_owned())
 }
+
+#[cfg(target_os = "windows")]
+pub(crate) use windows::filesystem as native_filesystem;
+#[cfg(unix)]
+mod unix;
+#[cfg(unix)]
+pub(crate) use unix::filesystem as native_filesystem;

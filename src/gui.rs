@@ -1,8 +1,8 @@
 use crate::MainWindow;
-use crate::community::{CommunityModuleOptions, create_community_module};
-use crate::install;
-use crate::project::{ProjectOptions, create_project};
-use crate::update;
+use crate::operations::community::{CommunityModuleOptions, create_community_module};
+use crate::operations::install;
+use crate::operations::project::{ProjectOptions, create_project};
+use crate::operations::update;
 use slint::ComponentHandle;
 use std::path::Path;
 

@@ -1,7 +1,9 @@
-use crate::community::{CommunityCreationResult, CommunityModuleOptions, create_community_module};
-use crate::install;
-use crate::project::{ProjectCreationResult, ProjectOptions, create_project};
-use crate::update;
+use crate::operations::community::{
+    CommunityCreationResult, CommunityModuleOptions, create_community_module,
+};
+use crate::operations::install;
+use crate::operations::project::{ProjectCreationResult, ProjectOptions, create_project};
+use crate::operations::update;
 use std::path::Path;
 use std::process::ExitCode;
 

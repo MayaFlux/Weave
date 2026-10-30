@@ -1,0 +1,11 @@
+pub mod cli;
+pub mod download;
+pub mod environment;
+pub mod filesystem;
+mod git;
+pub mod gui;
+pub mod operations;
+pub(crate) mod platform;
+pub mod process;
+pub mod resources;
+slint::include_modules!();

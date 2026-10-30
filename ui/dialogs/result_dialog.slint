@@ -1,0 +1,74 @@
+import { HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
+import { WeaveTheme } from "../theme.slint";
+import { AppButton } from "../components/mod.slint";
+
+export component ResultDialog inherits Rectangle {
+    in property <int> result_kind;
+    in property <string> result_title;
+    in property <string> result_message;
+    in property <bool> result_busy;
+    callback close;
+
+    x: 0px;
+    y: 0px;
+    width: 100%;
+    height: 100%;
+    z: 100;
+    background: WeaveTheme.overlay.with-alpha(0.78);
+    TouchArea { }
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 700px;
+        height: root.result_busy ? 520px : 300px;
+        border-radius: 6px;
+        border-width: 1px;
+        border-color: WeaveTheme.border-strong;
+        background: WeaveTheme.panel-background;
+        VerticalBox {
+            x: 28px; y: 26px; width: parent.width - 56px; height: parent.height - 52px; spacing: 12px;
+            HorizontalBox {
+                spacing: 14px;
+                Rectangle {
+                    width: 34px; height: 34px; border-radius: 4px;
+                    background: root.result_kind == 2 ? WeaveTheme.error-background : root.result_kind == 1 ? WeaveTheme.warning-background : WeaveTheme.success-background;
+                    Text {
+                    text: root.result_busy ? "…" : root.result_kind == 2 ? "!" : root.result_kind == 1 ? "!" : "✓";
+                        color: root.result_kind == 2 ? WeaveTheme.error-text : root.result_kind == 1 ? WeaveTheme.warning-text : WeaveTheme.success-text;
+                        font-size: WeaveTheme.font-icon; font-weight: 700;
+                        horizontal-alignment: center; vertical-alignment: center;
+                    }
+                }
+                VerticalBox {
+                    spacing: 2px;
+                    Text { text: root.result_busy ? "IN PROGRESS" : root.result_kind == 2 ? "FAILED" : root.result_kind == 1 ? "COMPLETED WITH WARNING" : "COMPLETED"; color: root.result_busy ? WeaveTheme.accent : root.result_kind == 2 ? WeaveTheme.error-text : root.result_kind == 1 ? WeaveTheme.warning-text : WeaveTheme.success-text; font-size: WeaveTheme.font-tiny; font-weight: 700; }
+                    Text { text: root.result_title; color: WeaveTheme.text-primary; font-size: WeaveTheme.font-dialog-title; font-weight: 650; wrap: word-wrap; }
+                }
+            }
+            Rectangle { height: 1px; background: WeaveTheme.border; }
+            ScrollView {
+                vertical-stretch: 1;
+                content-height: log_text.preferred-height + 16px;
+                content-y: min(0px, self.visible-height - self.content-height);
+                Rectangle {
+                    width: parent.width;
+                    height: log_text.preferred-height + 16px;
+                    background: WeaveTheme.window-background;
+                    log_text := Text {
+                        x: 10px; y: 8px; width: parent.width - 20px;
+                        height: self.preferred-height;
+                        text: root.result_message;
+                        color: WeaveTheme.text-body;
+                        font-size: WeaveTheme.font-small;
+                        wrap: word-wrap;
+                        vertical-alignment: top;
+                    }
+                }
+            }
+            HorizontalBox {
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+                AppButton { text: "Close"; primary: true; enabled: !root.result_busy; clicked => { root.close(); } }
+            }
+        }
+    }
+}

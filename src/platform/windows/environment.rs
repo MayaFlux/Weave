@@ -1,27 +1,12 @@
-use super::{files, host, tools};
-use crate::install::windows::Tools;
+use super::{discovery, process};
+use crate::filesystem as files;
+use crate::operations::install::dependencies::{Tool, Tools};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
 };
 
-pub trait Store {
-    fn read(&self, name: &str) -> Result<String, String>;
-    fn write(&mut self, name: &str, value: &str) -> Result<(), String>;
-}
-
-pub fn apply(values: &BTreeMap<String, String>, store: &mut impl Store) -> Result<(), String> {
-    for (name, value) in values {
-        let existing = store
-            .read(name)
-            .map_err(|e| format!("Cannot read {name}: {e}; retry environment setup"))?;
-        if existing != *value {
-            store.write(name, value).map_err(|e| format!("Cannot update {name}: {e}. Earlier environment changes may already be applied; correct permissions and retry environment setup"))?;
-        }
-    }
-    Ok(())
-}
-
+use crate::environment::{Store, apply};
 pub fn configure(
     root: &Path,
     selected: &Tools,
@@ -41,8 +26,8 @@ pub fn configure(
     for relative in ["bin", "include", "lib"] {
         require(&root.join(relative))?;
     }
-    let dependency_root = |package: &str| -> Result<PathBuf, String> {
-        let executable = selected.get(package).ok_or_else(|| {
+    let dependency_root = |package: Tool| -> Result<PathBuf, String> {
+        let executable = selected.get(&package).ok_or_else(|| {
             format!("No verified executable was selected for {package}; retry dependency setup")
         })?;
         if !executable.is_file() {
@@ -63,9 +48,9 @@ pub fn configure(
         require(bin)?;
         Ok(root)
     };
-    let llvm = dependency_root("LLVM.LLVM")?;
-    let vulkan = dependency_root("KhronosGroup.VulkanSDK")?;
-    let ffmpeg = dependency_root("Gyan.FFmpeg.Shared")?;
+    let llvm = dependency_root(Tool::Clang)?;
+    let vulkan = dependency_root(Tool::ShaderCompiler)?;
+    let ffmpeg = dependency_root(Tool::Ffmpeg)?;
     for path in [
         vulkan.join("Include"),
         ffmpeg.join("include"),
@@ -73,8 +58,8 @@ pub fn configure(
     ] {
         require(&path)?;
     }
-    let compiler = tools::checked(
-        &mut tools::powershell(include_str!("compiler.ps1")),
+    let compiler = process::checked(
+        &mut process::powershell(include_str!("scripts/compiler.ps1")),
         false,
         &|_| {},
     )?;
@@ -103,7 +88,7 @@ pub fn configure(
     let includes = paths("includes")?;
     let mut libraries = paths("libraries")?;
     libraries.push(ffmpeg.join("lib"));
-    let snapshot = host::Environment::read()?;
+    let snapshot = discovery::Environment::read()?;
     let mut store = MachineStore { snapshot };
     let mut values = BTreeMap::new();
     for (name, path) in [
@@ -123,9 +108,9 @@ pub fn configure(
         llvm.join("bin"),
         ffmpeg.join("bin"),
     ];
-    for package in ["Kitware.CMake", "Git.Git", "Ninja-build.Ninja"] {
+    for package in [Tool::CMake, Tool::Git, Tool::Ninja] {
         let executable = selected
-            .get(package)
+            .get(&package)
             .ok_or_else(|| format!("No verified tool selected for {package}"))?;
         if !executable.is_file() {
             return Err(format!(
@@ -155,7 +140,7 @@ pub fn configure(
     ] {
         values.insert(
             name.to_owned(),
-            tools::merge_paths(&store.read(name)?, &additions, prefer)?,
+            merge_paths(&store.read(name)?, &additions, prefer)?,
         );
     }
     apply(&values, &mut store)?;
@@ -167,7 +152,7 @@ pub fn configure(
 }
 
 struct MachineStore {
-    snapshot: host::Environment,
+    snapshot: discovery::Environment,
 }
 impl Store for MachineStore {
     fn read(&self, name: &str) -> Result<String, String> {
@@ -176,60 +161,62 @@ impl Store for MachineStore {
             .expand(self.snapshot.value("Machine", name).unwrap_or("")))
     }
     fn write(&mut self, name: &str, value: &str) -> Result<(), String> {
-        let mut command = tools::powershell(
+        let mut command = process::powershell(
             "[Environment]::SetEnvironmentVariable($env:WEAVE_ENV_NAME,$env:WEAVE_ENV_VALUE,'Machine')",
         );
         command
             .env("WEAVE_ENV_NAME", name)
             .env("WEAVE_ENV_VALUE", value);
-        tools::checked(&mut command, false, &|_| {})?;
+        process::checked(&mut command, false, &|_| {})?;
         Ok(())
     }
 }
 
+fn normalize(value: &str) -> String {
+    let text = value.trim().trim_matches('"').replace('/', "\\");
+    let path = Path::new(&text);
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
+            std::path::Component::CurDir => {}
+            _ => normalized.push(component.as_os_str()),
+        }
+    }
+    normalized
+        .to_string_lossy()
+        .trim_end_matches('\\')
+        .to_ascii_lowercase()
+}
+pub fn merge_paths(existing: &str, additions: &[PathBuf], prefer: bool) -> Result<String, String> {
+    crate::environment::merge_paths(existing, additions, prefer, ';', normalize)
+}
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[derive(Default)]
-    struct Fake {
-        values: BTreeMap<String, String>,
-        fail: Option<String>,
-    }
-    impl Store for Fake {
-        fn read(&self, name: &str) -> Result<String, String> {
-            Ok(self.values.get(name).cloned().unwrap_or_default())
-        }
-        fn write(&mut self, name: &str, value: &str) -> Result<(), String> {
-            if self.fail.as_deref() == Some(name) {
-                return Err("Access denied".into());
-            }
-            self.values.insert(name.into(), value.into());
-            Ok(())
-        }
-    }
     #[test]
-    fn failed_machine_write_reports_partial_state_and_retry_is_idempotent() {
-        let values = BTreeMap::from([
-            ("MAYAFLUX_ROOT".into(), "D:\\Maya Flux".into()),
-            ("PATH".into(), "D:\\Tools".into()),
-        ]);
-        let mut store = Fake {
-            fail: Some("PATH".into()),
-            ..Default::default()
-        };
-        let error = apply(&values, &mut store).unwrap_err();
-        assert!(error.contains("PATH"));
-        assert!(error.contains("retry"));
+    fn environment_merge_deduplicates_whole_paths_and_preserves_other_entries() {
+        let paths = [
+            PathBuf::from(r"D:\Tools\bin"),
+            PathBuf::from(r"D:\LLVM Tools\bin"),
+        ];
         assert_eq!(
-            store.values.get("MAYAFLUX_ROOT").map(String::as_str),
-            Some("D:\\Maya Flux")
+            merge_paths(r"E:\Old;d:\tools\BIN\;D:\Tools\binary", &paths, true).unwrap(),
+            r"D:\Tools\bin;D:\LLVM Tools\bin;E:\Old;D:\Tools\binary"
         );
-        store.fail = None;
-        apply(&values, &mut store).unwrap();
-        apply(&values, &mut store).unwrap();
-        assert_eq!(store.values, values);
-        store.fail = Some("PATH".into());
-        let changed = BTreeMap::from([("PATH".into(), "D:\\New Tools".into())]);
-        assert!(apply(&changed, &mut store).is_err());
+        assert_eq!(
+            merge_paths("", &paths[..1], false).unwrap(),
+            r"D:\Tools\bin"
+        );
+        for value in [
+            "relative",
+            "D:relative",
+            "D:\\Bad;Injected",
+            "D:\\Bad\nInjected",
+        ] {
+            assert!(merge_paths("", &[PathBuf::from(value)], false).is_err());
+        }
     }
 }
