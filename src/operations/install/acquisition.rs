@@ -73,6 +73,7 @@ pub fn acquire(
         extracted
     };
     files::verify_payload(&payload, layout.required)?;
+    super::release::record_install(&payload, release)?;
     log("Staged MayaFlux runtime, headers and CMake package verified. Installing package files...");
     let mut all = Vec::new();
     files::collect_files(&payload, &payload, &mut all)?;
@@ -160,6 +161,9 @@ mod tests {
             fs::create_dir_all(target.join("dist_staging/bin")).unwrap();
             if self.complete {
                 fs::write(target.join("dist_staging/bin/runtime.dll"), "new runtime").unwrap();
+                let marker = target.join("dist_staging/share/MayaFlux/.version");
+                fs::create_dir_all(marker.parent().unwrap()).unwrap();
+                fs::write(marker, r#"{"version":"0.5.0"}"#).unwrap();
             }
             Ok(())
         }
@@ -207,6 +211,10 @@ mod tests {
         )
         .unwrap();
         assert!(!root.join("old.txt").exists());
+        assert_eq!(
+            super::super::release::installed(&root).unwrap().unwrap()["weave_release"],
+            "v0.5.0"
+        );
         assert_eq!(
             fs::read_to_string(root.join("bin/runtime.dll")).unwrap(),
             "new runtime"

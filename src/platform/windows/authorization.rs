@@ -25,16 +25,9 @@ pub fn install_windows_worker(
 ) -> Result<String, InstallError> {
     // Reject malformed input before probing the host, requesting consent or writing logs.
     let channel = Channel::parse(channel)?;
-    if !replace_conflict
-        && let Ok(Some(local)) =
-            crate::operations::install::release::installed(std::path::Path::new(r"C:\MayaFlux"))
-        && let Some(installed) =
-            crate::operations::install::release::conflicting_stream(channel, &local)
-    {
-        return Err(InstallError::Conflict {
-            installed_formula: format!("MayaFlux {}", installed.name()),
-        });
-    }
+    check_installed_stream(channel, replace_conflict, || {
+        crate::operations::install::release::installed(std::path::Path::new(r"C:\MayaFlux"))
+    })?;
     if !cfg!(target_arch = "x86_64") {
         return Err(
             "An x64 Weave executable is required for Windows installation"
@@ -128,6 +121,62 @@ pub fn install_windows_worker(
     result
         .map(|message| format!("{message}\nInstallation log: {}", log_path.display()))
         .map_err(InstallError::Failed)
+}
+
+fn check_installed_stream(
+    channel: Channel,
+    replace_conflict: bool,
+    inspect: impl FnOnce() -> Result<Option<serde_json::Value>, String>,
+) -> Result<(), InstallError> {
+    if replace_conflict {
+        return Ok(());
+    }
+    if let Some(local) = inspect().map_err(|error| {
+        InstallError::Failed(format!(
+            "Cannot determine the installed MayaFlux stream: {error}. Repair the reported metadata and retry, or explicitly replace it with `weave install {} --replace-conflict`.", channel.name()
+        ))
+    })? && let Some(installed) = crate::operations::install::release::conflicting_stream(channel, &local) {
+        return Err(InstallError::Conflict {
+            installed_formula: format!("MayaFlux {}", installed.name()),
+        });
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod stream_preflight_tests {
+    use super::*;
+
+    #[test]
+    fn unreadable_provenance_requires_explicit_replacement_before_elevation() {
+        let error =
+            check_installed_stream(
+                Channel::Development,
+                false,
+                || Err("invalid receipt".into()),
+            )
+            .unwrap_err();
+        assert!(matches!(error, InstallError::Failed(_)));
+        assert!(error.to_string().contains("--replace-conflict"));
+        assert!(
+            check_installed_stream(Channel::Development, true, || panic!(
+                "approved replacement needs no stream probe"
+            ))
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn recorded_development_payload_is_not_a_conflict_with_itself() {
+        let local = serde_json::json!({"version":"1.0.0", "weave_release":"v1.0.0-dev"});
+        assert!(
+            check_installed_stream(Channel::Development, false, || Ok(Some(local.clone()))).is_ok()
+        );
+        assert!(matches!(
+            check_installed_stream(Channel::Stable, false, || Ok(Some(local))),
+            Err(InstallError::Conflict { .. })
+        ));
+    }
 }
 
 fn elevate(

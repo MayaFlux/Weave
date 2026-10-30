@@ -67,8 +67,20 @@ pub fn install(
     };
     let current = local
         .as_ref()
-        .is_some_and(|local| is_current(channel, &release, local, host.now()));
-    let configured = current && host.verify().is_ok();
+        .is_some_and(|local| is_current(channel, &release, local, host.now(), log));
+    if local.is_none() {
+        log("No readable installed MayaFlux version found; downloading the selected release.");
+    }
+    let configured = current
+        && match host.verify() {
+            Ok(()) => true,
+            Err(error) => {
+                log(&format!(
+                    "Existing MayaFlux payload verification failed: {error}. Downloading to repair it."
+                ));
+                false
+            }
+        };
     if configured {
         log("The existing MayaFlux payload is current and verified; continuing with host setup.");
     } else {
@@ -301,6 +313,57 @@ mod tests {
             assert!(install(Channel::Development, &mut host, &|_| {}).is_ok());
             assert_eq!(host.calls.contains(&"acquire"), acquire, "{timestamp}");
         }
+    }
+    #[test]
+    fn development_receipt_uses_age_check_for_unsuffixed_payload_and_still_runs_host_setup() {
+        for (timestamp, acquire) in [
+            ("2026-10-13 11:00:00 UTC", false),
+            ("2026-10-12 12:00:00 UTC", true),
+            ("2026-10-14 12:00:00 UTC", true),
+            ("invalid", true),
+        ] {
+            let mut host = Fake::new();
+            host.metadata = json!([release("v0.5.0-dev")]);
+            host.local = Some(
+                json!({"version":"0.5.0", "weave_release":"v0.5.0-dev", "build_time":timestamp}),
+            );
+            let lines = std::cell::RefCell::new(Vec::new());
+            assert!(
+                install(Channel::Development, &mut host, &|line| lines
+                    .borrow_mut()
+                    .push(line.to_owned()))
+                .is_ok()
+            );
+            assert_eq!(host.calls.contains(&"acquire"), acquire, "{timestamp}");
+            assert!(
+                host.calls
+                    .ends_with(&["dependencies", "environment", "resources"])
+            );
+            if !acquire {
+                assert!(
+                    lines
+                        .borrow()
+                        .iter()
+                        .any(|line| line.contains("Build age:"))
+                );
+                assert!(
+                    lines
+                        .borrow()
+                        .iter()
+                        .any(|line| line.contains("Development build is fresh"))
+                );
+            }
+        }
+    }
+    #[test]
+    fn fresh_development_receipt_does_not_suppress_a_newer_remote_version() {
+        let mut host = Fake::new();
+        host.metadata = json!([release("v0.6.0-dev")]);
+        host.local = Some(
+            json!({"version":"0.5.0", "weave_release":"v0.5.0-dev", "build_time":"2026-10-13 11:00:00 UTC"}),
+        );
+        assert!(install(Channel::Development, &mut host, &|_| {}).is_ok());
+        assert!(host.calls.contains(&"acquire"));
     }
     #[test]
     fn malformed_unicode_timestamp_cannot_panic_or_suppress_a_download() {

@@ -26,13 +26,61 @@ pub fn fetch(
 pub fn installed(root: &Path) -> Result<Option<Value>, String> {
     let path = root.join("share/MayaFlux/.version");
     filesystem::no_links(&path)?;
-    match fs::read(path) {
-        Ok(bytes) => serde_json::from_slice(&bytes)
-            .map(Some)
-            .map_err(|e| e.to_string()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e.to_string()),
+    let mut local: Value = match fs::read(path) {
+        Ok(bytes) => serde_json::from_slice(&bytes).map_err(|e| e.to_string())?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e.to_string()),
+    };
+    let receipt_path = root.join("share/weave/mayaflux-install.json");
+    filesystem::no_links(&receipt_path)?;
+    let receipt = match fs::read(receipt_path) {
+        Ok(bytes) => Some(
+            serde_json::from_slice::<Value>(&bytes)
+                .map_err(|e| format!("Cannot read Weave's installed-release record: {e}"))?,
+        ),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => return Err(e.to_string()),
+    };
+    // A receipt belongs only to the payload whose metadata was recorded.
+    // Manual replacement must not inherit the previous installation's stream.
+    let recorded_release = receipt
+        .as_ref()
+        .filter(|receipt| receipt.get("payload") == Some(&local))
+        .and_then(|receipt| receipt.get("release"))
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    if let Some(object) = local.as_object_mut() {
+        object.remove("weave_release");
+        if let Some(tag) = recorded_release {
+            object.insert("weave_release".into(), tag.into());
+        }
     }
+    Ok(Some(local))
+}
+
+/// Record release provenance without changing MayaFlux's own .version metadata.
+/// Called on the staged payload before replacing an existing installation.
+pub(crate) fn record_install(root: &Path, release: &Release) -> Result<(), String> {
+    let marker = root.join("share/MayaFlux/.version");
+    filesystem::no_links(&marker)?;
+    let payload: Value = serde_json::from_slice(
+        &fs::read(&marker)
+            .map_err(|e| format!("Cannot read staged MayaFlux version metadata: {e}"))?,
+    )
+    .map_err(|e| format!("Invalid staged MayaFlux version metadata: {e}"))?;
+    let payload_version = payload
+        .get("version")
+        .and_then(Value::as_str)
+        .ok_or("Staged MayaFlux metadata has no version")?;
+    if version(payload_version)?.0 != release.version || version(&release.tag)?.0 != release.version
+    {
+        return Err("Staged MayaFlux version does not match the selected release".into());
+    }
+    let path = root.join("share/weave/mayaflux-install.json");
+    filesystem::no_links(&path)?;
+    fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
+    let receipt = serde_json::json!({"release":release.tag,"payload":payload});
+    filesystem::atomic_write(&path, receipt.to_string().as_bytes()).map_err(|e| e.to_string())
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Channel {
@@ -69,12 +117,27 @@ pub fn conflicting_stream(channel: Channel, local: &Value) -> Option<Channel> {
         .get("version")
         .and_then(Value::as_str)
         .and_then(|text| version(text).ok())?;
-    let installed = if development {
+    let installed = installed_channel(local, development);
+    (installed != channel).then_some(installed)
+}
+
+fn installed_channel(local: &Value, development: bool) -> Channel {
+    let recorded = local
+        .get("weave_release")
+        .and_then(Value::as_str)
+        .and_then(|tag| version(tag).ok())
+        .filter(|(number, _)| {
+            local
+                .get("version")
+                .and_then(Value::as_str)
+                .and_then(|text| version(text).ok())
+                .is_some_and(|(local, _)| local == *number)
+        });
+    if recorded.map_or(development, |(_, dev)| dev) {
         Channel::Development
     } else {
         Channel::Stable
-    };
-    (installed != channel).then_some(installed)
+    }
 }
 
 pub fn version(text: &str) -> Result<([u64; 3], bool), String> {
@@ -169,26 +232,60 @@ pub fn select_release_for(
     })
 }
 
-pub(crate) fn is_current(channel: Channel, release: &Release, local: &Value, now: u64) -> bool {
+pub(crate) fn is_current(
+    channel: Channel,
+    release: &Release,
+    local: &Value,
+    now: u64,
+    log: &impl Fn(&str),
+) -> bool {
     let Some((number, dev)) = local
         .get("version")
         .and_then(Value::as_str)
         .and_then(|v| version(v).ok())
     else {
+        log("Installed MayaFlux version metadata is invalid; downloading the selected release.");
         return false;
     };
-    if number < release.version || dev != (channel == Channel::Development) {
+    log(&format!(
+        "Local version: {}. Selected release: {}.",
+        local["version"].as_str().unwrap(),
+        release.tag
+    ));
+    if number < release.version {
+        log("The selected release is newer; updating MayaFlux.");
+        return false;
+    }
+    if installed_channel(local, dev) != channel {
+        log("The installed stream differs from the requested stream; replacing the payload.");
         return false;
     }
     if channel == Channel::Stable {
         return true;
     }
-    local
+    let Some(build) = local
         .get("build_time")
         .and_then(Value::as_str)
         .and_then(utc_timestamp)
-        .and_then(|build| now.checked_sub(build))
-        .is_some_and(|age| age < 86_400)
+    else {
+        log("Development build_time is missing or invalid; downloading the selected release.");
+        return false;
+    };
+    let Some(age) = now.checked_sub(build) else {
+        log("Development build_time is in the future; downloading the selected release.");
+        return false;
+    };
+    log(&format!(
+        "Build age: {:.1}h (threshold: 24h).",
+        age as f64 / 3600.0
+    ));
+    if age < 86_400 {
+        log("Development build is fresh; verifying the existing payload.");
+        true
+    } else {
+        log("Development build is stale; updating MayaFlux.");
+        false
+    }
 }
 
 fn utc_timestamp(text: &str) -> Option<u64> {
@@ -245,6 +342,89 @@ fn utc_timestamp(text: &str) -> Option<u64> {
 #[cfg(test)]
 mod target_tests {
     use super::*;
+    #[test]
+    fn installed_development_release_keeps_its_stream_when_payload_version_has_no_suffix() {
+        let temporary = filesystem::Temporary::create().unwrap();
+        let marker = temporary.0.join("share/MayaFlux/.version");
+        fs::create_dir_all(marker.parent().unwrap()).unwrap();
+        let payload = serde_json::json!({"version":"0.5.0", "build_time":"2026-10-13 11:00:00 UTC", "commit":"abc123"});
+        fs::write(&marker, payload.to_string()).unwrap();
+        let release = Release {
+            tag: "v0.5.0-dev".into(),
+            url: "https://example.invalid/package.7z".into(),
+            size: 32,
+            version: [0, 5, 0],
+        };
+        record_install(&temporary.0, &release).unwrap();
+        let local = installed(&temporary.0).unwrap().unwrap();
+        assert_eq!(conflicting_stream(Channel::Development, &local), None);
+        assert_eq!(
+            conflicting_stream(Channel::Stable, &local),
+            Some(Channel::Development)
+        );
+        assert!(is_current(
+            Channel::Development,
+            &release,
+            &local,
+            1_791_892_800,
+            &|_| {}
+        ));
+        assert_eq!(
+            serde_json::from_slice::<Value>(&fs::read(&marker).unwrap()).unwrap(),
+            payload
+        );
+
+        // A manual payload replacement invalidates the old stream receipt.
+        let mut changed = payload;
+        changed["commit"] = "different".into();
+        fs::write(&marker, changed.to_string()).unwrap();
+        let local = installed(&temporary.0).unwrap().unwrap();
+        assert!(local.get("weave_release").is_none());
+
+        // A different stream/version must never inherit the development receipt.
+        assert_eq!(
+            conflicting_stream(Channel::Development, &local),
+            Some(Channel::Stable)
+        );
+        let receipt = temporary.0.join("share/weave/mayaflux-install.json");
+        fs::write(receipt, "invalid JSON").unwrap();
+        assert!(
+            installed(&temporary.0)
+                .unwrap_err()
+                .contains("installed-release record")
+        );
+    }
+    #[test]
+    fn recording_a_release_requires_matching_payload_metadata() {
+        let temporary = filesystem::Temporary::create().unwrap();
+        let marker = temporary.0.join("share/MayaFlux/.version");
+        fs::create_dir_all(marker.parent().unwrap()).unwrap();
+        let release = Release {
+            tag: "v0.5.0-dev".into(),
+            url: "https://example.invalid/package.7z".into(),
+            size: 32,
+            version: [0, 5, 0],
+        };
+        for source in ["invalid JSON", r#"{"version":"0.6.0"}"#, r#"{}"#] {
+            fs::write(&marker, source).unwrap();
+            assert!(record_install(&temporary.0, &release).is_err());
+            assert!(
+                !temporary
+                    .0
+                    .join("share/weave/mayaflux-install.json")
+                    .exists()
+            );
+        }
+    }
+    #[test]
+    fn explicit_stable_receipt_keeps_cross_stream_replacement_required() {
+        let local = serde_json::json!({"version":"0.5.0", "weave_release":"v0.5.0"});
+        assert_eq!(
+            conflicting_stream(Channel::Development, &local),
+            Some(Channel::Stable)
+        );
+        assert_eq!(conflicting_stream(Channel::Stable, &local), None);
+    }
     #[test]
     fn stream_conflicts_are_shared_policy_in_both_directions() {
         let stable = serde_json::json!({"version":"0.5.0"});
