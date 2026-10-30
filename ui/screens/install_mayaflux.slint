@@ -5,6 +5,7 @@ import { ActionCard, AppButton } from "../components.slint";
 export component InstallMayaFluxScreen inherits VerticalBox {
     in property <bool> busy;
     in property <bool> linux_install;
+    in property <bool> windows_install;
     in-out property <int> install_step;
     in-out property <string> install_channel;
     in-out property <string> install_password;
@@ -15,7 +16,8 @@ export component InstallMayaFluxScreen inherits VerticalBox {
     spacing: 14px;
     AppButton { text: "←  Projects"; enabled: !root.busy; clicked => { root.back(); } }
     Text { text: "Install MayaFlux"; color: WeaveTheme.accent; font-size: WeaveTheme.font-heading; font-weight: 650; }
-    if !root.linux_install: Text { text: "Install MayaFlux through Homebrew. The install runs as your logged-in user. If Homebrew is missing, its signed Apple Silicon package opens in macOS Installer for authorization."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-description; wrap: word-wrap; }
+    if root.windows_install: Text { text: "Install MayaFlux and its full build environment: Microsoft C++ tools and Windows SDK, 7-Zip, CMake, Git, Ninja, LLVM, FFmpeg Shared and Vulkan SDK. Weave configures the environment and installs templates and tools. Windows requests administrator consent for installation. Internet access and several GB of free space are required."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-description; wrap: word-wrap; }
+    if !root.linux_install && !root.windows_install: Text { text: "Install MayaFlux through Homebrew. The install runs as your logged-in user. If Homebrew is missing, its signed Apple Silicon package opens in macOS Installer for authorization."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-description; wrap: word-wrap; }
     if root.linux_install && root.install_step == 1: VerticalBox {
         spacing: 18px;
         Text { text: "Select Release Channel"; color: WeaveTheme.text-primary; font-size: WeaveTheme.font-heading; font-weight: 650; }
@@ -62,6 +64,6 @@ export component InstallMayaFluxScreen inherits VerticalBox {
         }
     }
     Rectangle { vertical-stretch: 1; background: transparent; }
-    if !root.linux_install: Text { text: "If the other edition is installed, Weave will ask before replacing it."; color: WeaveTheme.text-muted; font-size: WeaveTheme.font-caption; wrap: word-wrap; horizontal-alignment: center; }
+    if !root.linux_install: Text { text: root.windows_install ? "MayaFlux installs at C:\\MayaFlux. Weave asks before switching streams. Existing build tools are verified and reused. Restart Windows if requested after installation." : "If the other edition is installed, Weave will ask before replacing it."; color: WeaveTheme.text-muted; font-size: WeaveTheme.font-caption; wrap: word-wrap; horizontal-alignment: center; }
     AppButton { text: "Back to Projects"; enabled: !root.busy; clicked => { root.back(); } }
 }

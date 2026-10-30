@@ -7,6 +7,25 @@ mod macos;
 #[cfg(target_os = "windows")]
 mod windows;
 
+#[cfg(target_os = "windows")]
+pub fn install_windows(
+    channel: &str,
+    replace_conflict: bool,
+    log: &(impl Fn(&str) + Sync),
+) -> Result<String, crate::install::InstallError> {
+    windows::install_windows(channel, replace_conflict, log)
+}
+
+#[cfg(target_os = "windows")]
+pub fn install_windows_worker(
+    channel: &str,
+    replace_conflict: bool,
+    pipe: &str,
+    log: &(impl Fn(&str) + Sync),
+) -> Result<String, crate::install::InstallError> {
+    windows::install_windows_worker(channel, replace_conflict, Some(pipe), log)
+}
+
 #[cfg(target_os = "macos")]
 pub fn install_macos(
     channel: &str,

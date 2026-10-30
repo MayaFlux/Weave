@@ -9,10 +9,9 @@ use std::path::Path;
 pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
     let window = MainWindow::new()?;
     let destination = default_gui_destination().display().to_string();
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
     window.set_install_available(true);
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    window.set_install_available(false);
+    #[cfg(target_os = "windows")]
+    window.set_windows_install(true);
     #[cfg(target_os = "linux")]
     window.set_linux_install(true);
     window.set_destination(destination.into());

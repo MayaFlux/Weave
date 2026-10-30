@@ -74,9 +74,15 @@ pub fn run_cli(arguments: &[String]) -> ExitCode {
 fn run_install(arguments: &[String]) -> Result<String, String> {
     let mut channel = None;
     let mut replace_conflict = false;
+    #[cfg(target_os = "windows")]
+    let mut install_pipe = None;
     for argument in arguments {
         match argument.as_str() {
             "--replace-conflict" => replace_conflict = true,
+            #[cfg(target_os = "windows")]
+            value if value.starts_with("--windows-install-pipe=") => {
+                install_pipe = value.strip_prefix("--windows-install-pipe=")
+            }
             value if value.starts_with('-') => return Err(format!("Unknown option: {value}")),
             value if channel.is_none() => channel = Some(value),
             value => return Err(format!("Unexpected argument: {value}")),
@@ -85,6 +91,13 @@ fn run_install(arguments: &[String]) -> Result<String, String> {
     let channel = channel.ok_or_else(|| {
         "Usage: weave install <stable|development> [--replace-conflict]".to_owned()
     })?;
+    #[cfg(target_os = "windows")]
+    if let Some(pipe) = install_pipe {
+        return crate::platform::install_windows_worker(channel, replace_conflict, pipe, &|line| {
+            println!("{line}")
+        })
+        .map_err(|error| error.to_string());
+    }
     install::install_mayaflux(channel, replace_conflict, None, |line| println!("{line}"))
         .map_err(|error| error.to_string())
 }

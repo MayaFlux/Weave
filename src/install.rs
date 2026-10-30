@@ -1,4 +1,7 @@
+#[cfg(not(target_os = "windows"))]
 use std::io::Read;
+#[cfg(any(target_os = "windows", test))]
+pub(crate) mod windows;
 #[cfg(target_os = "macos")]
 use std::process::{Command, Stdio};
 
@@ -47,6 +50,7 @@ pub fn run_command_with_log(
     Ok(status)
 }
 
+#[cfg(not(target_os = "windows"))]
 pub(crate) fn stream_output(mut output: impl Read, log: &(impl Fn(&str) + Sync)) {
     let mut buffer = [0_u8; 4096];
     let mut pending = Vec::new();
@@ -98,12 +102,10 @@ pub fn install_mayaflux(
 
 #[cfg(target_os = "windows")]
 pub fn install_mayaflux(
-    _channel: &str,
-    _replace_conflict: bool,
+    channel: &str,
+    replace_conflict: bool,
     _password: Option<&str>,
-    _log: impl Fn(&str) + Sync,
+    log: impl Fn(&str) + Sync,
 ) -> Result<String, InstallError> {
-    Err(InstallError::Failed(
-        "MayaFlux package installation is not yet supported on this operating system.".to_owned(),
-    ))
+    crate::platform::install_windows(channel, replace_conflict, &log)
 }

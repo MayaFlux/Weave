@@ -175,7 +175,7 @@ fn cli_rejects_invalid_install_channel_without_starting_an_install() {
     #[cfg(target_os = "linux")]
     assert!(error.contains("Unsupported MayaFlux install channel: nightly"));
     #[cfg(target_os = "windows")]
-    assert!(error.contains("not yet supported on this operating system"));
+    assert!(error.contains("Unsupported MayaFlux install channel: nightly"));
 }
 
 #[cfg(target_os = "linux")]

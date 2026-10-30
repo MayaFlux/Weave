@@ -49,7 +49,7 @@ export component ResultDialog inherits Rectangle {
             ScrollView {
                 vertical-stretch: 1;
                 content-height: log_text.preferred-height + 16px;
-                content-y: max(0px, self.content-height - self.visible-height);
+                content-y: min(0px, self.visible-height - self.content-height);
                 Rectangle {
                     width: parent.width;
                     height: log_text.preferred-height + 16px;
@@ -67,7 +67,7 @@ export component ResultDialog inherits Rectangle {
             }
             HorizontalBox {
                 Rectangle { horizontal-stretch: 1; background: transparent; }
-                AppButton { text: root.result_busy ? "Hide" : "Close"; primary: true; clicked => { root.close(); } }
+                AppButton { text: "Close"; primary: true; enabled: !root.result_busy; clicked => { root.close(); } }
             }
         }
     }

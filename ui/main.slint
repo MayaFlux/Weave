@@ -39,6 +39,7 @@ export component MainWindow inherits Window {
     in-out property <bool> busy: false;
     in property <bool> install_available: false;
     in property <bool> linux_install: false;
+    in property <bool> windows_install: false;
     in-out property <bool> community_needs_lila: false;
     in-out property <bool> with_lila: false;
     in-out property <bool> with_vscode: true;
@@ -73,6 +74,7 @@ export component MainWindow inherits Window {
             if root.screen == 0: LandingScreen {
                 install_available: root.install_available;
                 linux_install: root.linux_install;
+                windows_install: root.windows_install;
                 install_mayaflux => {
                     root.install_step = 1;
                     root.install_password = "";
@@ -108,6 +110,7 @@ export component MainWindow inherits Window {
             if root.screen == 5: InstallMayaFluxScreen {
                 busy: root.busy;
                 linux_install: root.linux_install;
+                windows_install: root.windows_install;
                 install_step <=> root.install_step;
                 install_channel <=> root.install_channel;
                 install_password <=> root.install_password;

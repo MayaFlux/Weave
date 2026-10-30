@@ -5,6 +5,7 @@ import { ActionCard } from "../components.slint";
 export component LandingScreen inherits VerticalBox {
     in property <bool> install_available;
     in property <bool> linux_install;
+    in property <bool> windows_install;
     callback install_mayaflux;
     callback projects;
 
@@ -15,7 +16,7 @@ export component LandingScreen inherits VerticalBox {
     if root.install_available: ActionCard {
         eyebrow: "MAYAFLUX TOOLCHAIN";
         heading: "Install MayaFlux";
-        detail: root.linux_install ? "Install or switch the MayaFlux edition for this Linux system." : "Install or switch the MayaFlux edition for this Mac.";
+        detail: root.windows_install ? "Install MayaFlux and its build tools for Windows." : root.linux_install ? "Install or switch the MayaFlux edition for this Linux system." : "Install or switch the MayaFlux edition for this Mac.";
         accent: WeaveTheme.action-accent;
         clicked => { root.install_mayaflux(); }
     }

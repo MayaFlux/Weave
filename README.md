@@ -17,9 +17,15 @@ cargo run --locked -- --help
 cargo run --locked -- new AudioDemo /path/to/projects --with-lila
 cargo run --locked -- update /path/to/AudioDemo terrain_field,audio_tools
 cargo run --locked -- community audio_tools /path/to/modules --description "Audio helpers"
+cargo run --locked -- install stable
+cargo run --locked -- install development --replace-conflict
 ```
 
 Project creation, community-module creation, and project updates use the same Rust operations from the GUI and CLI. Generated projects remain ordinary CMake directories; MayaFlux, CMake, compilers, and Git are host tools and are not bundled into projects.
+
+Windows installation is available from both the GUI and `weave install <stable|development>`. It checks/acquires 7-Zip and Microsoft C++ prerequisites, downloads and verifies the selected MayaFlux x64 release, verifies/installs CMake 3.31+, Git, Ninja, LLVM, FFmpeg Shared and Vulkan SDK through winget, configures the machine environment, and deploys Weave's embedded templates and tools. Installation targets `C:\MayaFlux` and requires Windows 10 22H2 (build 19045) or later. Windows requests native UAC consent for this host installation; project and community operations stay non-elevated. Missing winget or other host tools produce a recoverable error.
+
+Switching stable/development streams asks for replacement approval in the GUI; the CLI uses `--replace-conflict`. Development builds use a 24-hour UTC freshness check. An already-current MayaFlux payload is verified, then the remaining setup stages still run. Installation logs append to `%LOCALAPPDATA%\weave_install.log`; completion reports any restart requirement. The Windows workflow has controlled Rust tests, but live installation and downloadable Windows package acceptance still require native validation.
 
 ## Build and test
 
