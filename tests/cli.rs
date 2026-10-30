@@ -5,6 +5,40 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[test]
+fn standalone_binary_exposes_its_license_and_package_metadata() {
+    let temporary = TestDirectory::new();
+    let license = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .arg("--license")
+        .current_dir(&temporary.0)
+        .output()
+        .unwrap();
+    assert!(license.status.success());
+    assert_eq!(license.stdout, include_bytes!("../LICENSE.txt"));
+    let info = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .arg("--package-info")
+        .current_dir(&temporary.0)
+        .output()
+        .unwrap();
+    assert!(info.status.success());
+    let metadata: serde_json::Value = serde_json::from_slice(&info.stdout).unwrap();
+    assert_eq!(metadata["version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(metadata["resources"], "embedded");
+    #[cfg(target_os = "windows")]
+    {
+        assert_eq!(metadata["architecture"], "x64");
+        assert_eq!(metadata["minimumWindows"], "10.0.19045");
+        assert_eq!(
+            metadata["runtime"],
+            if cfg!(target_feature = "crt-static") {
+                "static-msvc"
+            } else {
+                "dynamic-msvc"
+            }
+        );
+    }
+}
+
 struct TestDirectory(PathBuf);
 
 impl TestDirectory {

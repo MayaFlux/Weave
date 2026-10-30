@@ -105,27 +105,27 @@ jobs:
         shell: pwsh
         run: ./packaging/windows/scripts/package.ps1 -OutputDirectory "$env:RUNNER_TEMP/weave-windows"
 
-      - name: Validate Windows portable package
+      - name: Validate Windows executable
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Windows'
         shell: pwsh
         run: |
-          $package = Get-ChildItem -LiteralPath "$env:RUNNER_TEMP/weave-windows" -Filter 'Weave-*-Windows-x64.zip'
-          if (@($package).Count -ne 1) { throw 'Expected exactly one Windows portable package.' }
+          $package = Get-ChildItem -LiteralPath "$env:RUNNER_TEMP/weave-windows" -Filter 'Weave-*-Windows-x64.exe'
+          if (@($package).Count -ne 1) { throw 'Expected exactly one Windows executable.' }
           ./packaging/windows/scripts/verify.ps1 -Package $package.FullName -AllowMissingGpu
 
       - name: Test Windows package rejection paths
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Windows'
         shell: pwsh
         run: |
-          $package = Get-ChildItem -LiteralPath "$env:RUNNER_TEMP/weave-windows" -Filter 'Weave-*-Windows-x64.zip'
+          $package = Get-ChildItem -LiteralPath "$env:RUNNER_TEMP/weave-windows" -Filter 'Weave-*-Windows-x64.exe'
           ./tests/windows-package.ps1 -Package $package.FullName
 
-      - name: Upload Windows portable package
+      - name: Upload Windows executable
         if: steps.platform-selection.outputs.enabled == 'true' && runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: Weave-windows-x64
-          path: ${{ runner.temp }}/weave-windows/Weave-*-Windows-x64.zip
+          path: ${{ runner.temp }}/weave-windows/Weave-*-Windows-x64.exe
           if-no-files-found: error
           retention-days: 30
 

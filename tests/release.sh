@@ -31,6 +31,7 @@ if [[ "$1" == api ]]; then
     if [[ "$FAKE_RELEASE_EXISTS" == 1 ]]; then printf '%s\n' "$FAKE_RELEASE_DRAFT"; fi
     exit 0
 fi
+if [[ "$1 $2" == 'release view' ]]; then printf '%s\n' Weave-windows.zip; exit 0; fi
 if [[ "$1 $2" == 'release upload' && "$FAKE_FAIL_UPLOAD" == 1 ]]; then exit 1; fi
 EOF
 chmod +x "$WORK/bin/git" "$WORK/bin/gh"
@@ -49,12 +50,15 @@ GITHUB_REF="refs/tags/v$VERSION-dev" bash "$SCRIPT" plan > "$WORK/plan"
 grep -Fxq 'prerelease=true' "$WORK/plan"
 if GITHUB_REF=refs/tags/not-a-version bash "$SCRIPT" plan >/dev/null 2>&1; then echo 'Mismatched version tag was accepted' >&2; exit 1; fi
 
-for name in "Weave-$VERSION-macOS-arm64.dmg" "Weave-$VERSION-Linux-x86_64.AppImage" "Weave-$VERSION-Windows-x64.zip"; do
+for name in "Weave-$VERSION-macOS-arm64.dmg" "Weave-$VERSION-Linux-x86_64.AppImage" "Weave-$VERSION-Windows-x64.exe"; do
     printf 'controlled fixture %s\n' "$name" > "$WORK/packages/$name"
 done
 bash "$SCRIPT" assemble "$WORK/packages" "$WORK/release"
 (cd "$WORK/release" && sha256sum --check SHA256SUMS)
 grep -Fq 'Windows 10 22H2' "$WORK/release/release-notes.md"
+grep -Fq '[Executable]' "$WORK/release/release-notes.md"
+grep -Fq 'Weave-windows.exe' "$WORK/release/SHA256SUMS"
+if grep -Eiq 'windows\.zip|Portable ZIP|extract the ZIP' "$WORK/release/release-notes.md"; then echo 'Obsolete Windows ZIP instructions leaked into release notes' >&2; exit 1; fi
 grep -Fq 'Open Anyway' "$WORK/release/release-notes.md"
 if grep -Eiq '\.NET|as administrator|no CLI' "$WORK/release/release-notes.md"; then echo 'Legacy distribution instructions leaked into release notes' >&2; exit 1; fi
 
@@ -68,12 +72,14 @@ expect "git push origin +refs/tags/v$VERSION-dev:refs/tags/v$VERSION-dev"
 expect '--draft=true'
 expect "gh release upload v$VERSION-dev"
 expect '--clobber'
+expect "gh release delete-asset v$VERSION-dev Weave-windows.zip --yes"
 expect '--prerelease=true --latest=false --draft=false'
 
 export FAKE_FAIL_UPLOAD=1
 : > "$FAKE_LOG"
 if bash "$SCRIPT" publish "$WORK/release" >/dev/null 2>&1; then echo 'Failed upload was accepted' >&2; exit 1; fi
 reject '--draft=false'
+reject 'release delete-asset'
 export FAKE_FAIL_UPLOAD=0
 
 export FAKE_LOOKUP_FAIL=1
@@ -117,7 +123,7 @@ reject 'gh release upload'
 reject 'gh release edit'
 
 # A missing/tampered platform package must fail before any remote mutation.
-printf tampered >> "$WORK/release/Weave-windows.zip"
+printf tampered >> "$WORK/release/Weave-windows.exe"
 : > "$FAKE_LOG"
 if bash "$SCRIPT" publish "$WORK/release" >/dev/null 2>&1; then echo 'Tampered assets were accepted' >&2; exit 1; fi
 [[ ! -s "$FAKE_LOG" ]]

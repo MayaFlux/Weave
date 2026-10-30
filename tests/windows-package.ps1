@@ -5,16 +5,7 @@ $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 . (Join-Path $root 'packaging/windows/scripts/pe.ps1')
 . (Join-Path $root 'packaging/windows/scripts/gui.ps1')
 $work = Join-Path ([IO.Path]::GetTempPath()) "weave-package-negative-$([Guid]::NewGuid().ToString('N'))"
-$entries = @{}
-$zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $Package).Path)
-try {
-    foreach ($entry in $zip.Entries) {
-        $inputStream = $entry.Open()
-        $memory = [IO.MemoryStream]::new()
-        try { $inputStream.CopyTo($memory); $entries[$entry.FullName] = $memory.ToArray() }
-        finally { $memory.Dispose(); $inputStream.Dispose() }
-    }
-} finally { $zip.Dispose() }
+$original = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $Package).Path)
 
 function Assert-Rejected([scriptblock]$Action, [string]$Reason) {
     $rejected = $false
@@ -36,7 +27,6 @@ Assert-Rejected { Get-WeaveGuiExitOutcome -ExitCode 0 -ErrorText $missingGpu -Al
 
 try {
     New-Item -ItemType Directory -Path $work | Out-Null
-    $original = [byte[]]$entries['Weave.exe']
     $fixture = Join-Path $work 'wrong-architecture.exe'
     $wrongArchitecture = [byte[]]$original.Clone()
     $peOffset = [BitConverter]::ToInt32($wrongArchitecture, 0x3c)
@@ -55,22 +45,11 @@ try {
     [IO.File]::WriteAllBytes($fixture, $runtimeDependent)
     Assert-Rejected { Assert-WeavePe $fixture } 'non-OS DLL: VCRUNTIME140.dll'
 
-    # Reject unsafe archive entries before extraction, even when every normal
-    # package entry is also present. Nothing from this fixture is executed.
-    $unsafeZip = Join-Path $work 'unsafe.zip'
-    $zip = [IO.Compression.ZipFile]::Open($unsafeZip, [IO.Compression.ZipArchiveMode]::Create)
-    try {
-        foreach ($name in @($entries.Keys) + @('../escape.txt')) {
-            $entry = $zip.CreateEntry($name)
-            $entryStream = $entry.Open()
-            try {
-                $bytes = if ($entries.ContainsKey($name)) { $entries[$name] } else { [Text.Encoding]::UTF8.GetBytes('must not escape') }
-                $entryStream.Write($bytes, 0, $bytes.Length)
-            } finally { $entryStream.Dispose() }
-        }
-    } finally { $zip.Dispose() }
-    Assert-Rejected { & (Join-Path $root 'packaging/windows/scripts/verify.ps1') -Package $unsafeZip -SkipGui } 'Unexpected or missing archive entries'
-    Write-Host 'Windows package GPU classification, architecture, runtime-dependency, and unsafe-archive rejection tests passed.'
+    # Validate malformed executables before running any child process.
+    $fixture = Join-Path $work 'invalid.exe'
+    [IO.File]::WriteAllText($fixture, 'not an executable')
+    Assert-Rejected { & (Join-Path $root 'packaging/windows/scripts/verify.ps1') -Package $fixture -SkipGui } 'PE|DOS|image|header'
+    Write-Host 'Windows executable GPU classification, architecture, runtime-dependency, and malformed-image rejection tests passed.'
 } finally {
     $resolvedWork = [IO.Path]::GetFullPath($work)
     $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\')

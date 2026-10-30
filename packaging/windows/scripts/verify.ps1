@@ -7,7 +7,7 @@ if (!$IsWindows) { throw 'Package validation requires Windows and PowerShell 7.'
 if ($SkipGui -and $AllowMissingGpu) { throw 'Choose either SkipGui or AllowMissingGpu.' }
 $Package = (Resolve-Path -LiteralPath $Package).Path
 $work = Join-Path ([IO.Path]::GetTempPath()) "weave-package-check-$([Guid]::NewGuid().ToString('N'))"
-$unpacked = Join-Path $work 'portable package'
+$unpacked = Join-Path $work 'standalone executable'
 $gui = $null
 
 function New-PackagedProcess([string[]]$Arguments) {
@@ -43,20 +43,15 @@ function Invoke-PackagedCli([string[]]$Arguments, [bool]$Success = $true) {
 
 try {
     New-Item -ItemType Directory -Path $unpacked, (Join-Path $work 'profile/Local'), (Join-Path $work 'profile/Roaming') -Force | Out-Null
-    $zip = [IO.Compression.ZipFile]::OpenRead($Package)
-    try {
-        $expected = @('LICENSE.txt','README.txt','Weave.exe','package.json') | Sort-Object
-        $actual = @($zip.Entries.FullName | Sort-Object)
-        if (($actual -join '|') -cne ($expected -join '|')) { throw 'Unexpected or missing archive entries; refusing to extract.' }
-        if (($zip.Entries | Measure-Object Length -Sum).Sum -gt 512MB) { throw 'The archive exceeds the package validation size limit.' }
-    } finally { $zip.Dispose() }
-    [IO.Compression.ZipFile]::ExtractToDirectory($Package, $unpacked)
+    # Copy only the downloadable executable into an otherwise empty directory.
+    # No source resources or sidecar metadata are available to the child.
     $executable = Join-Path $unpacked 'Weave.exe'
+    Copy-Item -LiteralPath $Package -Destination $executable
     Assert-WeavePe $executable
-    $metadata = Get-Content -Raw -LiteralPath (Join-Path $unpacked 'package.json') | ConvertFrom-Json
-    if ($metadata.architecture -ne 'x64' -or $metadata.minimumWindows -ne '10.0.19045' -or $metadata.runtime -ne 'static-msvc' -or $metadata.resources -ne 'embedded') { throw 'The package support contract is incorrect.' }
-    if ((Get-Item -LiteralPath (Join-Path $unpacked 'LICENSE.txt')).Length -eq 0) { throw 'Packaged license is empty.' }
-
+    $metadata = Invoke-PackagedCli @('--package-info') | ConvertFrom-Json
+    if ($metadata.architecture -ne 'x64' -or $metadata.minimumWindows -ne '10.0.19045' -or $metadata.runtime -ne 'static-msvc' -or $metadata.resources -ne 'embedded') { throw 'The executable support contract is incorrect.' }
+    $license = Invoke-PackagedCli @('--license')
+    if (!$license.Contains('GNU GENERAL PUBLIC LICENSE') -or !$license.Contains('Version 3, 29 June 2007')) { throw 'The embedded license is missing or incorrect.' }
     $help = Invoke-PackagedCli @('--help')
     foreach ($operation in @('weave new','weave community','weave update','weave install')) {
         if (!$help.Contains($operation)) { throw "Packaged CLI help is missing $operation." }
@@ -137,8 +132,8 @@ public static class WeavePackageWindow {
         $gui.WaitForExit()
         Write-Host 'Packaged GUI launched with its normal GPU backend.'
     }
-    if ($SkipGui) { Write-Host "Windows portable package validation passed with GUI explicitly skipped: $Package" }
-    else { Write-Host "Windows portable package validation passed: $Package" }
+    if ($SkipGui) { Write-Host "Windows executable validation passed with GUI explicitly skipped: $Package" }
+    else { Write-Host "Windows executable validation passed: $Package" }
 } finally {
     if ($null -ne $gui) { if (!$gui.HasExited) { $gui.Kill($true); $gui.WaitForExit() }; $gui.Dispose() }
     $resolvedWork = [IO.Path]::GetFullPath($work)

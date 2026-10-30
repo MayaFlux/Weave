@@ -23,11 +23,13 @@ Use PowerShell 7:
 
 ```powershell
 ./packaging/windows/scripts/package.ps1
-./packaging/windows/scripts/verify.ps1 -Package ./target/packaging/windows/output/Weave-0.6.0-Windows-x64.zip
-./tests/windows-package.ps1 -Package ./target/packaging/windows/output/Weave-0.6.0-Windows-x64.zip
+./packaging/windows/scripts/verify.ps1 -Package ./target/packaging/windows/output/Weave-0.6.0-Windows-x64.exe
+./tests/windows-package.ps1 -Package ./target/packaging/windows/output/Weave-0.6.0-Windows-x64.exe
 ```
 
-Use this packaging build for distribution. It selects the x64 target and static MSVC runtime; an ordinary development build is not a substitute for the portable package. The verifier runs the extracted executable and generated-project checks outside the checkout, then launches the GUI. `-SkipGui` is available for CLI-only local checks. CI attempts GUI startup with `-AllowMissingGpu`: only the exact backend error reporting no GPU adapters is recorded as unavailable coverage. Other startup errors fail validation. Local verification requires successful GPU startup by default; test it on a Windows host with a supported GPU before release.
+Use this packaging build for distribution. It selects the x64 target and static MSVC runtime; an ordinary development build is not a substitute for the standalone executable. The verifier runs the copied executable and generated-project checks outside the checkout, then launches the GUI. `-SkipGui` is available for CLI-only local checks. CI attempts GUI startup with `-AllowMissingGpu`: only the exact backend error reporting no GPU adapters is recorded as unavailable coverage. Other startup errors fail validation. Local verification requires successful GPU startup by default; test it on a Windows host with a supported GPU before release.
+
+The downloadable executable needs no sidecar files. Its license is available through `--license` and its embedded build metadata through `--package-info`. Package validation checks both from the copied executable.
 
 ### macOS
 

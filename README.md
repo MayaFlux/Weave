@@ -10,11 +10,11 @@ Get the package for your platform from [Releases](https://github.com/MayaFlux/We
 
 | Platform | Package | Requirements |
 | --- | --- | --- |
-| Windows | Portable ZIP | x64, Windows 10 22H2 (build 19045) or later |
+| Windows | EXE | x64, Windows 10 22H2 (build 19045) or later |
 | macOS | DMG | Apple Silicon, macOS 26 or later |
 | Linux | AppImage | x86_64, glibc 2.43 or later, FUSE |
 
-- **Windows:** extract the ZIP and open **Weave.exe**. Launch normally; Weave requests administrator consent only when installing host software.
+- **Windows:** download and open **Weave-windows.exe**. Launch normally; Weave requests administrator consent only when installing host software.
 - **macOS:** open the DMG and drag **Weave.app** to Applications. If Gatekeeper blocks the downloaded app, approve it through **System Settings > Privacy & Security > Open Anyway**.
 - **Linux:** make the AppImage executable and launch it:
 
@@ -75,7 +75,7 @@ See the [community manifest contract](docs/COMMUNITY_MANIFEST.md) for the suppor
 
 ## Command line
 
-The same executable provides a CLI without opening the desktop app. Use its full path if it is not on PATH. For help, run `.\Weave.exe --help` on Windows, `/Applications/Weave.app/Contents/MacOS/weave --help` on macOS, or `./Weave-linux.AppImage --help` on Linux.
+The same executable provides a CLI without opening the desktop app. Use its full path if it is not on PATH. For help, run `.\Weave-windows.exe --help` on Windows, `/Applications/Weave.app/Contents/MacOS/weave --help` on macOS, or `./Weave-linux.AppImage --help` on Linux. Use `--license` to read the embedded license.
 
 Examples below use `weave` as shorthand for that executable:
 

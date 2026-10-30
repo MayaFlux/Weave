@@ -25,7 +25,7 @@ assemble() {
     local packages="${1:?Package directory required}" destination="${2:?Release directory required}"
     local macos="$packages/Weave-$VERSION-macOS-arm64.dmg"
     local linux="$packages/Weave-$VERSION-Linux-x86_64.AppImage"
-    local windows="$packages/Weave-$VERSION-Windows-x64.zip"
+    local windows="$packages/Weave-$VERSION-Windows-x64.exe"
     for artifact in "$macos" "$linux" "$windows"; do
         [[ -s "$artifact" && ! -L "$artifact" ]] || fail "missing validated platform artifact: $artifact"
     done
@@ -34,8 +34,8 @@ assemble() {
     mkdir -p "$destination"
     cp "$macos" "$destination/Weave-macos.dmg"
     cp "$linux" "$destination/Weave-linux.AppImage"
-    cp "$windows" "$destination/Weave-windows.zip"
-    (cd "$destination" && sha256sum Weave-macos.dmg Weave-linux.AppImage Weave-windows.zip > SHA256SUMS)
+    cp "$windows" "$destination/Weave-windows.exe"
+    (cd "$destination" && sha256sum Weave-macos.dmg Weave-linux.AppImage Weave-windows.exe > SHA256SUMS)
     cat > "$destination/release-notes.md" <<EOF
 # Weave $TAG
 
@@ -46,13 +46,13 @@ modules, and updating projects. Built from commit \`$GITHUB_SHA\`.
 
 | Platform | Download | Requirements |
 | --- | --- | --- |
-| Windows x64 | [Portable ZIP]($download/Weave-windows.zip) | Windows 10 22H2 (build 19045) or later |
+| Windows x64 | [Executable]($download/Weave-windows.exe) | Windows 10 22H2 (build 19045) or later |
 | macOS Apple Silicon | [DMG]($download/Weave-macos.dmg) | arm64, macOS 26 or later |
 | Linux x86_64 | [AppImage]($download/Weave-linux.AppImage) | glibc 2.43 or later, host FUSE |
 
-On Windows, extract the ZIP and open **Weave.exe** as an ordinary user. Templates
+On Windows, download and open **Weave-windows.exe** as an ordinary user. Templates
 and scripts are embedded. No installer or separate Weave runtime is required.
-The same executable provides the CLI: \`Weave.exe --help\`.
+The same executable provides the CLI: \`Weave-windows.exe --help\`.
 
 On macOS, open the DMG and copy **Weave.app** to Applications. An ad-hoc signature
 does not satisfy Gatekeeper for browser downloads. If macOS blocks this build,
@@ -80,10 +80,11 @@ EOF
 }
 
 publish() {
-    local directory="${1:?Release directory required}" tag_sha existing_draft exists=false
+    local directory="${1:?Release directory required}" tag_sha existing_draft existing_assets exists=false
+    local obsolete_windows_zip=false
     [[ "${GITHUB_ACTIONS:-}" == true ]] || fail 'publishing is only run by the release job'
     plan
-    for artifact in Weave-macos.dmg Weave-linux.AppImage Weave-windows.zip SHA256SUMS release-notes.md; do
+    for artifact in Weave-macos.dmg Weave-linux.AppImage Weave-windows.exe SHA256SUMS release-notes.md; do
         [[ -s "$directory/$artifact" && ! -L "$directory/$artifact" ]] || fail "missing release input: $artifact"
     done
     (cd "$directory" && sha256sum --check SHA256SUMS) || fail 'release asset checksum mismatch'
@@ -103,6 +104,8 @@ publish() {
             echo "Stable release $TAG is already published; preserving its assets."
             return
         fi
+        existing_assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')" || fail 'cannot look up existing release assets; no tag was moved'
+        if grep -Fxq 'Weave-windows.zip' <<< "$existing_assets"; then obsolete_windows_zip=true; fi
         # Keep incomplete uploads out of the published release. A failed run
         # leaves a draft that can be repaired by rerunning the same build.
         gh release edit "$TAG" --draft=true
@@ -117,7 +120,10 @@ publish() {
     if [[ "$exists" == false ]]; then
         gh release create "$TAG" --verify-tag --draft --title "Weave $TAG" --notes-file "$directory/release-notes.md"
     fi
-    gh release upload "$TAG" "$directory/Weave-macos.dmg" "$directory/Weave-linux.AppImage" "$directory/Weave-windows.zip" "$directory/SHA256SUMS" --clobber
+    gh release upload "$TAG" "$directory/Weave-macos.dmg" "$directory/Weave-linux.AppImage" "$directory/Weave-windows.exe" "$directory/SHA256SUMS" --clobber
+    if [[ "$obsolete_windows_zip" == true ]]; then
+        gh release delete-asset "$TAG" Weave-windows.zip --yes
+    fi
     local latest=true
     [[ "$PRERELEASE" != true ]] || latest=false
     gh release edit "$TAG" --title "Weave $TAG" --notes-file "$directory/release-notes.md" --prerelease="$PRERELEASE" --latest="$latest" --draft=false

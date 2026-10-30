@@ -33,30 +33,6 @@ $executable = Join-Path $targetDirectory "$target/release/weave.exe"
 . (Join-Path $PSScriptRoot 'pe.ps1')
 Assert-WeavePe $executable
 New-Item -ItemType Directory -Path $buildDirectory, $OutputDirectory -Force | Out-Null
-$stage = Join-Path $buildDirectory "stage-$([Guid]::NewGuid().ToString('N'))"
-$archive = Join-Path $OutputDirectory "Weave-$version-Windows-x64.zip"
-try {
-    New-Item -ItemType Directory -Path $stage | Out-Null
-    Copy-Item -LiteralPath $executable -Destination (Join-Path $stage 'Weave.exe')
-    Copy-Item -LiteralPath (Join-Path $repository 'LICENSE.txt') -Destination $stage
-    @"
-Weave $version for Windows x64
-
-Requires Windows 10 22H2 (build 19045) or later and the host graphics driver.
-Extract this archive and open Weave.exe. No installer, Rust, .NET, or separate
-Weave runtime is needed. Templates and scripts are embedded in the executable.
-Do not launch as administrator for project or community operations. Choosing
-Install MayaFlux requests UAC consent when host installation needs it.
-
-The same executable supports the CLI: .\Weave.exe --help
-Git, CMake, compilers, MayaFlux and other build tools remain separate host tools.
-"@ | Set-Content -LiteralPath (Join-Path $stage 'README.txt') -Encoding utf8
-    @{ version = $version; architecture = 'x64'; minimumWindows = '10.0.19045'; runtime = 'static-msvc'; resources = 'embedded' } |
-        ConvertTo-Json | Set-Content -LiteralPath (Join-Path $stage 'package.json') -Encoding utf8
-    Compress-Archive -LiteralPath (Join-Path $stage 'Weave.exe'), (Join-Path $stage 'LICENSE.txt'), (Join-Path $stage 'README.txt'), (Join-Path $stage 'package.json') -DestinationPath $archive -Force
-} finally {
-    $resolvedStage = [IO.Path]::GetFullPath($stage)
-    if ([IO.Path]::GetDirectoryName($resolvedStage) -ne $buildDirectory) { throw 'Invalid package staging path.' }
-    if (Test-Path -LiteralPath $resolvedStage) { Remove-Item -LiteralPath $resolvedStage -Recurse -Force }
-}
-Write-Host "Created $archive"
+$artifact = Join-Path $OutputDirectory "Weave-$version-Windows-x64.exe"
+Copy-Item -LiteralPath $executable -Destination $artifact -Force
+Write-Host "Created $artifact"

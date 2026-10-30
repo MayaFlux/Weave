@@ -8,6 +8,30 @@ use std::path::Path;
 use std::process::ExitCode;
 
 pub fn run_cli(arguments: &[String]) -> ExitCode {
+    if arguments[0] == "--license" {
+        print!("{}", include_str!("../LICENSE.txt"));
+        return ExitCode::SUCCESS;
+    }
+    if arguments[0] == "--package-info" {
+        let mut info = serde_json::json!({
+            "version": env!("CARGO_PKG_VERSION"),
+            "architecture": std::env::consts::ARCH,
+            "platform": std::env::consts::OS,
+            "resources": "embedded"
+        });
+        if cfg!(target_os = "windows") {
+            info["architecture"] = "x64".into();
+            info["minimumWindows"] = "10.0.19045".into();
+            info["runtime"] = if cfg!(target_feature = "crt-static") {
+                "static-msvc"
+            } else {
+                "dynamic-msvc"
+            }
+            .into();
+        }
+        println!("{info}");
+        return ExitCode::SUCCESS;
+    }
     if arguments[0] == "--help" || arguments[0] == "-h" {
         print_usage();
         return ExitCode::SUCCESS;
@@ -181,6 +205,6 @@ fn run_community(arguments: &[String]) -> Result<CommunityCreationResult, String
 
 fn print_usage() {
     println!(
-        "Weave: MayaFlux project tool\n\nUsage:\n  weave                 Open the Projects screen\n  weave new <name> [destination] [options]\n  weave update <project-dir> <module-name>[,<module-name>...]\n  weave community <module-name> [destination-dir] [options]\n  weave install <stable|development> [--replace-conflict]\n  weave --help\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila"
+        "Weave: MayaFlux project tool\n\nUsage:\n  weave                 Open the Projects screen\n  weave new <name> [destination] [options]\n  weave update <project-dir> <module-name>[,<module-name>...]\n  weave community <module-name> [destination-dir] [options]\n  weave install <stable|development> [--replace-conflict]\n  weave --help\n  weave --license         Show the embedded license\n  weave --package-info    Show build and package metadata\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila"
     );
 }
