@@ -2,7 +2,9 @@ use crate::MainWindow;
 use crate::operations::community::{CommunityModuleOptions, create_community_module};
 use crate::operations::install;
 use crate::operations::install::progress::{Event, Platform, Progress, Status};
-use crate::operations::project::{ProjectOptions, create_project};
+use crate::operations::project::{
+    ProjectCreationError, ProjectCreationResult, ProjectOptions, create_project,
+};
 use crate::operations::project_options::{
     FeatureStatus, ProjectOptionError, ShaderConflictPolicy, apply_project_options,
     inspect_project_options,
@@ -165,22 +167,12 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
             with_vscode: window.get_with_vscode(),
             copy_shader_sources: window.get_copy_shader_sources(),
         };
-        let (kind, title, message) = match create_project(&name, Path::new(&destination), options) {
-            Ok(result) => match result.git_warning {
-                Some(warning) => (
-                    1,
-                    "Project created with a warning",
-                    format!("Created at:\n{}\n\n{warning}", result.path.display()),
-                ),
-                None => (
-                    0,
-                    "Project created",
-                    format!("Created at:\n{}", result.path.display()),
-                ),
-            },
-            Err(error) => (2, "Could not create project", error.to_string()),
-        };
-        publish_result(&window, kind, title, message);
+        let outcome =
+            project_creation_outcome(create_project(&name, Path::new(&destination), options));
+        if outcome.return_to_projects {
+            window.set_screen(1);
+        }
+        publish_result(&window, outcome.kind, outcome.title, outcome.message);
     });
 
     let weak_window_for_add_modules = window.as_weak();
@@ -535,6 +527,40 @@ fn publish_result(window: &MainWindow, kind: i32, title: &str, message: String) 
     window.set_result_open(true);
 }
 
+struct ProjectCreationOutcome {
+    return_to_projects: bool,
+    kind: i32,
+    title: &'static str,
+    message: String,
+}
+
+fn project_creation_outcome(
+    result: Result<ProjectCreationResult, ProjectCreationError>,
+) -> ProjectCreationOutcome {
+    match result {
+        Ok(result) => match result.git_warning {
+            Some(warning) => ProjectCreationOutcome {
+                return_to_projects: true,
+                kind: 1,
+                title: "Project created with a warning",
+                message: format!("Created at:\n{}\n\n{warning}", result.path.display()),
+            },
+            None => ProjectCreationOutcome {
+                return_to_projects: true,
+                kind: 0,
+                title: "Project created",
+                message: format!("Created at:\n{}", result.path.display()),
+            },
+        },
+        Err(error) => ProjectCreationOutcome {
+            return_to_projects: false,
+            kind: 2,
+            title: "Could not create project",
+            message: error.to_string(),
+        },
+    }
+}
+
 fn default_gui_destination() -> std::path::PathBuf {
     #[cfg(windows)]
     let home = std::env::var_os("USERPROFILE").map(std::path::PathBuf::from);
@@ -553,4 +579,33 @@ fn default_gui_destination() -> std::path::PathBuf {
     }
 
     std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::project_creation_outcome;
+    use crate::operations::project::{ProjectCreationResult, ProjectOptions, create_project};
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn project_creation_outcome_returns_to_projects_only_after_success() {
+        let success = project_creation_outcome(Ok(ProjectCreationResult {
+            path: PathBuf::from("created project"),
+            git_warning: None,
+        }));
+        let warning = project_creation_outcome(Ok(ProjectCreationResult {
+            path: PathBuf::from("created project with warning"),
+            git_warning: Some("Git could not be initialized".to_owned()),
+        }));
+        let failure = project_creation_outcome(create_project(
+            "invalid name",
+            Path::new("."),
+            ProjectOptions::default(),
+        ));
+
+        assert_eq!(success.return_to_projects, true);
+        assert_eq!(warning.return_to_projects, true);
+        assert_eq!(failure.return_to_projects, false);
+        assert_eq!(failure.kind, 2);
+    }
 }
