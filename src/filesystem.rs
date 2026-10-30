@@ -152,9 +152,12 @@ pub fn development_package_present(
 pub fn no_links(path: &Path) -> Result<(), String> {
     for ancestor in path.ancestors() {
         match fs::symlink_metadata(ancestor) {
-            Ok(metadata) if crate::platform::native_filesystem::is_link(&metadata) => {
+            Ok(metadata)
+                if crate::platform::native_filesystem::is_link(&metadata)
+                    && !is_macos_system_alias(ancestor) =>
+            {
                 return Err(format!(
-                    "Path crosses a reparse point: {}",
+                    "Path crosses a reparse point or symbolic link: {}",
                     ancestor.display()
                 ));
             }
@@ -165,6 +168,31 @@ pub fn no_links(path: &Path) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn is_macos_system_alias(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    if path.parent() != Some(Path::new("/")) {
+        return false;
+    }
+    let target = match name {
+        "var" => Path::new("/private/var"),
+        "tmp" => Path::new("/private/tmp"),
+        "etc" => Path::new("/private/etc"),
+        _ => return false,
+    };
+    matches!(
+        (fs::canonicalize(path), fs::canonicalize(target)),
+        (Ok(path), Ok(target)) if path == target
+    )
+}
+
+#[cfg(not(target_os = "macos"))]
+fn is_macos_system_alias(_path: &Path) -> bool {
+    false
 }
 
 pub fn safe_directory(path: &Path) -> Result<(), String> {
@@ -249,6 +277,12 @@ mod atomic_write_tests {
         ));
         fs::create_dir(&path).unwrap();
         path
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn path_guard_accepts_the_system_temporary_directory_alias() {
+        assert!(no_links(&std::env::temp_dir()).is_ok());
     }
 
     #[test]

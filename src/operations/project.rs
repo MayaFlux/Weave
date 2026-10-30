@@ -67,6 +67,7 @@ fn create_project_with_shader_root(
     validate_name(name)?;
     let destination = resolve_destination(destination)?;
     let project_path = destination.join(name);
+    crate::filesystem::no_links(&project_path).map_err(ProjectCreationError)?;
     if fs::symlink_metadata(&project_path).is_ok() {
         return Err(ProjectCreationError(format!(
             "Project destination already exists: {}",
@@ -115,6 +116,7 @@ fn resolve_destination(destination: &Path) -> Result<PathBuf, ProjectCreationErr
         std::env::current_dir()?.join(destination)
     };
 
+    crate::filesystem::no_links(&absolute).map_err(ProjectCreationError)?;
     let metadata = fs::symlink_metadata(&absolute).map_err(|error| {
         ProjectCreationError(format!(
             "Project destination does not exist: {}: {error}",
@@ -134,6 +136,7 @@ fn resolve_destination(destination: &Path) -> Result<PathBuf, ProjectCreationErr
         )));
     }
 
+    crate::filesystem::no_links(&absolute).map_err(ProjectCreationError)?;
     fs::canonicalize(absolute).map_err(Into::into)
 }
 
@@ -393,12 +396,7 @@ fn read_shader_sources() -> Result<Vec<(PathBuf, Vec<u8>)>, ProjectCreationError
 }
 
 fn read_shader_sources_at(root: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>, ProjectCreationError> {
-    if fs::symlink_metadata(root).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
-        return Err(ProjectCreationError(format!(
-            "MayaFlux shader source directory is a symbolic link: {}",
-            root.display()
-        )));
-    }
+    crate::filesystem::no_links(root).map_err(ProjectCreationError)?;
     let canonical_root = fs::canonicalize(&root).map_err(|error| {
         ProjectCreationError(format!(
             "MayaFlux shader sources were not found at {}: {error}",
@@ -411,13 +409,9 @@ fn read_shader_sources_at(root: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>, Projec
     while let Some(directory) = pending.pop() {
         for entry in fs::read_dir(directory)? {
             let entry = entry?;
+            let path = entry.path();
+            crate::filesystem::no_links(&path).map_err(ProjectCreationError)?;
             let file_type = entry.file_type()?;
-            if file_type.is_symlink() {
-                return Err(ProjectCreationError(format!(
-                    "MayaFlux shader sources contain a symbolic link: {}",
-                    entry.path().display()
-                )));
-            }
             if file_type.is_dir() {
                 pending.push(entry.path());
             } else if file_type.is_file()
@@ -671,6 +665,55 @@ mod tests {
         .unwrap_err();
 
         assert!(error.to_string().contains("symbolic link"));
+        assert!(!temporary.0.join("ShaderDemo").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_destination_with_a_linked_ancestor_without_writing_through_it() {
+        use std::os::unix::fs::symlink;
+
+        let temporary = TestDirectory::new();
+        let target = temporary.0.join("target");
+        let linked_parent = temporary.0.join("linked-parent");
+        let destination = linked_parent.join("projects");
+        fs::create_dir_all(&target).unwrap();
+        fs::create_dir(target.join("projects")).unwrap();
+        symlink(&target, &linked_parent).unwrap();
+
+        let error =
+            create_project("AudioDemo", &destination, ProjectOptions::default()).unwrap_err();
+
+        assert!(error.to_string().contains("reparse point"));
+        assert!(!target.join("projects/AudioDemo").exists());
+        assert_eq!(fs::read_dir(&target).unwrap().count(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn shader_copy_rejects_a_linked_ancestor_before_creating_project() {
+        use std::os::unix::fs::symlink;
+
+        let temporary = TestDirectory::new();
+        let target = temporary.0.join("shader-target");
+        let linked_parent = temporary.0.join("linked-shader-parent");
+        let shader_root = linked_parent.join("shaders");
+        fs::create_dir_all(target.join("shaders/nested")).unwrap();
+        fs::write(target.join("shaders/nested/effect.frag"), "shader source").unwrap();
+        symlink(&target, &linked_parent).unwrap();
+
+        let error = create_project_with_shader_root(
+            "ShaderDemo",
+            &temporary.0,
+            ProjectOptions {
+                copy_shader_sources: true,
+                ..ProjectOptions::default()
+            },
+            Some(&shader_root),
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("reparse point"));
         assert!(!temporary.0.join("ShaderDemo").exists());
     }
 

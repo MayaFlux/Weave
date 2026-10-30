@@ -314,6 +314,7 @@ fn update_project_with(
     mut report: impl FnMut(String),
 ) -> Result<(), UpdateError> {
     let names = module_names(values)?;
+    crate::filesystem::no_links(project_path).map_err(fail)?;
     if std::fs::symlink_metadata(project_path)
         .map(|m| m.file_type().is_symlink())
         .unwrap_or(false)
@@ -329,6 +330,7 @@ fn update_project_with(
             project_path.display()
         ))
     })?;
+    crate::filesystem::no_links(&project).map_err(fail)?;
     if !project.join("CMakeLists.txt").is_file() {
         return Err(fail(format!(
             "Not a MayaFlux project: {}",
@@ -338,6 +340,7 @@ fn update_project_with(
     let community = project.join("community");
     let registration = project.join("community.cmake");
     for path in [&community, &registration] {
+        crate::filesystem::no_links(path).map_err(fail)?;
         if fs::symlink_metadata(path)
             .map(|m| m.file_type().is_symlink())
             .unwrap_or(false)
@@ -372,6 +375,7 @@ fn update_project_with(
                 .ok_or_else(|| fail(format!("Module {name} is not in the community registry")))?;
             let module = community.join(name);
             report(format!("Preparing {name}..."));
+            crate::filesystem::no_links(&module).map_err(fail)?;
             if fs::symlink_metadata(&module)
                 .map(|m| m.file_type().is_symlink())
                 .unwrap_or(false)
@@ -382,6 +386,7 @@ fn update_project_with(
                 )));
             }
             if !module.exists() {
+                crate::filesystem::no_links(&community).map_err(fail)?;
                 fs::create_dir_all(&community).map_err(|error| {
                     fail(format!("Could not create community directory: {error}"))
                 })?;
@@ -402,6 +407,7 @@ fn update_project_with(
             let source_directory = module.join("src");
             let manifest_file = module.join("community.json");
             for path in [&cmake_file, &source_directory, &manifest_file] {
+                crate::filesystem::no_links(path).map_err(fail)?;
                 if fs::symlink_metadata(path)
                     .is_ok_and(|metadata| metadata.file_type().is_symlink())
                 {
@@ -1149,6 +1155,31 @@ mod tests {
         assert!(fs::read_dir(&outside).unwrap().next().is_none());
         fs::remove_file(fixture.directory.0.join("community/terrain_field")).unwrap();
         fs::remove_dir(outside).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn linked_project_ancestor_is_rejected_before_registry_access() {
+        use std::os::unix::fs::symlink;
+
+        let fixture = ProjectFixture::new(&["terrain_field"]);
+        let linked_parent = fixture.directory.0.with_extension("linked-parent");
+        let project_name = fixture.directory.0.file_name().unwrap();
+        symlink(fixture.directory.0.parent().unwrap(), &linked_parent).unwrap();
+        let linked_project = linked_parent.join(project_name);
+
+        let error = update_project_with(
+            &linked_project,
+            &["terrain_field".to_owned()],
+            &fixture.services,
+            |_| {},
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("reparse point"));
+        assert_eq!(fixture.services.registry_calls.get(), 0);
+        assert!(fixture.services.clone_requests.borrow().is_empty());
+        assert!(!fixture.directory.0.join("community.cmake").exists());
     }
 
     #[cfg(unix)]

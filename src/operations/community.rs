@@ -64,6 +64,7 @@ pub fn create_community_module(
     validate_min_version(&options.min_version)?;
     let destination = resolve_destination(destination)?;
     let module_path = destination.join(name);
+    crate::filesystem::no_links(&module_path).map_err(CommunityCreationError)?;
     if fs::symlink_metadata(&module_path).is_ok() {
         return Err(CommunityCreationError(format!(
             "Community module destination already exists: {}",
@@ -141,6 +142,7 @@ fn resolve_destination(destination: &Path) -> Result<PathBuf, CommunityCreationE
     } else {
         std::env::current_dir()?.join(destination)
     };
+    crate::filesystem::no_links(&absolute).map_err(CommunityCreationError)?;
     fs::create_dir_all(&absolute).map_err(|error| {
         CommunityCreationError(format!(
             "Could not create community destination {}: {error}",
@@ -165,6 +167,7 @@ fn resolve_destination(destination: &Path) -> Result<PathBuf, CommunityCreationE
             absolute.display()
         )));
     }
+    crate::filesystem::no_links(&absolute).map_err(CommunityCreationError)?;
     fs::canonicalize(absolute).map_err(Into::into)
 }
 
@@ -517,5 +520,29 @@ mod tests {
                 .is_err()
         );
         assert!(fs::read_dir(target).unwrap().next().is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn linked_ancestor_is_rejected_before_creating_destination() {
+        use std::os::unix::fs::symlink;
+
+        let temporary = TestDirectory::new();
+        let target = temporary.0.join("target");
+        let linked_parent = temporary.0.join("linked-parent");
+        let destination = linked_parent.join("modules");
+        fs::create_dir(&target).unwrap();
+        symlink(&target, &linked_parent).unwrap();
+
+        let error = create_community_module(
+            "audio_tools",
+            &destination,
+            &CommunityModuleOptions::default(),
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("reparse point"));
+        assert!(!target.join("modules").exists());
+        assert!(fs::read_dir(&target).unwrap().next().is_none());
     }
 }

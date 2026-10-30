@@ -26,6 +26,7 @@ function New-PackagedProcess([string[]]$Arguments) {
     $start.Environment['HOME'] = Join-Path $work 'profile'
     $start.Environment['LOCALAPPDATA'] = Join-Path $work 'profile/Local'
     $start.Environment['APPDATA'] = Join-Path $work 'profile/Roaming'
+    if ($env:WEAVE_TEST_MAYAFLUX_ROOT) { $start.Environment['MAYAFLUX_ROOT'] = $env:WEAVE_TEST_MAYAFLUX_ROOT }
     [Diagnostics.Process]::Start($start)
 }
 
@@ -75,6 +76,55 @@ try {
         if (!(Test-Path -LiteralPath (Join-Path $modules "package_smoke/$resource") -PathType Leaf)) { throw "Embedded community resource is missing: $resource" }
     }
     Get-Content -Raw -LiteralPath (Join-Path $modules 'package_smoke/community.json') | ConvertFrom-Json | Out-Null
+
+    # Junction ancestors must be rejected before any operation writes through them.
+    $junctionTarget = Join-Path $work 'junction target'
+    $junctionParent = Join-Path $work 'junction parent'
+    New-Item -ItemType Directory -Path (Join-Path $junctionTarget 'project output') -Force | Out-Null
+    New-Item -ItemType Junction -Path $junctionParent -Target $junctionTarget | Out-Null
+
+    $linkedProjectOutput = Invoke-PackagedCli @('new','LinkedAncestorRejected',(Join-Path $junctionParent 'project output')) $false
+    if ($linkedProjectOutput -notmatch 'reparse point') { throw "Project creation did not report the linked ancestor: $linkedProjectOutput" }
+    if (Test-Path -LiteralPath (Join-Path $junctionTarget 'project output/LinkedAncestorRejected')) { throw 'Project creation wrote through a junction ancestor.' }
+
+    $linkedCommunityDestination = Join-Path $junctionParent 'community output'
+    $linkedCommunityOutput = Invoke-PackagedCli @('community','linked_module',$linkedCommunityDestination) $false
+    if ($linkedCommunityOutput -notmatch 'reparse point') { throw "Community creation did not report the linked ancestor: $linkedCommunityOutput" }
+    if (Test-Path -LiteralPath (Join-Path $junctionTarget 'community output')) { throw 'Community creation created its destination through a junction ancestor.' }
+
+    $mayaFluxTarget = Join-Path $junctionTarget 'mayaflux'
+    $shaderRoot = Join-Path $mayaFluxTarget 'share/MayaFlux/src/shaders'
+    New-Item -ItemType Directory -Path $shaderRoot -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $shaderRoot 'test.frag') -Value 'shader fixture' -NoNewline
+    $env:WEAVE_TEST_MAYAFLUX_ROOT = Join-Path $junctionParent 'mayaflux'
+    try {
+        $linkedShaderOutput = Invoke-PackagedCli @('new','ShaderAncestorRejected',$projects,'--copy-shader-sources') $false
+    } finally {
+        Remove-Item Env:WEAVE_TEST_MAYAFLUX_ROOT -ErrorAction SilentlyContinue
+    }
+    if ($linkedShaderOutput -notmatch 'reparse point') { throw "Shader copying did not report the linked ancestor: $linkedShaderOutput" }
+    if (Test-Path -LiteralPath (Join-Path $projects 'ShaderAncestorRejected')) { throw 'Project creation copied shaders through a junction ancestor.' }
+
+    $plainMayaFluxRoot = Join-Path $work 'plain mayaflux root'
+    $nestedShaderRoot = Join-Path $plainMayaFluxRoot 'share/MayaFlux/src/shaders'
+    $externalShaders = Join-Path $work 'external shaders'
+    New-Item -ItemType Directory -Path $nestedShaderRoot, $externalShaders -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $externalShaders 'linked.frag') -Value 'linked shader fixture' -NoNewline
+    New-Item -ItemType Junction -Path (Join-Path $nestedShaderRoot 'linked') -Target $externalShaders | Out-Null
+    $env:WEAVE_TEST_MAYAFLUX_ROOT = $plainMayaFluxRoot
+    try {
+        $linkedShaderDescendantOutput = Invoke-PackagedCli @('new','ShaderDescendantRejected',$projects,'--copy-shader-sources') $false
+    } finally {
+        Remove-Item Env:WEAVE_TEST_MAYAFLUX_ROOT -ErrorAction SilentlyContinue
+    }
+    if ($linkedShaderDescendantOutput -notmatch 'reparse point') { throw "Shader copying did not report the linked descendant: $linkedShaderDescendantOutput" }
+    if (Test-Path -LiteralPath (Join-Path $projects 'ShaderDescendantRejected')) { throw 'Project creation copied shaders through a junction descendant.' }
+
+    $projectAlias = Join-Path $work 'project alias'
+    New-Item -ItemType Junction -Path $projectAlias -Target $projects | Out-Null
+    $linkedUpdateOutput = Invoke-PackagedCli @('update',(Join-Path $projectAlias 'PackageSmoke'),'package_smoke') $false
+    if ($linkedUpdateOutput -notmatch 'reparse point') { throw "Project update did not report the linked ancestor: $linkedUpdateOutput" }
+
     $before = (Get-FileHash -LiteralPath (Join-Path $project 'CMakeLists.txt')).Hash
     Invoke-PackagedCli @('new','PackageSmoke',$projects) $false | Out-Null
     Invoke-PackagedCli @('new','../escape',$projects) $false | Out-Null
