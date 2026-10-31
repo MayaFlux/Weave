@@ -15,13 +15,14 @@ export component ManageProjectScreen inherits VerticalBox {
     callback back;
     callback add_community_modules;
     callback apply_options;
+    callback validate_project;
 
     spacing: 12px;
     AppButton { text: "←  Projects"; clicked => { root.back(); } }
     Text { text: "Manage Project"; color: WeaveTheme.accent; font-size: WeaveTheme.font-heading; font-weight: 650; }
     Text { text: "Selected project: " + root.project_path; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-small; overflow: elide; }
     Rectangle {
-        height: 260px;
+        height: 310px;
         background: WeaveTheme.panel-background;
         border-width: 1px;
         border-color: WeaveTheme.border;
@@ -40,8 +41,10 @@ export component ManageProjectScreen inherits VerticalBox {
                 Text { text: root.shader_status; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; wrap: word-wrap; }
             }
             Text { text: "Lila updates the project's MayaFlux CMake integration. Existing shader files are checked before copying."; color: WeaveTheme.text-muted; font-size: WeaveTheme.font-caption; wrap: word-wrap; }
+            Text { text: "Run the project's validation script to check project files and the MayaFlux installation."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-small; wrap: word-wrap; }
             Rectangle { vertical-stretch: 1; background: transparent; }
             HorizontalBox {
+                AppButton { text: "Validate Project"; enabled: !root.busy; clicked => { root.validate_project(); } }
                 Rectangle { horizontal-stretch: 1; background: transparent; }
                 AppButton { text: root.busy ? "Applying…" : "Apply Selected Options"; primary: true; enabled: !root.busy && (root.add_lila || root.add_shader_sources); clicked => { root.apply_options(); } }
             }

@@ -446,6 +446,88 @@ fn cli_reports_project_manage_validation_errors_without_network_access() {
 }
 
 #[test]
+fn cli_manage_validation_uses_the_project_script_and_returns_findings_status() {
+    let temporary = TestDirectory::new();
+    let project = temporary.0.join("Project with spaces");
+    fs::create_dir_all(&project).unwrap();
+    #[cfg(target_os = "windows")]
+    let script = project.join("validate.ps1");
+    #[cfg(not(target_os = "windows"))]
+    let script = project.join("validate.sh");
+
+    #[cfg(target_os = "windows")]
+    fs::write(
+        &script,
+        "Write-Output '[FIX] fixture finding'; Write-Output '1 item(s) need attention.'; exit 1\n",
+    )
+    .unwrap();
+    #[cfg(not(target_os = "windows"))]
+    fs::write(
+        &script,
+        "printf '[FIX] fixture finding\\n1 item(s) need attention.\\n'; exit 1\n",
+    )
+    .unwrap();
+
+    let result = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args(["manage", project.to_str().unwrap(), "--validate"])
+        .output()
+        .unwrap();
+
+    assert!(!result.status.success());
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(output.contains("[FIX] fixture finding"));
+    assert!(output.contains("Project validation completed with findings"));
+}
+
+#[test]
+fn cli_validation_refreshes_only_legacy_optional_file_checks() {
+    let temporary = TestDirectory::new();
+    let project = temporary.0.join("Legacy Project");
+    fs::create_dir_all(&project).unwrap();
+    #[cfg(target_os = "windows")]
+    let script = project.join("validate.ps1");
+    #[cfg(not(target_os = "windows"))]
+    let script = project.join("validate.sh");
+
+    #[cfg(target_os = "windows")]
+    fs::write(
+        &script,
+        "function Write-ValidationResult { param($Status, $Message, $Detail) Write-Output \"[$Status] $Message\" }\nWrite-ValidationResult 'WARN' 'community.cmake is missing.' 'No modules will be discovered through the standard project module list.'\nWrite-ValidationResult 'OK' 'No mayaflux.json in the project.' 'Engine defaults apply.'\nexit 0\n",
+    )
+    .unwrap();
+    #[cfg(not(target_os = "windows"))]
+    fs::write(
+        &script,
+        "custom user validation\nfor relative in CMakeLists.txt src/user_project.hpp community.cmake .gitignore; do\n  :\ndone\nprintf 'validation complete\\n'\nexit 0\n",
+    )
+    .unwrap();
+
+    let result = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args(["manage", project.to_str().unwrap(), "--validate"])
+        .output()
+        .unwrap();
+
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let output = String::from_utf8_lossy(&result.stdout);
+    assert!(output.contains("Updated only the known optional-file checks"));
+    let script = fs::read_to_string(&script).unwrap();
+    #[cfg(target_os = "windows")]
+    assert!(script.contains("function Write-ValidationResult"));
+    #[cfg(not(target_os = "windows"))]
+    assert!(script.contains("custom user validation"));
+    assert!(!script.contains("src/user_project.hpp community.cmake .gitignore"));
+    assert!(!script.contains("'WARN' 'community.cmake is missing.'"));
+}
+
+#[test]
 fn cli_manage_adds_lila_idempotently_to_project_paths_with_spaces() {
     let temporary = TestDirectory::new();
     let project = create_manage_project(&temporary.0);

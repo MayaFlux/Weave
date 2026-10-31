@@ -4,8 +4,10 @@ use std::path::PathBuf;
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
+mod validation;
 #[cfg(target_os = "windows")]
 pub(crate) mod windows;
+pub(crate) use validation::{run_validation_command, validation_interpreter};
 
 #[cfg(target_os = "windows")]
 pub fn install_windows(

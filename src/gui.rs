@@ -9,9 +9,11 @@ use crate::operations::project_options::{
     FeatureStatus, ProjectOptionError, ShaderConflictPolicy, apply_project_options,
     inspect_project_options,
 };
+use crate::operations::project_validation::{ValidationResult, validate_project};
 use crate::operations::update;
 use slint::{ComponentHandle, Model};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
@@ -25,6 +27,7 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
     window.set_destination(destination.into());
 
     let weak_window = window.as_weak();
+    let validation_cancellation: Arc<Mutex<Option<Arc<AtomicBool>>>> = Arc::new(Mutex::new(None));
     let weak_window_for_picker = window.as_weak();
     window.on_choose_destination(move || {
         let Some(window) = weak_window_for_picker.upgrade() else {
@@ -216,6 +219,39 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
             return;
         };
         start_project_option_application(&window, ShaderConflictPolicy::Reject);
+    });
+
+    let weak_window_for_validate = window.as_weak();
+    let validation_for_start = validation_cancellation.clone();
+    window.on_validate_project(move || {
+        let Some(window) = weak_window_for_validate.upgrade() else {
+            return;
+        };
+        let project_path = window.get_managed_project_path().to_string();
+        start_project_validation(&window, project_path, validation_for_start.clone());
+    });
+
+    let weak_window_for_cancel_validation = window.as_weak();
+    let validation_for_cancel = validation_cancellation.clone();
+    window.on_cancel_validation(move || {
+        let Some(window) = weak_window_for_cancel_validation.upgrade() else {
+            return;
+        };
+        if let Some(cancellation) = validation_for_cancel.lock().unwrap().as_ref() {
+            cancellation.store(true, Ordering::Relaxed);
+            window.set_result_cancel_enabled(false);
+            window.set_result_title("Cancelling validation…".into());
+        }
+    });
+
+    let weak_window_for_retry_validation = window.as_weak();
+    let validation_for_retry = validation_cancellation.clone();
+    window.on_retry_validation(move || {
+        let Some(window) = weak_window_for_retry_validation.upgrade() else {
+            return;
+        };
+        let project_path = window.get_managed_project_path().to_string();
+        start_project_validation(&window, project_path, validation_for_retry.clone());
     });
 
     let weak_window_for_replace_shaders = window.as_weak();
@@ -503,6 +539,86 @@ fn start_project_option_application(window: &MainWindow, conflict_policy: Shader
             }
         });
     });
+}
+
+fn start_project_validation(
+    window: &MainWindow,
+    project_path: String,
+    active_cancellation: Arc<Mutex<Option<Arc<AtomicBool>>>>,
+) {
+    let cancellation = Arc::new(AtomicBool::new(false));
+    *active_cancellation.lock().unwrap() = Some(cancellation.clone());
+    window.set_busy(true);
+    window.set_result_kind(0);
+    window.set_result_title("Validating project".into());
+    window.set_result_message("".into());
+    window.set_result_busy(true);
+    window.set_result_cancel_enabled(true);
+    window.set_result_retry_visible(false);
+    window.set_result_open(true);
+    let weak = window.as_weak();
+    std::thread::spawn(move || {
+        let output_window = weak.clone();
+        let result = validate_project(Path::new(&project_path), &cancellation, &|line| {
+            let weak = output_window.clone();
+            let line = line.to_owned();
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(window) = weak.upgrade() {
+                    let mut output = window.get_result_message().to_string();
+                    if !output.is_empty() {
+                        output.push('\n');
+                    }
+                    output.push_str(&line);
+                    window.set_result_message(output.into());
+                }
+            });
+        });
+        let cancelled = cancellation.load(Ordering::Relaxed);
+        *active_cancellation.lock().unwrap() = None;
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(window) = weak.upgrade() {
+                window.set_busy(false);
+                window.set_result_cancel_enabled(false);
+                window.set_result_retry_visible(true);
+                match result {
+                    Ok(ValidationResult {
+                        findings: false,
+                        output,
+                    }) => publish_result(&window, 0, "Project validation passed", output),
+                    Ok(ValidationResult {
+                        findings: true,
+                        output,
+                    }) => publish_result(&window, 1, "Validation found items to address", output),
+                    Err(error) if cancelled => {
+                        let output = window.get_result_message().to_string();
+                        publish_result(
+                            &window,
+                            1,
+                            "Validation cancelled",
+                            append_validation_error(output, error),
+                        )
+                    }
+                    Err(error) => {
+                        let output = window.get_result_message().to_string();
+                        publish_result(
+                            &window,
+                            2,
+                            "Could not run project validation",
+                            append_validation_error(output, error),
+                        )
+                    }
+                }
+            }
+        });
+    });
+}
+
+fn append_validation_error(mut output: String, error: String) -> String {
+    if !output.is_empty() {
+        output.push_str("\n\n");
+    }
+    output.push_str(&error);
+    output
 }
 
 fn show_install_conflict(window: &MainWindow, channel: &str, installed_package: &str) {

@@ -4,6 +4,7 @@ use crate::operations::community::{
 use crate::operations::install;
 use crate::operations::project::{ProjectCreationResult, ProjectOptions, create_project};
 use crate::operations::project_options::{ShaderConflictPolicy, apply_project_options};
+use crate::operations::project_validation::validate_project;
 use crate::operations::update;
 use std::path::Path;
 use std::process::ExitCode;
@@ -164,8 +165,10 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
     let mut with_lila = false;
     let mut copy_shader_sources = false;
     let mut replace_shader_conflicts = false;
+    let mut validate = false;
     for argument in &arguments[1..] {
         match argument.as_str() {
+            "--validate" => validate = true,
             "--with-lila" => with_lila = true,
             "--copy-shader-sources" => copy_shader_sources = true,
             "--replace-shader-conflicts" => replace_shader_conflicts = true,
@@ -175,7 +178,7 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
             value => module_names.push(value.to_owned()),
         }
     }
-    if module_names.is_empty() && !with_lila && !copy_shader_sources {
+    if module_names.is_empty() && !with_lila && !copy_shader_sources && !validate {
         return Err("Usage: weave manage <project-dir> [module-name,...] [options]".to_owned());
     }
     if with_lila || copy_shader_sources {
@@ -199,6 +202,16 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
             println!("{message}")
         })
         .map_err(|error| error.to_string())?;
+    }
+    if validate {
+        let cancellation = std::sync::atomic::AtomicBool::new(false);
+        let result = validate_project(Path::new(project_path), &cancellation, &|line| {
+            println!("{line}")
+        })
+        .map_err(|error| format!("Project validation could not run: {error}"))?;
+        if result.findings {
+            return Err("Project validation completed with findings. Review the [FIX] entries above, then run `weave manage <project-dir> --validate` again.".to_owned());
+        }
     }
     Ok(())
 }
@@ -244,7 +257,7 @@ fn print_usage() {
 }
 
 fn usage_text() -> &'static str {
-    "Weave: MayaFlux project tool\n\nUsage:\n  weave                 Open the Projects screen\n  weave new <name> [destination] [options]\n  weave manage <project-dir> [module-name,...] [options]\n  weave community <module-name> [destination-dir] [options]\n  weave install <stable|development> [--replace-conflict]\n  weave --help\n  weave --license         Show the embedded license\n  weave --package-info    Show build and package metadata\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n\nOptions for 'manage':\n  --with-lila             Add Lila live-coding integration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n  --replace-shader-conflicts Replace same-path project shader files\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila"
+    "Weave: MayaFlux project tool\n\nUsage:\n  weave                 Open the Projects screen\n  weave new <name> [destination] [options]\n  weave manage <project-dir> [module-name,...] [options]\n  weave community <module-name> [destination-dir] [options]\n  weave install <stable|development> [--replace-conflict]\n  weave --help\n  weave --license         Show the embedded license\n  weave --package-info    Show build and package metadata\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n\nOptions for 'manage':\n  --with-lila             Add Lila live-coding integration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n  --replace-shader-conflicts Replace same-path project shader files\n  --validate              Run the project's validation script\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila"
 }
 
 #[cfg(test)]
@@ -255,6 +268,7 @@ mod tests {
     fn usage_advertises_manage_instead_of_update() {
         let usage = usage_text();
         assert!(usage.contains("weave manage <project-dir> [module-name,...] [options]"));
+        assert!(usage.contains("--validate              Run the project's validation script"));
         assert!(!usage.contains("weave update"));
     }
 }

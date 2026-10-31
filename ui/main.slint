@@ -38,6 +38,8 @@ export component MainWindow inherits Window {
     in-out property <string> module_names: "";
     in-out property <bool> result_open: false;
     in-out property <bool> result_busy: false;
+    in-out property <bool> result_cancel_enabled: false;
+    in-out property <bool> result_retry_visible: false;
     in-out property <bool> conflict_confirmation_open: false;
     in-out property <bool> password_dialog_open: false;
     in-out property <int> result_kind: 0;
@@ -71,6 +73,9 @@ export component MainWindow inherits Window {
     callback choose_manage_project();
     callback add_community_modules();
     callback apply_project_options();
+    callback validate_project();
+    callback cancel_validation();
+    callback retry_validation();
     callback replace_shader_conflicts();
     callback skip_shader_conflicts();
     callback cancel_shader_conflicts();
@@ -139,6 +144,7 @@ export component MainWindow inherits Window {
                 back => { root.screen = 1; }
                 add_community_modules => { root.add_community_modules(); }
                 apply_options => { root.apply_project_options(); }
+                validate_project => { root.validate_project(); }
             }
             if root.screen == 5: InstallMayaFluxScreen {
                 busy: root.busy;
@@ -174,10 +180,14 @@ export component MainWindow inherits Window {
         }
         if root.result_open: ResultDialog {
             result_busy: root.result_busy;
+            cancel_enabled: root.result_cancel_enabled;
+            retry_visible: root.result_retry_visible;
             result_kind: root.result_kind;
             result_title: root.result_title;
             result_message: root.result_message;
-            close => { root.result_open = false; }
+            close => { root.result_open = false; root.result_retry_visible = false; }
+            cancel => { root.cancel_validation(); }
+            retry => { root.retry_validation(); }
         }
         if root.conflict_confirmation_open: ConfirmationDialog {
             title: root.conflict_confirmation_title;

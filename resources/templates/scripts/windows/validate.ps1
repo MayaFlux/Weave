@@ -208,7 +208,7 @@ function Test-ValidationProject([string]$Directory) {
     Invoke-ValidationSection 'Project configuration' {
         $path = Join-Path $Directory 'mayaflux.json'
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-            Write-ValidationResult 'OK' 'No mayaflux.json in the project.' 'Engine defaults apply.'
+            Write-ValidationResult 'INFO' 'No mayaflux.json in the project.' 'Engine defaults apply.'
             return
         }
         $config = Get-Content -LiteralPath $path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
@@ -221,7 +221,7 @@ function Test-ValidationProject([string]$Directory) {
     Invoke-ValidationSection 'Project community modules' {
         $list = Join-Path $Directory 'community.cmake'
         if (-not (Test-Path -LiteralPath $list -PathType Leaf)) {
-            Write-ValidationResult 'WARN' 'community.cmake is missing.' 'No modules will be discovered through the standard project module list.'
+            Write-ValidationResult 'INFO' 'No community.cmake is present.' 'No community modules are configured.'
             return
         }
         $names = @(Get-Content -LiteralPath $list -ErrorAction Stop | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') })

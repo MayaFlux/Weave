@@ -127,13 +127,16 @@ else
 fi
 
 printf '\nProject files\n'
-for relative in CMakeLists.txt CMakePresets.json cmake/mayaflux.cmake cmake/shaders.cmake cmake/build_community.cmake src/main.cpp src/user_project.hpp community.cmake .gitignore; do
+for relative in CMakeLists.txt CMakePresets.json cmake/mayaflux.cmake cmake/shaders.cmake cmake/build_community.cmake src/main.cpp src/user_project.hpp .gitignore; do
     if [ -s "$project_dir/$relative" ]; then
         ok "$relative"
     else
         fix "Missing or empty project file: $relative"
     fi
 done
+if [ ! -f "$project_dir/community.cmake" ]; then
+    printf '[INFO] No community.cmake is present. No community modules are configured.\n'
+fi
 
 if [ -d "$project_dir/data/shaders" ]; then
     ok 'data/shaders/'

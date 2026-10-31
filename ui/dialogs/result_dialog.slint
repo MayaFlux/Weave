@@ -7,7 +7,11 @@ export component ResultDialog inherits Rectangle {
     in property <string> result_title;
     in property <string> result_message;
     in property <bool> result_busy;
+    in property <bool> cancel_enabled: false;
+    in property <bool> retry_visible: false;
     callback close;
+    callback cancel;
+    callback retry;
 
     x: 0px;
     y: 0px;
@@ -54,6 +58,8 @@ export component ResultDialog inherits Rectangle {
             }
             HorizontalBox {
                 Rectangle { horizontal-stretch: 1; background: transparent; }
+                if root.cancel_enabled: Button { text: "Cancel"; enabled: root.result_busy; clicked => { root.cancel(); } }
+                if root.retry_visible: Button { text: "Retry"; enabled: !root.result_busy; clicked => { root.retry(); } }
                 Button { text: "Close"; primary: true; enabled: !root.result_busy; clicked => { root.close(); } }
             }
         }

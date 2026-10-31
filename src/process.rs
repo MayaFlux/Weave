@@ -113,6 +113,35 @@ pub fn run_with<R: ProcessRuntime>(
     timeout: Duration,
     log: &(impl Fn(&str) + Sync),
 ) -> Result<Output, String> {
+    run_inner(runtime, command, installer, timeout, log, None)
+}
+
+pub fn run_cancellable_with<R: ProcessRuntime>(
+    runtime: &R,
+    command: &mut Command,
+    installer: bool,
+    timeout: Duration,
+    cancellation: &std::sync::atomic::AtomicBool,
+    log: &(impl Fn(&str) + Sync),
+) -> Result<Output, String> {
+    run_inner(
+        runtime,
+        command,
+        installer,
+        timeout,
+        log,
+        Some(cancellation),
+    )
+}
+
+fn run_inner<R: ProcessRuntime>(
+    runtime: &R,
+    command: &mut Command,
+    installer: bool,
+    timeout: Duration,
+    log: &(impl Fn(&str) + Sync),
+    cancellation: Option<&std::sync::atomic::AtomicBool>,
+) -> Result<Output, String> {
     use std::process::Stdio;
     use std::sync::mpsc;
     command
@@ -157,6 +186,7 @@ pub fn run_with<R: ProcessRuntime>(
         let mut status = None;
         let start = std::time::Instant::now();
         let mut timed_out = false;
+        let mut cancelled = false;
         loop {
             match receiver.recv_timeout(Duration::from_millis(50)) {
                 Ok((error, bytes)) => {
@@ -182,6 +212,16 @@ pub fn run_with<R: ProcessRuntime>(
                     format!("Cannot wait for {label}: {e}")
                 })?;
             }
+            if !cancelled
+                && cancellation
+                    .is_some_and(|token| token.load(std::sync::atomic::Ordering::Relaxed))
+            {
+                cancelled = true;
+                if let Some(job) = &job {
+                    job.terminate();
+                }
+                let _ = child.kill();
+            }
             if !timed_out && start.elapsed() >= timeout {
                 timed_out = true;
                 if installer {
@@ -202,6 +242,9 @@ pub fn run_with<R: ProcessRuntime>(
             return Err(format!(
                 "{label} exceeded its reporting deadline; the operation has ended. Retry to verify the resulting host state"
             ));
+        }
+        if cancelled {
+            return Err("Validation was cancelled. Retry when you are ready.".to_owned());
         }
         Ok(Output {
             status: status.unwrap(),
