@@ -76,7 +76,7 @@ fn classify_validation_output(output: Output) -> Result<ValidationResult, String
     }
 }
 
-fn current_platform() -> ValidationPlatform {
+pub(crate) fn current_platform() -> ValidationPlatform {
     #[cfg(target_os = "windows")]
     {
         ValidationPlatform::Windows

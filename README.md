@@ -53,7 +53,7 @@ For live coding, enable **Live coding (Lila)** when creating the project, then c
 
 If the project was created without Lila or copied MayaFlux shader sources, choose **Projects > Manage Project** to inspect and add those options later. Weave preserves project CMake changes, skips identical shader files, and asks before replacing shader files with different contents. Customized Lila CMake layouts that cannot be identified safely are reported for manual review.
 
-Use **Validate Project** on the Manage screen to run the project's bundled validation script and review MayaFlux installation and project diagnostics in Weave.
+Use **Validate Project** on the Manage screen to run the project's bundled validation script and review MayaFlux installation and project diagnostics in Weave. **Run & Report** starts an already built project, streams its output, and shows the generated report locations. Close the project app to finish collecting diagnostics; Weave does not build it.
 
 ## Community modules
 
@@ -90,6 +90,7 @@ weave manage /path/to/AudioDemo terrain_field,audio_tools
 weave manage /path/to/AudioDemo --with-lila --copy-shader-sources
 weave manage /path/to/AudioDemo --copy-shader-sources --replace-shader-conflicts
 weave manage /path/to/AudioDemo --validate
+weave manage /path/to/AudioDemo --run-report --configuration Release
 weave install stable
 weave install development --replace-conflict
 ```

@@ -4,6 +4,7 @@ use crate::operations::community::{
 use crate::operations::install;
 use crate::operations::project::{ProjectCreationResult, ProjectOptions, create_project};
 use crate::operations::project_options::{ShaderConflictPolicy, apply_project_options};
+use crate::operations::project_run_report::{RunReportOptions, run_project_report};
 use crate::operations::project_validation::validate_project;
 use crate::operations::update;
 use std::path::Path;
@@ -166,19 +167,58 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
     let mut copy_shader_sources = false;
     let mut replace_shader_conflicts = false;
     let mut validate = false;
-    for argument in &arguments[1..] {
+    let mut run_report = false;
+    let mut report_options = RunReportOptions::default();
+    let mut arguments = arguments[1..].iter();
+    while let Some(argument) = arguments.next() {
         match argument.as_str() {
             "--validate" => validate = true,
+            "--run-report" => run_report = true,
             "--with-lila" => with_lila = true,
             "--copy-shader-sources" => copy_shader_sources = true,
             "--replace-shader-conflicts" => replace_shader_conflicts = true,
+            "--configuration" => {
+                report_options.configuration = Some(
+                    arguments
+                        .next()
+                        .ok_or_else(|| "Missing value for --configuration".to_owned())?
+                        .to_string(),
+                );
+            }
+            "--executable" => {
+                report_options.executable = Some(
+                    Path::new(
+                        arguments
+                            .next()
+                            .ok_or_else(|| "Missing value for --executable".to_owned())?,
+                    )
+                    .to_path_buf(),
+                );
+            }
+            "--mayaflux-root" => {
+                report_options.mayaflux_root = Some(
+                    Path::new(
+                        arguments
+                            .next()
+                            .ok_or_else(|| "Missing value for --mayaflux-root".to_owned())?,
+                    )
+                    .to_path_buf(),
+                );
+            }
             value if value.starts_with('-') => {
                 return Err(format!("Unknown manage option: {value}"));
             }
             value => module_names.push(value.to_owned()),
         }
     }
-    if module_names.is_empty() && !with_lila && !copy_shader_sources && !validate {
+    if !run_report
+        && (report_options.configuration.is_some()
+            || report_options.executable.is_some()
+            || report_options.mayaflux_root.is_some())
+    {
+        return Err("Run-report options require --run-report.".to_owned());
+    }
+    if module_names.is_empty() && !with_lila && !copy_shader_sources && !validate && !run_report {
         return Err("Usage: weave manage <project-dir> [module-name,...] [options]".to_owned());
     }
     if with_lila || copy_shader_sources {
@@ -211,6 +251,27 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
         .map_err(|error| format!("Project validation could not run: {error}"))?;
         if result.findings {
             return Err("Project validation completed with findings. Review the [FIX] entries above, then run `weave manage <project-dir> --validate` again.".to_owned());
+        }
+    }
+    if run_report {
+        let cancellation = std::sync::atomic::AtomicBool::new(false);
+        let result = run_project_report(
+            Path::new(project_path),
+            &report_options,
+            &cancellation,
+            &|line| println!("{line}"),
+        )
+        .map_err(|error| format!("Run & Report could not start: {error}"))?;
+        if result.application_exit_code != 0 {
+            return Err(format!(
+                "The project exited with code {}. Console log: {}. Application report: {}",
+                result.application_exit_code,
+                result.console_log.as_deref().unwrap_or("not reported"),
+                result
+                    .application_report
+                    .as_deref()
+                    .unwrap_or("not reported")
+            ));
         }
     }
     Ok(())
@@ -257,7 +318,7 @@ fn print_usage() {
 }
 
 fn usage_text() -> &'static str {
-    "Weave: MayaFlux project tool\n\nUsage:\n  weave                 Open the Projects screen\n  weave new <name> [destination] [options]\n  weave manage <project-dir> [module-name,...] [options]\n  weave community <module-name> [destination-dir] [options]\n  weave install <stable|development> [--replace-conflict]\n  weave --help\n  weave --license         Show the embedded license\n  weave --package-info    Show build and package metadata\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n\nOptions for 'manage':\n  --with-lila             Add Lila live-coding integration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n  --replace-shader-conflicts Replace same-path project shader files\n  --validate              Run the project's validation script\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila"
+    "Weave: MayaFlux project tool\n\nUsage:\n  weave                 Open the Projects screen\n  weave new <name> [destination] [options]\n  weave manage <project-dir> [module-name,...] [options]\n  weave community <module-name> [destination-dir] [options]\n  weave install <stable|development> [--replace-conflict]\n  weave --help\n  weave --license         Show the embedded license\n  weave --package-info    Show build and package metadata\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n\nOptions for 'manage':\n  --with-lila             Add Lila live-coding integration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n  --replace-shader-conflicts Replace same-path project shader files\n  --validate              Run the project's validation script\n  --run-report            Run a built project and collect diagnostics\n  --configuration <name>  Select a build configuration for --run-report\n  --executable <path>     Select a custom project executable for --run-report\n  --mayaflux-root <path>  Select MayaFlux for --run-report\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila"
 }
 
 #[cfg(test)]
@@ -269,6 +330,9 @@ mod tests {
         let usage = usage_text();
         assert!(usage.contains("weave manage <project-dir> [module-name,...] [options]"));
         assert!(usage.contains("--validate              Run the project's validation script"));
+        assert!(
+            usage.contains("--run-report            Run a built project and collect diagnostics")
+        );
         assert!(!usage.contains("weave update"));
     }
 }

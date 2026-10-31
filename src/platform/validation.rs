@@ -47,6 +47,18 @@ pub(crate) fn run_validation_command(
     )
 }
 
+pub(crate) fn run_project_process(
+    command: &mut Command,
+    cancellation: &AtomicBool,
+    log: &(impl Fn(&str) + Sync),
+) -> Result<Output, String> {
+    #[cfg(target_os = "windows")]
+    let runtime = crate::platform::windows::process::Runtime;
+    #[cfg(not(target_os = "windows"))]
+    let runtime = ValidationRuntime;
+    crate::process::run_cancellable_until_exit_with(&runtime, command, false, cancellation, log)
+}
+
 #[cfg(not(target_os = "windows"))]
 struct ValidationRuntime;
 

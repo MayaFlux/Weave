@@ -7,6 +7,7 @@ import { ManageProjectScreen } from "./screens/manage_project.slint";
 import { CreateCommunityModuleScreen } from "./screens/create_community_module.slint";
 import { InstallMayaFluxScreen } from "./screens/install_mayaflux.slint";
 import { ResultDialog } from "./dialogs/result_dialog.slint";
+import { RunReportDialog } from "./dialogs/run_report_dialog.slint";
 import { ConfirmationDialog } from "./dialogs/confirmation_dialog.slint";
 import { ShaderConflictDialog } from "./dialogs/shader_conflict_dialog.slint";
 import { PasswordDialog } from "./dialogs/password_dialog.slint";
@@ -40,6 +41,11 @@ export component MainWindow inherits Window {
     in-out property <bool> result_busy: false;
     in-out property <bool> result_cancel_enabled: false;
     in-out property <bool> result_retry_visible: false;
+    in-out property <int> result_retry_kind: 0;
+    in-out property <bool> run_report_dialog_open: false;
+    in-out property <string> run_report_configuration: "";
+    in-out property <string> run_report_executable: "";
+    in-out property <string> run_report_mayaflux_root: "";
     in-out property <bool> conflict_confirmation_open: false;
     in-out property <bool> password_dialog_open: false;
     in-out property <int> result_kind: 0;
@@ -74,8 +80,11 @@ export component MainWindow inherits Window {
     callback add_community_modules();
     callback apply_project_options();
     callback validate_project();
-    callback cancel_validation();
-    callback retry_validation();
+    callback run_report();
+    callback choose_run_report_executable();
+    callback choose_run_report_mayaflux_root();
+    callback cancel_project_operation();
+    callback retry_project_operation();
     callback replace_shader_conflicts();
     callback skip_shader_conflicts();
     callback cancel_shader_conflicts();
@@ -145,6 +154,7 @@ export component MainWindow inherits Window {
                 add_community_modules => { root.add_community_modules(); }
                 apply_options => { root.apply_project_options(); }
                 validate_project => { root.validate_project(); }
+                run_report => { root.run_report_dialog_open = true; }
             }
             if root.screen == 5: InstallMayaFluxScreen {
                 busy: root.busy;
@@ -185,9 +195,18 @@ export component MainWindow inherits Window {
             result_kind: root.result_kind;
             result_title: root.result_title;
             result_message: root.result_message;
-            close => { root.result_open = false; root.result_retry_visible = false; }
-            cancel => { root.cancel_validation(); }
-            retry => { root.retry_validation(); }
+            close => { root.result_open = false; root.result_retry_visible = false; root.result_retry_kind = 0; }
+            cancel => { root.cancel_project_operation(); }
+            retry => { root.retry_project_operation(); }
+        }
+        if root.run_report_dialog_open: RunReportDialog {
+            configuration <=> root.run_report_configuration;
+            executable <=> root.run_report_executable;
+            mayaflux_root <=> root.run_report_mayaflux_root;
+            choose_executable => { root.choose_run_report_executable(); }
+            choose_mayaflux_root => { root.choose_run_report_mayaflux_root(); }
+            cancel => { root.run_report_dialog_open = false; }
+            run_report => { root.run_report_dialog_open = false; root.run_report(); }
         }
         if root.conflict_confirmation_open: ConfirmationDialog {
             title: root.conflict_confirmation_title;

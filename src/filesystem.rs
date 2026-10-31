@@ -205,10 +205,17 @@ pub fn safe_directory(path: &Path) -> Result<(), String> {
     no_links(path)
 }
 pub fn unique_id() -> u128 {
-    std::time::SystemTime::now()
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static NEXT_ID: AtomicU32 = AtomicU32::new(0);
+    let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
-        .as_nanos()
+        .as_nanos() as u64;
+    let process = std::process::id() as u128;
+    let sequence = NEXT_ID.fetch_add(1, Ordering::Relaxed) as u128;
+
+    ((timestamp as u128) << 64) | (process << 32) | sequence
 }
 
 pub struct Temporary(pub std::path::PathBuf);
@@ -268,6 +275,21 @@ pub fn numeric_version(text: &str) -> Option<Vec<u64>> {
 mod atomic_write_tests {
     use super::*;
     use std::io;
+
+    #[test]
+    fn unique_ids_do_not_collide_when_requested_concurrently() {
+        let workers = 16;
+        let ids = std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..workers)
+                .map(|_| scope.spawn(|| (0..128).map(|_| unique_id()).collect::<Vec<_>>()))
+                .collect();
+            handles
+                .into_iter()
+                .flat_map(|handle| handle.join().unwrap())
+                .collect::<std::collections::HashSet<_>>()
+        });
+        assert_eq!(ids.len(), workers * 128);
+    }
 
     fn temporary_directory() -> PathBuf {
         let path = std::env::temp_dir().join(format!(

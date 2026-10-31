@@ -1,4 +1,4 @@
-import { Button, HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
+import { Button, HorizontalBox, TextEdit, VerticalBox } from "std-widgets.slint";
 import { WeaveTheme } from "../theme.slint";
 import { CompletionNotice } from "../components/completion_notice.slint";
 
@@ -37,23 +37,18 @@ export component ResultDialog inherits Rectangle {
                 heading: root.result_title;
             }
             Rectangle { height: 1px; background: WeaveTheme.border; }
-            ScrollView {
+            Rectangle {
                 vertical-stretch: 1;
-                content-height: log_text.preferred-height + 16px;
-                content-y: root.result_busy ? min(0px, self.visible-height - self.content-height) : 0px;
-                Rectangle {
-                    width: parent.width;
-                    height: log_text.preferred-height + 16px;
-                    background: WeaveTheme.window-background;
-                    log_text := Text {
-                        x: 10px; y: 8px; width: parent.width - 20px;
-                        height: self.preferred-height;
-                        text: root.result_message;
-                        color: WeaveTheme.text-body;
-                        font-size: WeaveTheme.font-small;
-                        wrap: word-wrap;
-                        vertical-alignment: top;
-                    }
+                background: WeaveTheme.window-background;
+                log_text := TextEdit {
+                    x: 10px; y: 8px;
+                    width: parent.width - 20px; height: parent.height - 16px;
+                    read-only: true;
+                    text: root.result_message;
+                    font-size: WeaveTheme.font-small;
+                    wrap: word-wrap;
+                    content-y: root.result_busy ? min(0px, self.visible-height - self.content-height) : 0px;
+                    accessible-label: "Operation output";
                 }
             }
             HorizontalBox {

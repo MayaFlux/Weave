@@ -1,0 +1,54 @@
+import { Button, HorizontalBox, LineEdit, VerticalBox } from "std-widgets.slint";
+import { WeaveTheme } from "../theme.slint";
+import { AppButton } from "../components/mod.slint";
+
+export component RunReportDialog inherits Rectangle {
+    in-out property <string> configuration;
+    in-out property <string> executable;
+    in-out property <string> mayaflux_root;
+    callback choose_executable;
+    callback choose_mayaflux_root;
+    callback cancel;
+    callback run_report;
+
+    x: 0px;
+    y: 0px;
+    width: 100%;
+    height: 100%;
+    z: 105;
+    background: WeaveTheme.overlay.with-alpha(0.82);
+    TouchArea { }
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: min(720px, parent.width - 32px);
+        height: min(520px, parent.height - 32px);
+        border-radius: 6px;
+        border-width: 1px;
+        border-color: WeaveTheme.border-strong;
+        background: WeaveTheme.panel-background;
+        VerticalBox {
+            x: 28px; y: 24px; width: parent.width - 56px; height: parent.height - 48px; spacing: 12px;
+            Text { text: "Run & Report"; color: WeaveTheme.accent; font-size: WeaveTheme.font-heading; font-weight: 700; }
+            Text { text: "Runs an already built project. Close the project app to finish collecting diagnostics. Weave does not build the project."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-small; wrap: word-wrap; }
+            Text { text: "Configuration (optional)"; color: WeaveTheme.text-primary; font-size: WeaveTheme.font-caption; font-weight: 650; }
+            LineEdit { text <=> root.configuration; placeholder-text: "Auto-detect, Debug, Release, RelWithDebInfo, or MinSizeRel"; }
+            Text { text: "Executable override (optional)"; color: WeaveTheme.text-primary; font-size: WeaveTheme.font-caption; font-weight: 650; }
+            HorizontalBox {
+                LineEdit { text <=> root.executable; placeholder-text: "Auto-detect from the project build"; horizontal-stretch: 1; }
+                Button { text: "Choose…"; clicked => { root.choose_executable(); } }
+            }
+            Text { text: "MayaFlux installation folder (optional)"; color: WeaveTheme.text-primary; font-size: WeaveTheme.font-caption; font-weight: 650; }
+            HorizontalBox {
+                LineEdit { text <=> root.mayaflux_root; placeholder-text: "Use the current MayaFlux environment"; horizontal-stretch: 1; }
+                Button { text: "Choose…"; clicked => { root.choose_mayaflux_root(); } }
+            }
+            Rectangle { vertical-stretch: 1; background: transparent; }
+            HorizontalBox {
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+                AppButton { text: "Cancel"; clicked => { root.cancel(); } }
+                AppButton { text: "Run & Report"; primary: true; clicked => { root.run_report(); } }
+            }
+        }
+    }
+}

@@ -113,7 +113,7 @@ pub fn run_with<R: ProcessRuntime>(
     timeout: Duration,
     log: &(impl Fn(&str) + Sync),
 ) -> Result<Output, String> {
-    run_inner(runtime, command, installer, timeout, log, None)
+    run_inner(runtime, command, installer, Some(timeout), log, None)
 }
 
 pub fn run_cancellable_with<R: ProcessRuntime>(
@@ -128,17 +128,27 @@ pub fn run_cancellable_with<R: ProcessRuntime>(
         runtime,
         command,
         installer,
-        timeout,
+        Some(timeout),
         log,
         Some(cancellation),
     )
+}
+
+pub fn run_cancellable_until_exit_with<R: ProcessRuntime>(
+    runtime: &R,
+    command: &mut Command,
+    installer: bool,
+    cancellation: &std::sync::atomic::AtomicBool,
+    log: &(impl Fn(&str) + Sync),
+) -> Result<Output, String> {
+    run_inner(runtime, command, installer, None, log, Some(cancellation))
 }
 
 fn run_inner<R: ProcessRuntime>(
     runtime: &R,
     command: &mut Command,
     installer: bool,
-    timeout: Duration,
+    timeout: Option<Duration>,
     log: &(impl Fn(&str) + Sync),
     cancellation: Option<&std::sync::atomic::AtomicBool>,
 ) -> Result<Output, String> {
@@ -222,7 +232,7 @@ fn run_inner<R: ProcessRuntime>(
                 }
                 let _ = child.kill();
             }
-            if !timed_out && start.elapsed() >= timeout {
+            if !timed_out && timeout.is_some_and(|deadline| start.elapsed() >= deadline) {
                 timed_out = true;
                 if installer {
                     log(
@@ -282,6 +292,49 @@ mod framing_tests {
             combined.push(line.to_owned())
         });
         assert_eq!(combined, output[..2]);
+    }
+}
+
+#[cfg(all(test, unix))]
+mod unbounded_tests {
+    use super::*;
+    use std::process::Child;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    struct Runtime;
+    impl ProcessGuard for () {
+        fn terminate(&self) {}
+    }
+    impl ProcessRuntime for Runtime {
+        type Guard = ();
+        fn prepare(&self, _command: &mut Command) {}
+        fn supervise(
+            &self,
+            _child: &mut Child,
+            _installer: bool,
+        ) -> Result<Option<Self::Guard>, String> {
+            Ok(Some(()))
+        }
+    }
+
+    #[test]
+    fn long_running_child_can_be_cancelled_without_an_operation_deadline() {
+        let cancellation = std::sync::Arc::new(AtomicBool::new(false));
+        let signal = cancellation.clone();
+        let canceller = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(100));
+            signal.store(true, Ordering::Relaxed);
+        });
+        let mut command = Command::new("/bin/sh");
+        command.args(["-c", "exec sleep 20"]);
+
+        let started = std::time::Instant::now();
+        let result =
+            run_cancellable_until_exit_with(&Runtime, &mut command, false, &cancellation, &|_| {});
+        canceller.join().unwrap();
+
+        assert!(result.unwrap_err().contains("cancelled"));
+        assert!(started.elapsed() < Duration::from_secs(5));
     }
 }
 

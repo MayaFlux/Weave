@@ -9,10 +9,13 @@ use crate::operations::project_options::{
     FeatureStatus, ProjectOptionError, ShaderConflictPolicy, apply_project_options,
     inspect_project_options,
 };
+use crate::operations::project_run_report::{
+    RunReportOptions, RunReportResult, run_project_report,
+};
 use crate::operations::project_validation::{ValidationResult, validate_project};
 use crate::operations::update;
 use slint::{ComponentHandle, Model};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -27,7 +30,7 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
     window.set_destination(destination.into());
 
     let weak_window = window.as_weak();
-    let validation_cancellation: Arc<Mutex<Option<Arc<AtomicBool>>>> = Arc::new(Mutex::new(None));
+    let active_project_operation: Arc<Mutex<Option<Arc<AtomicBool>>>> = Arc::new(Mutex::new(None));
     let weak_window_for_picker = window.as_weak();
     window.on_choose_destination(move || {
         let Some(window) = weak_window_for_picker.upgrade() else {
@@ -53,6 +56,9 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
             window.set_screen(3);
             window.set_add_lila_option(false);
             window.set_add_shader_sources_option(false);
+            window.set_run_report_configuration("".into());
+            window.set_run_report_executable("".into());
+            window.set_run_report_mayaflux_root("".into());
             start_manage_option_inspection(&window);
         }
     });
@@ -222,36 +228,84 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let weak_window_for_validate = window.as_weak();
-    let validation_for_start = validation_cancellation.clone();
+    let operation_for_validation = active_project_operation.clone();
     window.on_validate_project(move || {
         let Some(window) = weak_window_for_validate.upgrade() else {
             return;
         };
         let project_path = window.get_managed_project_path().to_string();
-        start_project_validation(&window, project_path, validation_for_start.clone());
+        start_project_validation(&window, project_path, operation_for_validation.clone());
     });
 
-    let weak_window_for_cancel_validation = window.as_weak();
-    let validation_for_cancel = validation_cancellation.clone();
-    window.on_cancel_validation(move || {
-        let Some(window) = weak_window_for_cancel_validation.upgrade() else {
+    let weak_window_for_report = window.as_weak();
+    let operation_for_report = active_project_operation.clone();
+    window.on_run_report(move || {
+        let Some(window) = weak_window_for_report.upgrade() else {
             return;
         };
-        if let Some(cancellation) = validation_for_cancel.lock().unwrap().as_ref() {
-            cancellation.store(true, Ordering::Relaxed);
-            window.set_result_cancel_enabled(false);
-            window.set_result_title("Cancelling validation…".into());
+        let project = window.get_managed_project_path().to_string();
+        let options = run_report_options(&window);
+        start_project_report(&window, project, options, operation_for_report.clone());
+    });
+
+    let weak_window_for_pick_report_executable = window.as_weak();
+    window.on_choose_run_report_executable(move || {
+        let Some(window) = weak_window_for_pick_report_executable.upgrade() else {
+            return;
+        };
+        let mut picker = rfd::FileDialog::new();
+        if !window.get_run_report_executable().is_empty() {
+            picker = picker.set_file_name(window.get_run_report_executable().to_string());
+        }
+        if let Some(executable) = picker.pick_file() {
+            window.set_run_report_executable(executable.display().to_string().into());
         }
     });
 
-    let weak_window_for_retry_validation = window.as_weak();
-    let validation_for_retry = validation_cancellation.clone();
-    window.on_retry_validation(move || {
-        let Some(window) = weak_window_for_retry_validation.upgrade() else {
+    let weak_window_for_pick_mayaflux_root = window.as_weak();
+    window.on_choose_run_report_mayaflux_root(move || {
+        let Some(window) = weak_window_for_pick_mayaflux_root.upgrade() else {
+            return;
+        };
+        let mut picker = rfd::FileDialog::new();
+        if !window.get_run_report_mayaflux_root().is_empty() {
+            picker = picker.set_directory(window.get_run_report_mayaflux_root().to_string());
+        }
+        if let Some(root) = picker.pick_folder() {
+            window.set_run_report_mayaflux_root(root.display().to_string().into());
+        }
+    });
+
+    let weak_window_for_cancel_operation = window.as_weak();
+    let operation_for_cancel = active_project_operation.clone();
+    window.on_cancel_project_operation(move || {
+        let Some(window) = weak_window_for_cancel_operation.upgrade() else {
+            return;
+        };
+        if let Some(cancellation) = operation_for_cancel.lock().unwrap().as_ref() {
+            cancellation.store(true, Ordering::Relaxed);
+            window.set_result_cancel_enabled(false);
+            window.set_result_title("Stopping project operation…".into());
+        }
+    });
+
+    let weak_window_for_retry_operation = window.as_weak();
+    let operation_for_retry = active_project_operation.clone();
+    window.on_retry_project_operation(move || {
+        let Some(window) = weak_window_for_retry_operation.upgrade() else {
             return;
         };
         let project_path = window.get_managed_project_path().to_string();
-        start_project_validation(&window, project_path, validation_for_retry.clone());
+        match window.get_result_retry_kind() {
+            1 => start_project_validation(&window, project_path, operation_for_retry.clone()),
+            2 => start_project_report(
+                &window,
+                project_path,
+                run_report_options(&window),
+                operation_for_retry.clone(),
+            ),
+            _ => {}
+        }
     });
 
     let weak_window_for_replace_shaders = window.as_weak();
@@ -555,6 +609,7 @@ fn start_project_validation(
     window.set_result_busy(true);
     window.set_result_cancel_enabled(true);
     window.set_result_retry_visible(false);
+    window.set_result_retry_kind(1);
     window.set_result_open(true);
     let weak = window.as_weak();
     std::thread::spawn(move || {
@@ -619,6 +674,95 @@ fn append_validation_error(mut output: String, error: String) -> String {
     }
     output.push_str(&error);
     output
+}
+
+fn run_report_options(window: &MainWindow) -> RunReportOptions {
+    let optional_path = |value: String| {
+        let value = value.trim();
+        (!value.is_empty()).then(|| PathBuf::from(value))
+    };
+    let configuration = window.get_run_report_configuration().to_string();
+    RunReportOptions {
+        configuration: (!configuration.trim().is_empty()).then(|| configuration.trim().to_owned()),
+        executable: optional_path(window.get_run_report_executable().to_string()),
+        mayaflux_root: optional_path(window.get_run_report_mayaflux_root().to_string()),
+    }
+}
+
+fn start_project_report(
+    window: &MainWindow,
+    project_path: String,
+    options: RunReportOptions,
+    active_cancellation: Arc<Mutex<Option<Arc<AtomicBool>>>>,
+) {
+    let cancellation = Arc::new(AtomicBool::new(false));
+    *active_cancellation.lock().unwrap() = Some(cancellation.clone());
+    window.set_busy(true);
+    window.set_result_kind(0);
+    window.set_result_title("Running project and collecting diagnostics".into());
+    window.set_result_message("".into());
+    window.set_result_busy(true);
+    window.set_result_cancel_enabled(true);
+    window.set_result_retry_visible(false);
+    window.set_result_retry_kind(2);
+    window.set_result_open(true);
+    let weak = window.as_weak();
+    std::thread::spawn(move || {
+        let output_window = weak.clone();
+        let result =
+            run_project_report(Path::new(&project_path), &options, &cancellation, &|line| {
+                let weak = output_window.clone();
+                let line = line.to_owned();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(window) = weak.upgrade() {
+                        let mut output = window.get_result_message().to_string();
+                        if !output.is_empty() {
+                            output.push('\n');
+                        }
+                        output.push_str(&line);
+                        window.set_result_message(output.into());
+                    }
+                });
+            });
+        let cancelled = cancellation.load(Ordering::Relaxed);
+        *active_cancellation.lock().unwrap() = None;
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(window) = weak.upgrade() {
+                window.set_busy(false);
+                window.set_result_cancel_enabled(false);
+                window.set_result_retry_visible(true);
+                match result {
+                    Ok(RunReportResult {
+                        application_exit_code: 0,
+                        output,
+                        ..
+                    }) => publish_result(&window, 0, "Run & Report complete", output),
+                    Ok(RunReportResult {
+                        application_exit_code,
+                        output,
+                        ..
+                    }) => publish_result(
+                        &window,
+                        1,
+                        &format!("Project exited with code {application_exit_code}"),
+                        output,
+                    ),
+                    Err(error) if cancelled => publish_result(
+                        &window,
+                        1,
+                        "Project run cancelled",
+                        append_validation_error(window.get_result_message().to_string(), error),
+                    ),
+                    Err(error) => publish_result(
+                        &window,
+                        2,
+                        "Could not run project and collect diagnostics",
+                        append_validation_error(window.get_result_message().to_string(), error),
+                    ),
+                }
+            }
+        });
+    });
 }
 
 fn show_install_conflict(window: &MainWindow, channel: &str, installed_package: &str) {

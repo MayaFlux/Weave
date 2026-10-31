@@ -528,6 +528,57 @@ fn cli_validation_refreshes_only_legacy_optional_file_checks() {
 }
 
 #[test]
+fn cli_manage_runs_the_report_script_and_prints_report_locations() {
+    let temporary = TestDirectory::new();
+    let project = temporary.0.join("Built Project with spaces");
+    fs::create_dir_all(&project).unwrap();
+    let executable = project.join("build/Custom App");
+    fs::create_dir_all(executable.parent().unwrap()).unwrap();
+    fs::write(&executable, "fixture executable").unwrap();
+    let mayaflux_root = temporary.0.join("MayaFlux Install");
+    fs::create_dir(&mayaflux_root).unwrap();
+    #[cfg(target_os = "windows")]
+    fs::write(
+        project.join("run-report.ps1"),
+        "Write-Output 'Application exit code: 0'; Write-Output \"Console log: $((Get-Location).Path)\\mayaflux_run.txt\"; Write-Output \"Application report: $((Get-Location).Path)\\data\\log\\mayaflux_report.log\"; exit 0\n",
+    )
+    .unwrap();
+    #[cfg(not(target_os = "windows"))]
+    fs::write(
+        project.join("run-report.sh"),
+        "printf 'Application exit code: 0\\nConsole log: %s/mayaflux_run.txt\\nApplication report: %s/data/log/mayaflux_report.log\\n' \"$PWD\" \"$PWD\"; exit 0\n",
+    )
+    .unwrap();
+
+    let result = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args([
+            "manage",
+            project.to_str().unwrap(),
+            "--run-report",
+            "--configuration",
+            "Release",
+            "--executable",
+            executable.to_str().unwrap(),
+            "--mayaflux-root",
+            mayaflux_root.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let output = String::from_utf8_lossy(&result.stdout);
+    assert!(output.contains("Application exit code: 0"));
+    assert!(output.contains("Console log:"));
+    assert!(output.contains("Application report:"));
+    assert!(output.contains("mayaflux_run.txt"));
+    assert!(output.contains("mayaflux_report.log"));
+}
+
+#[test]
 fn cli_manage_adds_lila_idempotently_to_project_paths_with_spaces() {
     let temporary = TestDirectory::new();
     let project = create_manage_project(&temporary.0);
