@@ -251,7 +251,8 @@ fn inspect_lila(path: &Path) -> Result<FeatureStatus, ProjectOptionError> {
     let cmake = fs::read_to_string(path).map_err(|error| {
         ProjectOptionError::Failure(format!("Could not read {}: {error}", path.display()))
     })?;
-    let has_link = cmake.contains(lila_link_block());
+    let normalized = cmake.replace("\r\n", "\n");
+    let has_link = normalized.contains(lila_link_block());
     let has_debugger_path = cmake.contains(lila_debugger_path());
     let has_host_runtime = cmake.contains("MayaFluxHost.dll")
         && cmake.contains("add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD");
@@ -338,8 +339,22 @@ fn shader_sources_in(root: &Path) -> Result<std::collections::BTreeMap<PathBuf, 
     Ok(files)
 }
 
+fn line_anchor(text: &str, marker: &str) -> Option<String> {
+    let mut found = None;
+    for newline in ["\r\n", "\n"] {
+        let anchor = format!("{marker}{newline}");
+        match text.matches(&anchor).count() {
+            0 => {}
+            1 if found.is_none() => found = Some(anchor),
+            _ => return None,
+        }
+    }
+    found
+}
+
 fn enable_lila(cmake: &str) -> Result<String, String> {
-    let has_link = cmake.contains(lila_link_block());
+    let normalized = cmake.replace("\r\n", "\n");
+    let has_link = normalized.contains(lila_link_block());
     let has_debugger = cmake.contains(lila_debugger_path());
     let has_host_runtime = cmake.contains("MayaFluxHost.dll")
         && cmake.contains("add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD");
@@ -349,21 +364,17 @@ fn enable_lila(cmake: &str) -> Result<String, String> {
     if has_link || has_debugger || has_host_runtime {
         return Err("Lila is partially configured in cmake/mayaflux.cmake. Review the existing integration and resolve it manually before retrying.".to_owned());
     }
-    let link_anchor = "# Optional: Lila (Live Coding JIT)\n";
-    if cmake.matches(link_anchor).count() != 1 {
-        return Err("Unsupported CMake layout: the Lila insertion section in cmake/mayaflux.cmake could not be identified safely.".to_owned());
-    }
+    let link_anchor = line_anchor(cmake, "# Optional: Lila (Live Coding JIT)")
+        .ok_or("Unsupported CMake layout: the Lila insertion section in cmake/mayaflux.cmake could not be identified safely.")?;
     let debugger_anchor = "$<TARGET_FILE_DIR:MayaFlux::MayaFluxLib>;";
     if cmake.matches(debugger_anchor).count() != 1 {
         return Err("Unsupported CMake layout: the Windows debugger path in cmake/mayaflux.cmake could not be identified safely.".to_owned());
     }
-    let windows_anchor = "    # Windows subsystem configuration\n";
-    if cmake.matches(windows_anchor).count() != 1 {
-        return Err("Unsupported CMake layout: the Windows runtime section in cmake/mayaflux.cmake could not be identified safely.".to_owned());
-    }
+    let windows_anchor = line_anchor(cmake, "    # Windows subsystem configuration")
+        .ok_or("Unsupported CMake layout: the Windows runtime section in cmake/mayaflux.cmake could not be identified safely.")?;
 
     let mut updated = cmake.replacen(
-        link_anchor,
+        &link_anchor,
         &format!("{link_anchor}{}", lila_link_block()),
         1,
     );
@@ -373,18 +384,25 @@ fn enable_lila(cmake: &str) -> Result<String, String> {
         1,
     );
     let dll_block = lila_dll_copy_block();
-    let runtime_marker = "    # WEAVE: Lila Windows runtime integration\n";
-    match updated.matches(runtime_marker).count() {
+    let runtime_label = "    # WEAVE: Lila Windows runtime integration";
+    match updated.matches(runtime_label).count() {
         1 => {
-            let empty_slot = format!("{runtime_marker}    \n");
+            let runtime_marker = line_anchor(&updated, runtime_label)
+                .ok_or("The Lila runtime marker has no supported line ending.")?;
+            let newline = if runtime_marker.ends_with("\r\n") {
+                "\r\n"
+            } else {
+                "\n"
+            };
+            let empty_slot = format!("{runtime_marker}    {newline}");
             if updated.matches(&empty_slot).count() != 1 {
                 return Err("The Lila Windows runtime section contains custom content. Review cmake/mayaflux.cmake before editing.".to_owned());
             }
-            let replacement = format!("{runtime_marker}    {dll_block}\n");
+            let replacement = format!("{runtime_marker}    {dll_block}{newline}");
             updated = updated.replacen(&empty_slot, &replacement, 1);
         }
         0 => {
-            let insert_at = updated.find(windows_anchor).ok_or_else(|| {
+            let insert_at = updated.find(&windows_anchor).ok_or_else(|| {
                 "Unsupported CMake layout: the Windows runtime section changed during update."
                     .to_owned()
             })?;
@@ -635,6 +653,31 @@ mod tests {
     }
 
     #[test]
+    fn lila_edits_preserve_line_endings_and_custom_content() {
+        let template = include_str!("../../resources/templates/project/cmake/mayaflux.cmake")
+            .replace("\r\n", "\n");
+        for newline in ["\n", "\r\n"] {
+            let base = template.replace('\n', newline);
+            let custom = "\n# Custom setting\r\nset(USER_OPTION ON)\n";
+            let original = base
+                .replace("@LILA_LINK_BLOCK@", "")
+                .replace("@LILA_DEBUGGER_PATH@", "")
+                .replace("@LILA_DLL_COPY@", "")
+                + custom;
+            let expected = base
+                .replace("@LILA_LINK_BLOCK@", lila_link_block())
+                .replace("@LILA_DEBUGGER_PATH@", lila_debugger_path())
+                .replace("@LILA_DLL_COPY@", lila_dll_copy_block())
+                + custom;
+            let enabled = super::enable_lila(&original).unwrap();
+            assert_eq!(enabled, expected);
+            assert_eq!(super::enable_lila(&enabled).unwrap(), enabled);
+            let all_crlf = enabled.replace("\r\n", "\n").replace('\n', "\r\n");
+            assert_eq!(super::enable_lila(&all_crlf).unwrap(), all_crlf);
+        }
+    }
+
+    #[test]
     fn inspect_reports_options_available_for_a_standard_project() {
         let temporary = Temporary::new();
         let project = project(&temporary.0);
@@ -717,7 +760,9 @@ mod tests {
         )
         .unwrap_err();
 
-        assert!(error.to_string().contains("nested/effect.frag"));
+        assert!(
+            matches!(&error, super::ProjectOptionError::ShaderConflicts(paths) if paths == &[PathBuf::from("nested").join("effect.frag")])
+        );
         assert_eq!(fs::read(&destination).unwrap(), b"user shader");
         assert_eq!(fs::read(&cmake_path).unwrap(), before_cmake);
     }

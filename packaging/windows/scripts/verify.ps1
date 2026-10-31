@@ -60,8 +60,13 @@ try {
     if ($help.Contains('weave update')) { throw 'Packaged CLI still advertises the retired update command.' }
     $projects = Join-Path $work 'generated projects'
     New-Item -ItemType Directory -Path $projects | Out-Null
-    Invoke-PackagedCli @('new','PackageSmoke',$projects,'--with-lila') | Write-Host
+    Invoke-PackagedCli @('new','PackageSmoke',$projects) | Write-Host
     $project = Join-Path $projects 'PackageSmoke'
+    Invoke-PackagedCli @('manage',$project,'--with-lila') | Write-Host
+    $enabledCmake = Get-Content -Raw -LiteralPath (Join-Path $project 'cmake/mayaflux.cmake')
+    if (!$enabledCmake.Contains('MayaFlux::MayaFluxHost') -or !$enabledCmake.Contains('MayaFluxHost.dll')) { throw 'Packaged Manage did not enable Lila integration.' }
+    Invoke-PackagedCli @('manage',$project,'--with-lila') | Out-Null
+    if ((Get-Content -Raw -LiteralPath (Join-Path $project 'cmake/mayaflux.cmake')) -cne $enabledCmake) { throw 'Repeated packaged Manage changed an already enabled project.' }
     foreach ($resource in @('CMakeLists.txt','CMakePresets.json','src/main.cpp','src/user_project.hpp',
         'cmake/mayaflux.cmake','cmake/shaders.cmake','cmake/build_community.cmake',
         '.vscode/settings.json','.vscode/tasks.json','.vscode/launch.json',

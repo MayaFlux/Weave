@@ -7,7 +7,9 @@ mod macos;
 mod validation;
 #[cfg(target_os = "windows")]
 pub(crate) mod windows;
-pub(crate) use validation::{run_project_process, run_validation_command, validation_interpreter};
+pub(crate) use validation::{
+    run_project_process, run_validation_command, validation_interpreter, validation_script_path,
+};
 
 #[cfg(target_os = "windows")]
 pub fn install_windows(

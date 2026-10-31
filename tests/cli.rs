@@ -578,6 +578,105 @@ fn cli_manage_runs_the_report_script_and_prints_report_locations() {
     assert!(output.contains("mayaflux_report.log"));
 }
 
+#[cfg(target_os = "windows")]
+#[test]
+fn bundled_windows_run_report_executes_a_fixture_and_preserves_reports() {
+    let temporary = TestDirectory::new();
+    let weave = std::env::var_os("WEAVE_TEST_EXECUTABLE")
+        .unwrap_or_else(|| env!("CARGO_BIN_EXE_weave").into());
+    let created = Command::new(&weave)
+        .args(["new", "ReportFixture", temporary.0.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        created.status.success(),
+        "{}",
+        String::from_utf8_lossy(&created.stderr)
+    );
+    let project = temporary.0.join("ReportFixture");
+    let install = temporary.0.join("MayaFlux install with spaces");
+    let configuration = install.join("share/MayaFlux/report/mayaflux.report.json");
+    fs::create_dir_all(configuration.parent().unwrap()).unwrap();
+    fs::write(&configuration, "{}\n").unwrap();
+    let source = temporary.0.join("report_fixture.rs");
+    fs::write(
+        &source,
+        r#"
+fn main() {
+    let arguments: Vec<_> = std::env::args().skip(1).collect();
+    assert_eq!(arguments.len(), 2);
+    assert_eq!(arguments[0], "--config");
+    assert!(std::path::Path::new(&arguments[1]).is_file());
+    std::fs::create_dir_all("data/log").unwrap();
+    std::fs::write("data/log/mayaflux_report.log", "fixture application report").unwrap();
+    println!("fixture stdout");
+    eprintln!("fixture stderr");
+    let code = std::fs::read_to_string("fixture-exit-code").unwrap();
+    std::process::exit(code.parse().unwrap());
+}
+"#,
+    )
+    .unwrap();
+    let executable = project.join("custom build/Fixture App.exe");
+    fs::create_dir_all(executable.parent().unwrap()).unwrap();
+    let compiled = Command::new("rustc")
+        .arg(&source)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    fs::create_dir_all(project.join("data/log")).unwrap();
+    fs::write(project.join("mayaflux_run.txt"), "previous console log").unwrap();
+    fs::write(
+        project.join("data/log/mayaflux_report.log"),
+        "previous application report",
+    )
+    .unwrap();
+    for code in [0, 7] {
+        fs::write(project.join("fixture-exit-code"), code.to_string()).unwrap();
+        let result = Command::new(&weave)
+            .arg("manage")
+            .arg(&project)
+            .arg("--run-report")
+            .arg("--executable")
+            .arg(&executable)
+            .arg("--mayaflux-root")
+            .arg(&install)
+            .output()
+            .unwrap();
+        let output = format!(
+            "{}{}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert_eq!(result.status.success(), code == 0, "{output}");
+        for expected in [
+            "fixture stdout",
+            "fixture stderr",
+            "Previous log saved:",
+            "Console log:",
+            "Application report:",
+        ] {
+            assert!(output.contains(expected), "{output}");
+        }
+        assert!(
+            output.contains(&format!("Application exit code: {code}")),
+            "{output}"
+        );
+        let log = fs::read_to_string(project.join("mayaflux_run.txt")).unwrap();
+        assert!(log.contains("fixture stdout") && log.contains("fixture stderr"));
+        assert_eq!(
+            fs::read_to_string(project.join("data/log/mayaflux_report.log")).unwrap(),
+            "fixture application report"
+        );
+    }
+}
+
 #[test]
 fn cli_manage_adds_lila_idempotently_to_project_paths_with_spaces() {
     let temporary = TestDirectory::new();

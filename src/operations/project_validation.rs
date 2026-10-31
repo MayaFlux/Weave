@@ -119,6 +119,11 @@ pub fn build_validation_command_for(
     let project = std::fs::canonicalize(&absolute_project)
         .map_err(|error| format!("Cannot resolve selected project folder: {error}"))?;
     crate::filesystem::no_links(&project)?;
+    let project = if platform == ValidationPlatform::Windows {
+        crate::platform::validation_script_path(&project)?
+    } else {
+        project
+    };
     let (script_name, arguments): (&str, Vec<std::ffi::OsString>) = match platform {
         ValidationPlatform::Linux => ("validate.sh", vec![project.as_os_str().to_owned()]),
         ValidationPlatform::MacOS => ("validate.sh", vec![project.as_os_str().to_owned()]),
@@ -214,6 +219,15 @@ mod tests {
     use std::path::Path;
     use std::time::Duration;
 
+    fn write_validation_fixture(root: &Path, powershell: &str, bash: &str) {
+        let (name, source) = if cfg!(target_os = "windows") {
+            ("validate.ps1", powershell)
+        } else {
+            ("validate.sh", bash)
+        };
+        fs::write(root.join(name), source).unwrap();
+    }
+
     #[test]
     fn validation_command_uses_project_working_directory_and_preserves_spaces() {
         let root = std::env::temp_dir().join(format!(
@@ -234,7 +248,7 @@ mod tests {
             command.arguments,
             [root.join("validate.sh").as_os_str(), root.as_os_str()]
         );
-        assert_eq!(command.working_directory, fs::canonicalize(&root).unwrap());
+        assert_eq!(command.working_directory, root);
         let _ = fs::remove_dir_all(root);
     }
 
@@ -259,7 +273,8 @@ mod tests {
             command.program,
             Path::new(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")
         );
-        let root = fs::canonicalize(&root).unwrap();
+        let root =
+            crate::platform::validation_script_path(&fs::canonicalize(&root).unwrap()).unwrap();
         assert_eq!(
             command.arguments,
             [
@@ -278,7 +293,7 @@ mod tests {
             ])
             .collect::<Vec<_>>()
         );
-        assert_eq!(command.working_directory, fs::canonicalize(&root).unwrap());
+        assert_eq!(command.working_directory, root);
         let _ = fs::remove_dir_all(root);
     }
 
@@ -428,11 +443,11 @@ mod tests {
             crate::filesystem::unique_id()
         ));
         fs::create_dir_all(&root).unwrap();
-        fs::write(
-            root.join("validate.sh"),
+        write_validation_fixture(
+            &root,
+            "Write-Output \"cwd=$((Get-Location).Path)\"; Write-Output '[FIX] fixture finding'; Write-Output '1 item(s) need attention.'; exit 1\n",
             "printf 'cwd=%s\\n' \"$PWD\"; printf '[FIX] fixture finding\\n1 item(s) need attention.\\n'; exit 1\n",
-        )
-        .unwrap();
+        );
         let streamed = std::sync::Mutex::new(Vec::new());
         let cancellation = std::sync::atomic::AtomicBool::new(false);
 
@@ -444,9 +459,13 @@ mod tests {
         assert!(result.findings);
         assert!(result.output.contains("[FIX] fixture finding"));
         assert!(
-            result
-                .output
-                .contains(&fs::canonicalize(&root).unwrap().display().to_string())
+            result.output.replace(r"\\?\", "").contains(
+                &fs::canonicalize(&root)
+                    .unwrap()
+                    .display()
+                    .to_string()
+                    .replace(r"\\?\", "")
+            )
         );
         assert!(
             streamed
@@ -465,11 +484,11 @@ mod tests {
             crate::filesystem::unique_id()
         ));
         fs::create_dir_all(&root).unwrap();
-        fs::write(
-            root.join("validate.sh"),
+        write_validation_fixture(
+            &root,
+            "Write-Output 'script crashed'; exit 2\n",
             "printf 'script crashed\\n'; exit 2\n",
-        )
-        .unwrap();
+        );
         let cancellation = std::sync::atomic::AtomicBool::new(false);
 
         let error = validate_project(&root, &cancellation, &|_| {}).unwrap_err();
@@ -514,7 +533,7 @@ mod tests {
             crate::filesystem::unique_id()
         ));
         fs::create_dir_all(&root).unwrap();
-        fs::write(root.join("validate.sh"), "exec sleep 20\n").unwrap();
+        write_validation_fixture(&root, "Start-Sleep -Seconds 20\n", "exec sleep 20\n");
         let cancellation = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let signal = cancellation.clone();
         let cancel_after_start = std::thread::spawn(move || {
@@ -526,11 +545,11 @@ mod tests {
         cancel_after_start.join().unwrap();
 
         assert!(error.contains("cancelled"));
-        fs::write(
-            root.join("validate.sh"),
+        write_validation_fixture(
+            &root,
+            "Write-Output 'retry passed'; exit 0\n",
             "printf 'retry passed\\n'; exit 0\n",
-        )
-        .unwrap();
+        );
         let retry = std::sync::atomic::AtomicBool::new(false);
         assert!(!validate_project(&root, &retry, &|_| {}).unwrap().findings);
         let _ = fs::remove_dir_all(root);

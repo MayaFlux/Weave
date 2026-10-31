@@ -116,6 +116,11 @@ pub fn build_run_report_command_for(
     let project = std::fs::canonicalize(&absolute_project)
         .map_err(|error| format!("Cannot resolve selected project folder: {error}"))?;
     crate::filesystem::no_links(&project)?;
+    let project = if platform == ValidationPlatform::Windows {
+        crate::platform::validation_script_path(&project)?
+    } else {
+        project
+    };
     if let Some(configuration) = options.configuration.as_deref()
         && !matches!(
             configuration,
@@ -152,7 +157,12 @@ pub fn build_run_report_command_for(
                     path.display()
                 ));
             }
-            Some(std::fs::canonicalize(path).map_err(|error| error.to_string())?)
+            let canonical = std::fs::canonicalize(path).map_err(|error| error.to_string())?;
+            Some(if platform == ValidationPlatform::Windows {
+                crate::platform::validation_script_path(&canonical)?
+            } else {
+                canonical
+            })
         }
         None => None,
     };
@@ -200,6 +210,11 @@ pub fn build_run_report_command_for(
         );
     }
     if let Some(mayaflux_root) = &options.mayaflux_root {
+        let mayaflux_root = if platform == ValidationPlatform::Windows {
+            crate::platform::validation_script_path(mayaflux_root)?
+        } else {
+            mayaflux_root.to_path_buf()
+        };
         push_option(
             &mut arguments,
             if platform == ValidationPlatform::Windows {
@@ -288,7 +303,8 @@ mod tests {
         )
         .unwrap();
 
-        let root = fs::canonicalize(root).unwrap();
+        let root =
+            crate::platform::validation_script_path(&fs::canonicalize(root).unwrap()).unwrap();
         assert_eq!(command.arguments[0], "-NoProfile");
         assert_eq!(command.arguments[1], "-NonInteractive");
         assert_eq!(command.arguments[2], "-ExecutionPolicy");
