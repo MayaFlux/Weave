@@ -54,9 +54,10 @@ try {
     $license = Invoke-PackagedCli @('--license')
     if (!$license.Contains('GNU GENERAL PUBLIC LICENSE') -or !$license.Contains('Version 3, 29 June 2007')) { throw 'The embedded license is missing or incorrect.' }
     $help = Invoke-PackagedCli @('--help')
-    foreach ($operation in @('weave new','weave community','weave update','weave install')) {
+    foreach ($operation in @('weave new','weave manage','weave community','weave install')) {
         if (!$help.Contains($operation)) { throw "Packaged CLI help is missing $operation." }
     }
+    if ($help.Contains('weave update')) { throw 'Packaged CLI still advertises the retired update command.' }
     $projects = Join-Path $work 'generated projects'
     New-Item -ItemType Directory -Path $projects | Out-Null
     Invoke-PackagedCli @('new','PackageSmoke',$projects,'--with-lila') | Write-Host
@@ -122,13 +123,13 @@ try {
 
     $projectAlias = Join-Path $work 'project alias'
     New-Item -ItemType Junction -Path $projectAlias -Target $projects | Out-Null
-    $linkedUpdateOutput = Invoke-PackagedCli @('update',(Join-Path $projectAlias 'PackageSmoke'),'package_smoke') $false
-    if ($linkedUpdateOutput -notmatch 'reparse point') { throw "Project update did not report the linked ancestor: $linkedUpdateOutput" }
+    $linkedManageOutput = Invoke-PackagedCli @('manage',(Join-Path $projectAlias 'PackageSmoke'),'package_smoke') $false
+    if ($linkedManageOutput -notmatch 'reparse point') { throw "Project management did not report the linked ancestor: $linkedManageOutput" }
 
     $before = (Get-FileHash -LiteralPath (Join-Path $project 'CMakeLists.txt')).Hash
     Invoke-PackagedCli @('new','PackageSmoke',$projects) $false | Out-Null
     Invoke-PackagedCli @('new','../escape',$projects) $false | Out-Null
-    Invoke-PackagedCli @('update',$project,'../unsafe') $false | Out-Null
+    Invoke-PackagedCli @('manage',$project,'../unsafe') $false | Out-Null
     Invoke-PackagedCli @('install','nightly') $false | Out-Null
     if ((Test-Path -LiteralPath (Join-Path $work 'escape')) -or (Get-FileHash -LiteralPath (Join-Path $project 'CMakeLists.txt')).Hash -ne $before) { throw 'Invalid operations modified the package fixture.' }
 

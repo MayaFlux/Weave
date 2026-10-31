@@ -54,6 +54,8 @@ fi
 cd "$TEMP_DIR"
 "$CLI" --help > "$TEMP_DIR/help.txt"
 grep -q 'weave community' "$TEMP_DIR/help.txt"
+grep -q 'weave manage' "$TEMP_DIR/help.txt"
+! grep -q 'weave update' "$TEMP_DIR/help.txt"
 "$CLI" community package_smoke "$TEMP_DIR/modules"
 [[ -s "$TEMP_DIR/modules/package_smoke/community.json" ]]
 [[ -s "$TEMP_DIR/modules/package_smoke/CMakeLists.txt" ]]
@@ -61,7 +63,7 @@ mkdir -p "$TEMP_DIR/projects"
 "$CLI" new PackageSmoke "$TEMP_DIR/projects"
 [[ -s "$TEMP_DIR/projects/PackageSmoke/CMakeLists.txt" ]]
 
-# Exercise a successful project update from the packaged CLI with a controlled
+# Exercise successful module addition through the packaged CLI with a controlled
 # registry and repository checkout. No live registry or repository is contacted.
 UPDATE_ROOT="$TEMP_DIR/update-fixture"
 MODULE_FIXTURE="$TEMP_DIR/module-fixture"
@@ -118,7 +120,7 @@ env PATH="$SHIMS:$PATH" \
     MAYAFLUX_ROOT="$UPDATE_ROOT" \
     WEAVE_TEST_REGISTRY="$TEMP_DIR/registry.json" \
     WEAVE_TEST_MODULE_FIXTURE="$MODULE_FIXTURE" \
-    "$CLI" update "$TEMP_DIR/projects/PackageSmoke" package_smoke
+    "$CLI" manage "$TEMP_DIR/projects/PackageSmoke" package_smoke
 [[ -s "$TEMP_DIR/projects/PackageSmoke/community/package_smoke/package_smoke.cmake" ]]
 grep -qx 'package_smoke' "$TEMP_DIR/projects/PackageSmoke/community.cmake"
 validator_output="$(env HOME="$TEMP_DIR/home" ZDOTDIR="$TEMP_DIR/zdotdir" \
