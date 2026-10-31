@@ -61,7 +61,7 @@ run_package_case() {
     [[ -s "$case_dir/modules/package_smoke/community.json" ]] \
         || fail "$case_name community creation failed"
 
-    # Fake host tools and an installed-version fixture keep this update offline.
+    # Fake host tools and an installed-version fixture keep this module addition offline.
     printf 'set(PACKAGE_VERSION "0.5.0")\n' \
         > "$mayaflux_root/lib/cmake/MayaFlux/MayaFluxConfigVersion.cmake"
     printf 'set(MF_MIN_VERSION "0.5.0")\n' > "$module_fixture/package_smoke.cmake"
@@ -88,16 +88,55 @@ SH
         WEAVE_TEST_REGISTRY="$case_dir/registry.json" \
         WEAVE_TEST_MODULE_FIXTURE="$module_fixture" \
         WEAVE_TEST_TOOL_LOG="$case_dir/tools.log" \
-        "$launcher" update "$project" package_smoke \
-        || fail "$case_name packaged project update failed"
+        "$launcher" manage "$project" package_smoke \
+        || fail "$case_name packaged project module addition failed"
     [[ -s "$project/community/package_smoke/package_smoke.cmake" ]] \
-        || fail "$case_name update did not install the module"
+        || fail "$case_name module addition did not install the module"
     grep -qx 'package_smoke' "$project/community.cmake" \
-        || fail "$case_name update did not register the module"
+        || fail "$case_name module addition did not register the module"
     grep -qx 'curl' "$case_dir/tools.log" \
         || fail "$case_name did not discover the fake registry tool"
     grep -qx 'git clone' "$case_dir/tools.log" \
         || fail "$case_name did not discover the fake repository tool"
+
+    # The packaged CLI must invoke the generated Linux validator and preserve
+    # findings as diagnostics rather than a script-launch error.
+    if env PATH="$shims:$PATH" MAYAFLUX_ROOT="$mayaflux_root" \
+        "$launcher" manage "$project" --validate > "$case_dir/validation.txt" 2>&1; then
+        :
+    else
+        grep -q 'item(s) need attention.' "$case_dir/validation.txt" \
+            || fail "$case_name validation failed without project findings"
+    fi
+    grep -q 'MayaFlux project diagnostics' "$case_dir/validation.txt" \
+        || fail "$case_name did not run the packaged Linux validation script"
+
+    # A controlled built executable produces both report files without
+    # installing MayaFlux or launching a real project.
+    mkdir -p "$project/build" "$project/data/log" \
+        "$mayaflux_root/share/MayaFlux/report"
+    printf '{}\n' > "$mayaflux_root/share/MayaFlux/report/mayaflux.report.json"
+    cat > "$project/build/PackageSmoke" <<'SH'
+#!/bin/sh
+printf 'packaged run fixture\n'
+printf 'packaged application report\n' > data/log/mayaflux_report.log
+SH
+    chmod +x "$project/build/PackageSmoke"
+    "$launcher" manage "$project" --run-report \
+        --executable "$project/build/PackageSmoke" \
+        --mayaflux-root "$mayaflux_root" > "$case_dir/run-report.txt" \
+        || fail "$case_name packaged run/report failed"
+    grep -q 'Application exit code: 0' "$case_dir/run-report.txt" \
+        || fail "$case_name run/report did not finish the project"
+    grep -Fq "Console log: $project/mayaflux_run.txt" "$case_dir/run-report.txt" \
+        || fail "$case_name did not report the console log location"
+    grep -Fq "Application report: $project/data/log/mayaflux_report.log" \
+        "$case_dir/run-report.txt" \
+        || fail "$case_name did not report the application log location"
+    grep -q 'packaged run fixture' "$project/mayaflux_run.txt" \
+        || fail "$case_name did not save the project console log"
+    grep -q 'packaged application report' "$project/data/log/mayaflux_report.log" \
+        || fail "$case_name did not save the application report"
 }
 
 run_package_case "$APPDIR/AppRun" extracted
@@ -109,7 +148,7 @@ if "$IMAGE" --help > "$TEMP_DIR/image-launch.txt" 2>&1; then
     grep -q 'weave community' "$TEMP_DIR/image-launch.txt" || fail "actual AppImage CLI output was wrong"
     run_package_case "$IMAGE" mounted
     MOUNTED_CLI=1
-    echo "Mounted AppImage CLI creation, update, and host-tool discovery passed."
+    echo "Mounted AppImage CLI creation, module addition, validation, run/report, and host-tool discovery passed."
 else
     if ! grep -iq 'fuse' "$TEMP_DIR/image-launch.txt"; then
         cat "$TEMP_DIR/image-launch.txt" >&2
