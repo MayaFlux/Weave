@@ -54,10 +54,10 @@ try {
     $license = Invoke-PackagedCli @('--license')
     if (!$license.Contains('GNU GENERAL PUBLIC LICENSE') -or !$license.Contains('Version 3, 29 June 2007')) { throw 'The embedded license is missing or incorrect.' }
     $help = Invoke-PackagedCli @('--help')
-    foreach ($operation in @('weave new','weave manage','weave community','weave install')) {
+    foreach ($operation in @('Weave new','Weave manage','Weave community','Weave install')) {
         if (!$help.Contains($operation)) { throw "Packaged CLI help is missing $operation." }
     }
-    if ($help.Contains('weave update')) { throw 'Packaged CLI still advertises the retired update command.' }
+    if ($help.Contains('Weave update')) { throw 'Packaged CLI still advertises the retired update command.' }
     $projects = Join-Path $work 'generated projects'
     New-Item -ItemType Directory -Path $projects | Out-Null
     Invoke-PackagedCli @('new','PackageSmoke',$projects) | Write-Host

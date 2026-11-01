@@ -29,6 +29,8 @@ Each download includes the executable, templates, and resources needed to run We
 
 Open Weave and choose **Install MayaFlux**, then select **Stable** or **Development**. Weave checks your system, installs MayaFlux and its build dependencies, and configures the environment where needed.
 
+**Make the Weave CLI available in new terminals** is selected by default. On Linux, Weave copies the full AppImage to `~/.local/bin/Weave`, or the executable itself when run from a source build. On Windows, it copies the executable to `%USERPROFILE%\.local\bin\Weave.exe`. A later install replaces that copy. On macOS, Weave adds `/Applications/Weave.app/Contents/MacOS` to your shell PATH, so replacing `Weave.app` updates the CLI. Uncheck the option to leave any existing CLI setup untouched. Open a new terminal after installation.
+
 Installation uses winget on Windows, Homebrew on macOS, and your distribution's package manager on supported Linux distributions. Follow any authorization prompts and restart your terminal or Windows if requested. Weave asks before replacing another MayaFlux edition. If installation fails, review the reported error and retry; project operations remain available.
 
 ## Create a project
@@ -79,20 +81,21 @@ See the [community manifest contract](docs/COMMUNITY_MANIFEST.md) for the suppor
 
 ## Command line
 
-The same executable provides a CLI without opening the desktop app. Use its full path if it is not on PATH. For help, run `.\Weave-windows.exe --help` on Windows, `/Applications/Weave.app/Contents/MacOS/weave --help` on macOS, or `./Weave-linux.AppImage --help` on Linux. Use `--license` to read the embedded license.
+The same executable provides a CLI without opening the desktop app. CLI installation is available during MayaFlux setup and can be skipped with `--no-cli` when using `Weave install`. Run `Weave install-cli` to set up CLI access separately. From a source build, use `cargo run -- install-cli`. Use the full executable path if it is not on PATH. For help, run `.\Weave-windows.exe --help` on Windows, `/Applications/Weave.app/Contents/MacOS/Weave --help` on macOS, or `./Weave-linux.AppImage --help` on Linux. Use `--license` to read the embedded license.
 
-Examples below use `weave` as shorthand for that executable:
+Examples below use `Weave` as shorthand for that executable:
 
 ```sh
-weave new AudioDemo /path/to/projects --with-lila
-weave community audio_tools /path/to/modules --description "Audio helpers"
-weave manage /path/to/AudioDemo terrain_field,audio_tools
-weave manage /path/to/AudioDemo --with-lila --copy-shader-sources
-weave manage /path/to/AudioDemo --copy-shader-sources --replace-shader-conflicts
-weave manage /path/to/AudioDemo --validate
-weave manage /path/to/AudioDemo --run-report --configuration Release
-weave install stable
-weave install development --replace-conflict
+Weave new AudioDemo /path/to/projects --with-lila
+Weave community audio_tools /path/to/modules --description "Audio helpers"
+Weave manage /path/to/AudioDemo terrain_field,audio_tools
+Weave manage /path/to/AudioDemo --with-lila --copy-shader-sources
+Weave manage /path/to/AudioDemo --copy-shader-sources --replace-shader-conflicts
+Weave manage /path/to/AudioDemo --validate
+Weave manage /path/to/AudioDemo --run-report --configuration Release
+Weave install stable
+Weave install-cli
+Weave install development --replace-conflict
 ```
 
 ## Diagnostics and bug reports

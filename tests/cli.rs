@@ -204,13 +204,14 @@ fn cli_help_exposes_project_and_install_operations() {
         .unwrap();
     assert!(result.status.success());
     let help = String::from_utf8_lossy(&result.stdout);
-    assert!(help.contains("weave new"));
-    assert!(help.contains("weave manage"));
+    assert!(help.contains("Weave new"));
+    assert!(help.contains("Weave manage"));
     assert!(!help.contains("weave update"));
     assert!(help.contains("--with-lila             Add Lila live-coding integration"));
     assert!(help.contains("--replace-shader-conflicts"));
-    assert!(help.contains("weave community"));
-    assert!(help.contains("weave install <stable|development>"));
+    assert!(help.contains("Weave community"));
+    assert!(help.contains("Weave install <stable|development>"));
+    assert!(!help.contains("  weave "));
 }
 
 #[test]
@@ -231,6 +232,37 @@ fn cli_rejects_invalid_install_channel_without_starting_an_install() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn source_build_can_install_cli_without_reinstalling_mayaflux() {
+    let temporary = TestDirectory::new();
+    let result = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .arg("install-cli")
+        .env_remove("APPIMAGE")
+        .env("HOME", &temporary.0)
+        .env("SHELL", "/bin/bash")
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let installed = temporary.0.join(".local/bin/Weave");
+    assert_eq!(
+        fs::read(&installed).unwrap(),
+        fs::read(env!("CARGO_BIN_EXE_weave")).unwrap()
+    );
+    assert!(
+        Command::new(installed)
+            .arg("--help")
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn cli_installs_on_ubuntu_with_fake_package_tools_only() {
     use std::os::unix::fs::PermissionsExt;
     let temporary = TestDirectory::new();
@@ -238,6 +270,11 @@ fn cli_installs_on_ubuntu_with_fake_package_tools_only() {
     fs::create_dir(&bin).unwrap();
     let log = temporary.0.join("commands.log");
     let state = temporary.0.join("installed");
+    let appimage = temporary.0.join("Weave.AppImage");
+    fs::write(&appimage, b"release one").unwrap();
+    fs::create_dir_all(temporary.0.join(".local/bin")).unwrap();
+    let texlive_cli = temporary.0.join(".local/bin/weave");
+    fs::write(&texlive_cli, b"TeX Live weave").unwrap();
     for (name, script) in [
         ("sudo", "#!/bin/sh\nexec \"$@\"\n"),
         (
@@ -264,6 +301,9 @@ fn cli_installs_on_ubuntu_with_fake_package_tools_only() {
         .env("PATH", &bin)
         .env("WEAVE_TEST_LOG", &log)
         .env("WEAVE_TEST_STATE", &state)
+        .env("APPIMAGE", &appimage)
+        .env("HOME", &temporary.0)
+        .env("SHELL", "/bin/bash")
         .output()
         .unwrap();
     assert!(
@@ -272,9 +312,86 @@ fn cli_installs_on_ubuntu_with_fake_package_tools_only() {
         String::from_utf8_lossy(&result.stderr)
     );
     assert!(String::from_utf8_lossy(&result.stdout).contains("mayaflux installed and verified"));
+    let installed_cli = temporary.0.join(".local/bin/Weave");
+    assert_eq!(fs::read(&installed_cli).unwrap(), b"release one");
+    assert_eq!(fs::read(&texlive_cli).unwrap(), b"TeX Live weave");
+    assert!(
+        fs::read_to_string(temporary.0.join(".bashrc"))
+            .unwrap()
+            .contains("$HOME/.local/bin")
+    );
+    fs::write(&appimage, b"release two").unwrap();
+    let skipped = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args(["install", "stable", "--no-cli"])
+        .env("PATH", &bin)
+        .env("WEAVE_TEST_LOG", &log)
+        .env("WEAVE_TEST_STATE", &state)
+        .env("APPIMAGE", &appimage)
+        .env("HOME", &temporary.0)
+        .env("SHELL", "/bin/bash")
+        .output()
+        .unwrap();
+    assert!(
+        skipped.status.success(),
+        "{}",
+        String::from_utf8_lossy(&skipped.stderr)
+    );
+    assert_eq!(fs::read(&installed_cli).unwrap(), b"release one");
+    let replaced = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args(["install", "stable"])
+        .env("PATH", &bin)
+        .env("WEAVE_TEST_LOG", &log)
+        .env("WEAVE_TEST_STATE", &state)
+        .env("APPIMAGE", &appimage)
+        .env("HOME", &temporary.0)
+        .env("SHELL", "/bin/bash")
+        .output()
+        .unwrap();
+    assert!(
+        replaced.status.success(),
+        "{}",
+        String::from_utf8_lossy(&replaced.stderr)
+    );
+    assert_eq!(fs::read(&installed_cli).unwrap(), b"release two");
+    assert_eq!(fs::read(&texlive_cli).unwrap(), b"TeX Live weave");
+    assert_eq!(
+        fs::read_to_string(temporary.0.join(".bashrc"))
+            .unwrap()
+            .matches("# Weave CLI")
+            .count(),
+        1
+    );
+    let source_build = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args(["install", "stable"])
+        .env("PATH", &bin)
+        .env("WEAVE_TEST_LOG", &log)
+        .env("WEAVE_TEST_STATE", &state)
+        .env_remove("APPIMAGE")
+        .env("HOME", &temporary.0)
+        .env("SHELL", "/bin/bash")
+        .output()
+        .unwrap();
+    assert!(
+        source_build.status.success(),
+        "{}",
+        String::from_utf8_lossy(&source_build.stderr)
+    );
+    assert!(String::from_utf8_lossy(&source_build.stdout).contains("Weave CLI installed at"));
+    assert_eq!(
+        fs::read(&installed_cli).unwrap(),
+        fs::read(env!("CARGO_BIN_EXE_weave")).unwrap()
+    );
+    assert!(
+        Command::new(&installed_cli)
+            .arg("--help")
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
     assert_eq!(
         fs::read_to_string(log).unwrap(),
-        "add-apt-repository -y ppa:mayaflux/mayaflux\napt-get update\napt-get install -y mayaflux\n"
+        "add-apt-repository -y ppa:mayaflux/mayaflux\napt-get update\napt-get install -y mayaflux\n".repeat(4)
     );
 }
 
@@ -301,7 +418,7 @@ fn cli_fedora_requires_conflict_approval_then_removes_and_installs() {
     let run = |replace: bool, fail_step: &str| {
         let mut command = Command::new(env!("CARGO_BIN_EXE_weave"));
         command
-            .args(["install", "stable"])
+            .args(["install", "stable", "--no-cli"])
             .env("PATH", &bin)
             .env("WEAVE_TEST_LOG", &log)
             .env("WEAVE_TEST_STATE", &state)
@@ -361,7 +478,7 @@ fn cli_arch_uses_fresh_checkout_and_cleans_it_after_install() {
         "#!/bin/sh\nprintf 'makepkg %s\\n' \"$*\" >> \"$WEAVE_TEST_LOG\"\n[ -d \"$2\" ] || exit 3\nprintf mayaflux-bin > \"$WEAVE_TEST_STATE\"\n",
     );
     let result = Command::new(env!("CARGO_BIN_EXE_weave"))
-        .args(["install", "stable", "--replace-conflict"])
+        .args(["install", "stable", "--replace-conflict", "--no-cli"])
         .env("PATH", &bin)
         .env("WEAVE_TEST_LOG", &log)
         .env("WEAVE_TEST_STATE", &state)
@@ -426,7 +543,7 @@ fn cli_reports_project_manage_validation_errors_without_network_access() {
         .output()
         .unwrap();
     assert!(!missing.status.success());
-    assert!(String::from_utf8_lossy(&missing.stderr).contains("Usage: weave manage"));
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("Usage: Weave manage"));
 
     let unsafe_name = Command::new(env!("CARGO_BIN_EXE_weave"))
         .args(["manage", temporary.0.to_str().unwrap(), "../escape"])

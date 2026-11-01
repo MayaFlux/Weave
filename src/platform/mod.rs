@@ -3,7 +3,7 @@ use std::path::PathBuf;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
-mod macos;
+pub(crate) mod macos;
 mod validation;
 #[cfg(target_os = "windows")]
 pub(crate) mod windows;

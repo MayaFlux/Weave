@@ -1,3 +1,4 @@
+pub mod cli_access;
 pub mod community;
 pub mod community_manifest;
 pub mod install;

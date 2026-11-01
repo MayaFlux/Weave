@@ -782,7 +782,17 @@ fn configure_shell_environment(brew: &std::path::Path, formula: &str) -> Result<
         return Err("Homebrew returned an empty MayaFlux formula prefix.".to_owned());
     }
 
-    // Resolve ZDOTDIR through a zsh login shell before choosing the target file.
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .ok_or_else(|| "Could not determine the logged-in user's home directory.".to_owned())?;
+    let path = user_zshenv_path(&home);
+    update_shell_environment(&path, &prefix)
+        .map_err(|error| format!("Failed to update {}: {error}", path.display()))
+}
+
+pub(crate) fn user_zshenv_path(home: &std::path::Path) -> PathBuf {
+    // Resolve ZDOTDIR through a zsh login shell so both environment and CLI
+    // setup edit the same startup file.
     let zdotdir = Command::new("/bin/zsh")
         .args(["-lc", "printf %s \"${ZDOTDIR:-}\""])
         .output()
@@ -790,12 +800,7 @@ fn configure_shell_environment(brew: &std::path::Path, formula: &str) -> Result<
         .filter(|output| output.status.success())
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
         .unwrap_or_default();
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .ok_or_else(|| "Could not determine the logged-in user's home directory.".to_owned())?;
-    let path = resolve_zshenv_path(&home, Some(&zdotdir));
-    update_shell_environment(&path, &prefix)
-        .map_err(|error| format!("Failed to update {}: {error}", path.display()))
+    resolve_zshenv_path(home, Some(&zdotdir))
 }
 
 fn resolve_zshenv_path(home: &std::path::Path, zdotdir: Option<&str>) -> PathBuf {

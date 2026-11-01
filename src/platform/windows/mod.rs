@@ -1,7 +1,7 @@
 //! Windows adapters contain only native mechanisms and installation requirements.
 mod authorization;
 mod discovery;
-mod environment;
+pub(crate) mod environment;
 pub(crate) mod filesystem;
 mod install;
 pub(crate) mod process;

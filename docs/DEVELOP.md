@@ -5,6 +5,7 @@ Weave is written in Rust and uses Slint for its GUI. Install the Rust toolchain 
 ## Run and test
 
 ```sh
+rustup toolchain install stable
 cargo run --locked
 cargo run --locked -- --help
 cargo test --locked

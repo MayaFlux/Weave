@@ -133,7 +133,7 @@ fn check_installed_stream(
     }
     if let Some(local) = inspect().map_err(|error| {
         InstallError::Failed(format!(
-            "Cannot determine the installed MayaFlux stream: {error}. Repair the reported metadata and retry, or explicitly replace it with `weave install {} --replace-conflict`.", channel.name()
+            "Cannot determine the installed MayaFlux stream: {error}. Repair the reported metadata and retry, or explicitly replace it with `Weave install {} --replace-conflict`.", channel.name()
         ))
     })? && let Some(installed) = crate::operations::install::release::conflicting_stream(channel, &local) {
         return Err(InstallError::Conflict {

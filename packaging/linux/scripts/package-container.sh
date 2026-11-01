@@ -15,6 +15,7 @@ fi
     -t weave-appimage-builder:ubuntu-26.04 "$ROOT_DIR/packaging/linux"
 
 RUN_OPTIONS=(--rm -v "$ROOT_DIR:/workspace:z" -w /workspace \
+    -e RUSTUP_TOOLCHAIN=1.99.1 \
     -e CARGO_HOME=/workspace/target/packaging/linux/cargo-home \
     -e CARGO_TARGET_DIR=/workspace/target/packaging/linux/cargo-ubuntu26)
 if [[ "$ENGINE" == podman ]]; then

@@ -47,7 +47,7 @@ pub(crate) fn verify_weave_resources(log: &(impl Fn(&str) + Sync)) -> Result<(),
         crate::resources::RESOURCES.len()
     ));
     log(&format!(
-        "The same executable provides the GUI and standalone CLI: {}. Its location is not automatically added to PATH.",
+        "The same executable provides the GUI and standalone CLI: {}. CLI PATH setup follows installation when selected.",
         executable.display()
     ));
     Ok(())

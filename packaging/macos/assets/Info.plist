@@ -5,7 +5,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleExecutable</key>
-    <string>weave</string>
+    <string>Weave</string>
     <key>CFBundleIdentifier</key>
     <string>com.mayaflux.weave</string>
     <key>CFBundleInfoDictionaryVersion</key>

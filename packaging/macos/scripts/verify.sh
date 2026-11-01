@@ -29,8 +29,8 @@ hdiutil verify "$DMG_PATH"
 hdiutil attach "$DMG_PATH" -readonly -nobrowse -mountpoint "$MOUNT_POINT" -quiet
 MOUNTED=1
 APP_BUNDLE="$MOUNT_POINT/Weave.app"
-EXECUTABLE="$APP_BUNDLE/Contents/MacOS/weave"
-CLI="$APP_BUNDLE/Contents/Resources/weave"
+EXECUTABLE="$APP_BUNDLE/Contents/MacOS/Weave"
+CLI="$APP_BUNDLE/Contents/Resources/Weave"
 PLIST="$APP_BUNDLE/Contents/Info.plist"
 
 [[ -d "$APP_BUNDLE" && -x "$EXECUTABLE" && -x "$CLI" ]]
@@ -53,9 +53,9 @@ fi
 # embedded in the executable and the bundle also carries the resource snapshot.
 cd "$TEMP_DIR"
 "$CLI" --help > "$TEMP_DIR/help.txt"
-grep -q 'weave community' "$TEMP_DIR/help.txt"
-grep -q 'weave manage' "$TEMP_DIR/help.txt"
-! grep -q 'weave update' "$TEMP_DIR/help.txt"
+grep -q 'Weave community' "$TEMP_DIR/help.txt"
+grep -q 'Weave manage' "$TEMP_DIR/help.txt"
+! grep -q 'Weave update' "$TEMP_DIR/help.txt"
 "$CLI" community package_smoke "$TEMP_DIR/modules"
 [[ -s "$TEMP_DIR/modules/package_smoke/community.json" ]]
 [[ -s "$TEMP_DIR/modules/package_smoke/CMakeLists.txt" ]]

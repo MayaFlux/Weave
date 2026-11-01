@@ -59,6 +59,7 @@ export component MainWindow inherits Window {
     in-out property <bool> install_retry_replace_confirmed: false;
     in-out property <string> install_password: "";
     in-out property <string> install_channel: "stable";
+    in-out property <bool> install_cli_access: true;
     in-out property <bool> busy: false;
     in-out property <bool> install_progress_open: false;
     in-out property <[InstallationStep]> install_progress_steps;
@@ -187,6 +188,7 @@ export component MainWindow inherits Window {
                 linux_install: root.linux_install;
                 windows_install: root.windows_install;
                 install_channel <=> root.install_channel;
+                install_cli_access <=> root.install_cli_access;
                 back => { root.install_password = ""; root.password_dialog_open = false; root.screen = 0; }
                 install_mayaflux(channel) => { root.install_mayaflux(channel); }
                 prepare_install_mayaflux(channel) => { root.prepare_install_mayaflux(channel); }

@@ -40,6 +40,23 @@ pub fn run_cli(arguments: &[String]) -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    if arguments[0] == "install-cli" {
+        if arguments.len() != 1 {
+            eprintln!("Usage: Weave install-cli");
+            return ExitCode::FAILURE;
+        }
+        return match crate::operations::cli_access::install() {
+            Ok(message) => {
+                println!("{message}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("[Weave ERROR] {error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+
     if arguments[0] == "install" {
         return match run_install(&arguments[1..]) {
             Ok(message) => {
@@ -103,11 +120,13 @@ pub fn run_cli(arguments: &[String]) -> ExitCode {
 fn run_install(arguments: &[String]) -> Result<String, String> {
     let mut channel = None;
     let mut replace_conflict = false;
+    let mut install_cli_access = true;
     #[cfg(target_os = "windows")]
     let mut install_pipe = None;
     for argument in arguments {
         match argument.as_str() {
             "--replace-conflict" => replace_conflict = true,
+            "--no-cli" => install_cli_access = false,
             #[cfg(target_os = "windows")]
             value if value.starts_with("--windows-install-pipe=") => {
                 install_pipe = value.strip_prefix("--windows-install-pipe=")
@@ -118,7 +137,7 @@ fn run_install(arguments: &[String]) -> Result<String, String> {
         }
     }
     let channel = channel.ok_or_else(|| {
-        "Usage: weave install <stable|development> [--replace-conflict]".to_owned()
+        "Usage: Weave install <stable|development> [--replace-conflict] [--no-cli]".to_owned()
     })?;
     #[cfg(target_os = "windows")]
     if let Some(pipe) = install_pipe {
@@ -127,8 +146,18 @@ fn run_install(arguments: &[String]) -> Result<String, String> {
         })
         .map_err(|error| error.to_string());
     }
-    install::install_mayaflux(channel, replace_conflict, None, |line| println!("{line}"))
-        .map_err(|error| error.to_string())
+    let message =
+        install::install_mayaflux(channel, replace_conflict, None, |line| println!("{line}"))
+            .map_err(|error| error.to_string())?;
+    if install_cli_access {
+        match crate::operations::cli_access::install() {
+            Ok(line) => println!("{line}"),
+            Err(error) => eprintln!(
+                "[Weave WARNING] MayaFlux was installed, but CLI setup needs attention: {error}"
+            ),
+        }
+    }
+    Ok(message)
 }
 
 fn run_new(arguments: &[String]) -> Result<ProjectCreationResult, String> {
@@ -149,7 +178,7 @@ fn run_new(arguments: &[String]) -> Result<ProjectCreationResult, String> {
     }
 
     let name = name.ok_or_else(|| {
-        "Project name required: weave new <name> [destination] [options]".to_owned()
+        "Project name required: Weave new <name> [destination] [options]".to_owned()
     })?;
     let destination = match destination {
         Some(path) => Path::new(path).to_path_buf(),
@@ -160,7 +189,7 @@ fn run_new(arguments: &[String]) -> Result<ProjectCreationResult, String> {
 
 fn run_manage(arguments: &[String]) -> Result<(), String> {
     let Some(project_path) = arguments.first() else {
-        return Err("Usage: weave manage <project-dir> [module-name,...] [options]".to_owned());
+        return Err("Usage: Weave manage <project-dir> [module-name,...] [options]".to_owned());
     };
     let mut module_names = Vec::new();
     let mut with_lila = false;
@@ -219,7 +248,7 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
         return Err("Run-report options require --run-report.".to_owned());
     }
     if module_names.is_empty() && !with_lila && !copy_shader_sources && !validate && !run_report {
-        return Err("Usage: weave manage <project-dir> [module-name,...] [options]".to_owned());
+        return Err("Usage: Weave manage <project-dir> [module-name,...] [options]".to_owned());
     }
     if with_lila || copy_shader_sources {
         for message in apply_project_options(
@@ -250,7 +279,7 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
         })
         .map_err(|error| format!("Project validation could not run: {error}"))?;
         if result.findings {
-            return Err("Project validation completed with findings. Review the [FIX] entries above, then run `weave manage <project-dir> --validate` again.".to_owned());
+            return Err("Project validation completed with findings. Review the [FIX] entries above, then run `Weave manage <project-dir> --validate` again.".to_owned());
         }
     }
     if run_report {
@@ -304,7 +333,7 @@ fn run_community(arguments: &[String]) -> Result<CommunityCreationResult, String
         }
     }
     let name = name.ok_or_else(|| {
-        "Module name required: weave community <module-name> [destination-dir] [options]".to_owned()
+        "Module name required: Weave community <module-name> [destination-dir] [options]".to_owned()
     })?;
     let destination = match destination {
         Some(path) => Path::new(path).to_path_buf(),
@@ -318,7 +347,7 @@ fn print_usage() {
 }
 
 fn usage_text() -> &'static str {
-    "Weave: MayaFlux project tool\n\nUsage:\n  weave                 Open the Projects screen\n  weave new <name> [destination] [options]\n  weave manage <project-dir> [module-name,...] [options]\n  weave community <module-name> [destination-dir] [options]\n  weave install <stable|development> [--replace-conflict]\n  weave --help\n  weave --license         Show the embedded license\n  weave --package-info    Show build and package metadata\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n\nOptions for 'manage':\n  --with-lila             Add Lila live-coding integration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n  --replace-shader-conflicts Replace same-path project shader files\n  --validate              Run the project's validation script\n  --run-report            Run a built project and collect diagnostics\n  --configuration <name>  Select a build configuration for --run-report\n  --executable <path>     Select a custom project executable for --run-report\n  --mayaflux-root <path>  Select MayaFlux for --run-report\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila"
+    "Weave: MayaFlux project tool\n\nUsage:\n  Weave                 Open the Projects screen\n  Weave new <name> [destination] [options]\n  Weave manage <project-dir> [module-name,...] [options]\n  Weave community <module-name> [destination-dir] [options]\n  Weave install <stable|development> [--replace-conflict] [--no-cli]\n  Weave install-cli         Make the CLI available without installing MayaFlux\n  Weave --help\n  Weave --license         Show the embedded license\n  Weave --package-info    Show build and package metadata\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n\nOptions for 'manage':\n  --with-lila             Add Lila live-coding integration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n  --replace-shader-conflicts Replace same-path project shader files\n  --validate              Run the project's validation script\n  --run-report            Run a built project and collect diagnostics\n  --configuration <name>  Select a build configuration for --run-report\n  --executable <path>     Select a custom project executable for --run-report\n  --mayaflux-root <path>  Select MayaFlux for --run-report\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila"
 }
 
 #[cfg(test)]
@@ -328,11 +357,11 @@ mod tests {
     #[test]
     fn usage_advertises_manage_instead_of_update() {
         let usage = usage_text();
-        assert!(usage.contains("weave manage <project-dir> [module-name,...] [options]"));
+        assert!(usage.contains("Weave manage <project-dir> [module-name,...] [options]"));
         assert!(usage.contains("--validate              Run the project's validation script"));
         assert!(
             usage.contains("--run-report            Run a built project and collect diagnostics")
         );
-        assert!(!usage.contains("weave update"));
+        assert!(!usage.contains("Weave update"));
     }
 }

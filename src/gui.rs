@@ -437,6 +437,7 @@ fn start_mayaflux_install(window: &MainWindow, channel: String, replace_conflict
     window.set_install_replace_confirmed(false);
     window.set_busy(true);
     window.set_install_channel(channel.clone().into());
+    let install_cli_access = window.get_install_cli_access();
     window.set_result_open(false);
     window.set_install_failed(false);
     window.set_install_selected_page(0);
@@ -473,6 +474,26 @@ fn start_mayaflux_install(window: &MainWindow, channel: String, replace_conflict
         unsafe {
             password.as_mut_vec().fill(0);
         }
+        let result = result.map(|message| {
+            if !install_cli_access {
+                return message;
+            }
+            let cli_message = match crate::operations::cli_access::install() {
+                Ok(message) => message,
+                Err(error) => format!("Weave CLI setup needs attention: {error}"),
+            };
+            let log_progress = progress.clone();
+            let log_weak = weak.clone();
+            let line = cli_message.clone();
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(window) = log_weak.upgrade() {
+                    let mut progress = log_progress.lock().unwrap();
+                    progress.receive(Event::Output(line));
+                    sync_install_progress(&window, &progress);
+                }
+            });
+            format!("{message}\n\n{cli_message}")
+        });
         match result {
             Err(install::InstallError::Conflict { installed_formula }) => {
                 let _ = slint::invoke_from_event_loop(move || {
@@ -903,6 +924,7 @@ mod tests {
         set_platform(Box::new(HeadlessPlatform)).unwrap();
         let window = MainWindow::new().unwrap();
         assert!(!window.get_update_available());
+        assert!(window.get_install_cli_access());
 
         let directory = std::env::temp_dir().join(format!(
             "weave-gui-update-{}",

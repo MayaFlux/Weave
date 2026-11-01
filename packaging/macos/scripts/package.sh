@@ -36,14 +36,14 @@ if [[ ! -x "$BINARY" ]]; then
     echo "Expected executable was not produced: $BINARY" >&2
     exit 1
 fi
-cp "$BINARY" "$APP_BUNDLE/Contents/MacOS/weave"
+cp "$BINARY" "$APP_BUNDLE/Contents/MacOS/Weave"
 cp "$ROOT_DIR/packaging/macos/assets/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$APP_BUNDLE/Contents/Info.plist"
 printf 'APPL????' > "$APP_BUNDLE/Contents/PkgInfo"
 
 # The same self-contained executable provides the GUI and the standalone CLI.
-ln -s ../MacOS/weave "$APP_BUNDLE/Contents/Resources/weave"
+ln -s ../MacOS/Weave "$APP_BUNDLE/Contents/Resources/Weave"
 bash "$ROOT_DIR/packaging/scripts/stage-resources.sh" "$APP_BUNDLE/Contents/Resources"
 cp "$ROOT_DIR/LICENSE.txt" "$APP_BUNDLE/Contents/Resources/LICENSE.txt"
 cp "$ROOT_DIR/resources/icons/weave.icns" "$APP_BUNDLE/Contents/Resources/weave.icns"

@@ -53,7 +53,9 @@ run_package_case() {
     mkdir -p "$case_dir/projects" "$shims" "$module_fixture/src" \
         "$mayaflux_root/lib/cmake/MayaFlux"
     "$launcher" --help > "$case_dir/help.txt"
-    grep -q 'weave community' "$case_dir/help.txt" || fail "$case_name CLI help failed"
+    grep -q 'Weave community' "$case_dir/help.txt" || fail "$case_name CLI help failed"
+    grep -q -- '--no-cli' "$case_dir/help.txt" || fail "$case_name is missing CLI opt-out support"
+    grep -q 'Weave install-cli' "$case_dir/help.txt" || fail "$case_name is missing CLI setup command"
     "$launcher" new PackageSmoke "$case_dir/projects"
     [[ -s "$project/CMakeLists.txt" && -s "$project/src/main.cpp" ]] \
         || fail "$case_name project creation or templates failed"
@@ -145,7 +147,7 @@ run_package_case "$APPDIR/AppRun" extracted
 # the device can be inaccessible. Probe the actual runtime in either case.
 # Extraction above is only a package inspection technique.
 if "$IMAGE" --help > "$TEMP_DIR/image-launch.txt" 2>&1; then
-    grep -q 'weave community' "$TEMP_DIR/image-launch.txt" || fail "actual AppImage CLI output was wrong"
+    grep -q 'Weave community' "$TEMP_DIR/image-launch.txt" || fail "actual AppImage CLI output was wrong"
     run_package_case "$IMAGE" mounted
     MOUNTED_CLI=1
     echo "Mounted AppImage CLI creation, module addition, validation, run/report, and host-tool discovery passed."
