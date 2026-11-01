@@ -14,6 +14,7 @@ use crate::operations::project_run_report::{
 };
 use crate::operations::project_validation::{ValidationResult, validate_project};
 use crate::operations::update;
+use crate::operations::weave_release;
 use slint::{ComponentHandle, Model};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,6 +22,7 @@ use std::sync::{Arc, Mutex};
 
 pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
     let window = MainWindow::new()?;
+    window.set_weave_version(env!("CARGO_PKG_VERSION").into());
     let destination = default_gui_destination().display().to_string();
     window.set_install_available(true);
     #[cfg(target_os = "windows")]
@@ -28,6 +30,35 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(target_os = "linux")]
     window.set_linux_install(true);
     window.set_destination(destination.into());
+
+    let weak_window_for_update = window.as_weak();
+    std::thread::spawn(move || {
+        if let Some(notice) = weave_release::check_on_startup(env!("CARGO_PKG_VERSION")) {
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(window) = weak_window_for_update.upgrade() {
+                    show_update_notice(&window, notice);
+                }
+            });
+        }
+    });
+
+    let weak_window_for_view_update = window.as_weak();
+    window.on_view_update(move || {
+        if let Some(window) = weak_window_for_view_update.upgrade() {
+            let url = window.get_update_url().to_string();
+            std::thread::spawn(move || {
+                let _ = webbrowser::open(&url);
+            });
+        }
+    });
+    let weak_window_for_dismiss_update = window.as_weak();
+    window.on_dismiss_update(move || {
+        if let Some(window) = weak_window_for_dismiss_update.upgrade() {
+            let version = window.get_update_version().to_string();
+            window.set_update_available(false);
+            weave_release::dismiss(&version);
+        }
+    });
 
     let weak_window = window.as_weak();
     let active_project_operation: Arc<Mutex<Option<Arc<AtomicBool>>>> = Arc::new(Mutex::new(None));
@@ -374,6 +405,12 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
 
     window.run()?;
     Ok(())
+}
+
+fn show_update_notice(window: &MainWindow, notice: weave_release::ReleaseNotice) {
+    window.set_update_version(notice.version.into());
+    window.set_update_url(notice.url.into());
+    window.set_update_available(true);
 }
 
 fn start_mayaflux_install(window: &MainWindow, channel: String, replace_conflict: bool) {
@@ -844,8 +881,51 @@ fn default_gui_destination() -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
     use super::project_creation_outcome;
+    use super::show_update_notice;
+    use crate::MainWindow;
     use crate::operations::project::{ProjectCreationResult, ProjectOptions, create_project};
+    use crate::operations::weave_release;
+    use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
+    use slint::platform::{Platform, PlatformError, WindowAdapter, set_platform};
     use std::path::{Path, PathBuf};
+    use std::rc::Rc;
+
+    struct HeadlessPlatform;
+
+    impl Platform for HeadlessPlatform {
+        fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, PlatformError> {
+            Ok(MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer))
+        }
+    }
+
+    #[test]
+    fn fake_release_turns_on_the_gui_update_banner() {
+        set_platform(Box::new(HeadlessPlatform)).unwrap();
+        let window = MainWindow::new().unwrap();
+        assert!(!window.get_update_available());
+
+        let directory = std::env::temp_dir().join(format!(
+            "weave-gui-update-{}",
+            crate::filesystem::unique_id()
+        ));
+        let state_path = directory.join("update-check.json");
+
+        let release = serde_json::json!({
+            "tag_name": "v0.7.0", "draft": false, "prerelease": false,
+            "html_url": "https://github.com/MayaFlux/Weave/releases/tag/v0.7.0"
+        });
+        let notice =
+            weave_release::check_with(&state_path, 1_000_000, "0.6.0", || Some(release)).unwrap();
+        show_update_notice(&window, notice);
+
+        assert!(window.get_update_available());
+        assert_eq!(window.get_update_version().as_str(), "0.7.0");
+        assert_eq!(
+            window.get_update_url().as_str(),
+            "https://github.com/MayaFlux/Weave/releases/tag/v0.7.0"
+        );
+        std::fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn project_creation_outcome_returns_to_projects_only_after_success() {

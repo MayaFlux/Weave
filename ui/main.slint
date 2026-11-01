@@ -12,6 +12,7 @@ import { ConfirmationDialog } from "./dialogs/confirmation_dialog.slint";
 import { ShaderConflictDialog } from "./dialogs/shader_conflict_dialog.slint";
 import { PasswordDialog } from "./dialogs/password_dialog.slint";
 import { InstallDialog, InstallationStep } from "./dialogs/install_dialog.slint";
+import { AppButton } from "./components/mod.slint";
 
 export component MainWindow inherits Window {
     title: "Weave";
@@ -73,6 +74,12 @@ export component MainWindow inherits Window {
     in-out property <bool> with_lila: false;
     in-out property <bool> with_vscode: true;
     in-out property <bool> copy_shader_sources: false;
+    in property <string> weave_version;
+    in-out property <string> update_version: "";
+    in-out property <string> update_url: "";
+    in-out property <bool> update_available: false;
+    callback view_update();
+    callback dismiss_update();
     callback choose_destination();
     callback create_project();
     callback create_community_module();
@@ -110,7 +117,26 @@ export component MainWindow inherits Window {
                     Text { text: "WEAVE  /  MAYAFLUX TOOLCHAIN"; color: WeaveTheme.text-primary; font-size: WeaveTheme.font-body; font-weight: 650; }
                 }
                 Rectangle { horizontal-stretch: 1; background: transparent; }
-                Text { text: "0.6"; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; vertical-alignment: center; }
+                Text { text: root.weave_version; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; vertical-alignment: center; }
+            }
+            if root.update_available: Rectangle {
+                height: 82px;
+                border-radius: 6px;
+                border-width: 1px;
+                border-color: WeaveTheme.action-accent;
+                background: WeaveTheme.panel-background;
+                HorizontalBox {
+                    padding: 14px;
+                    spacing: 12px;
+                    VerticalBox {
+                        horizontal-stretch: 1;
+                        spacing: 4px;
+                        Text { text: "Weave " + root.update_version + " is available"; color: WeaveTheme.text-primary; font-size: WeaveTheme.font-body; font-weight: 650; }
+                        Text { text: "A new stable release is ready to download."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-small; }
+                    }
+                    AppButton { text: "View release"; primary: true; clicked => { root.view_update(); } }
+                    AppButton { text: "Dismiss"; clicked => { root.dismiss_update(); } }
+                }
             }
             if root.screen == 0: LandingScreen {
                 install_available: root.install_available;

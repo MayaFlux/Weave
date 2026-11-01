@@ -6,3 +6,4 @@ pub mod project_options;
 pub mod project_run_report;
 pub mod project_validation;
 pub mod update;
+pub mod weave_release;
