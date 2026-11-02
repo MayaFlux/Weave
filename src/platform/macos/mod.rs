@@ -41,8 +41,8 @@ fn brew_candidates() -> Vec<PathBuf> {
 #[cfg(test)]
 mod install_tests {
     use super::{
-        formula_for_channel, install_formula_with_brew, resolve_zshenv_path, run_brew_with_log,
-        update_shell_environment,
+        formula_for_channel, install_formula_with_brew, install_formula_with_brew_at,
+        resolve_zshenv_path, run_brew_with_log, update_shell_environment,
     };
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
@@ -407,6 +407,75 @@ mod install_tests {
     }
 
     #[test]
+    fn installed_development_formula_reinstalls_when_stale_or_timestamp_is_untrustworthy() {
+        for (timestamp, expected_command) in [
+            (
+                "2026-10-12 12:00:00 UTC",
+                "reinstall mayaflux/mayaflux/mayaflux-dev",
+            ),
+            ("2026-10-13 11:00:00 UTC", ""),
+            (
+                "2026-10-14 12:00:00 UTC",
+                "reinstall mayaflux/mayaflux/mayaflux-dev",
+            ),
+            ("invalid", "reinstall mayaflux/mayaflux/mayaflux-dev"),
+        ] {
+            let (root, brew, log) = fake_installed_development_brew(timestamp);
+            install_formula_with_brew_at(
+                &brew,
+                "mayaflux-dev",
+                false,
+                &|_| {},
+                |_, _| Ok(()),
+                1_791_892_800,
+            )
+            .unwrap();
+            let commands = fs::read_to_string(log).unwrap();
+            let commands: Vec<_> = commands.lines().collect();
+            assert_eq!(
+                commands.contains(&"reinstall mayaflux/mayaflux/mayaflux-dev"),
+                !expected_command.is_empty()
+            );
+            assert!(!commands.contains(&"install mayaflux/mayaflux/mayaflux-dev"));
+            if !expected_command.is_empty() {
+                assert!(commands.contains(&expected_command));
+            }
+            let _ = fs::remove_dir_all(root);
+        }
+    }
+
+    fn fake_installed_development_brew(timestamp: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let root = temp_dir();
+        let state = root.join("state");
+        let prefix = root.join("prefix");
+        fs::create_dir_all(state.as_path()).unwrap();
+        fs::write(state.join("mayaflux-dev"), "installed").unwrap();
+        fs::create_dir_all(prefix.join("share/MayaFlux")).unwrap();
+        fs::write(
+            prefix.join("share/MayaFlux/.version"),
+            format!(r#"{{"version":"0.5.0","build_time":"{timestamp}"}}"#),
+        )
+        .unwrap();
+        fs::write(prefix.join("env.sh"), "# installed formula environment\n").unwrap();
+        let log = root.join("commands.log");
+        let brew = root.join("brew");
+        fs::write(
+            &brew,
+            format!(
+                "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\ncase \"$1:$2\" in\n  list:--formula) test -f '{}/'$3 ;;\n  --prefix:*) echo '{}' ;;\n  install:*) exit 0 ;;\n  reinstall:*) exit 0 ;;\nesac\n",
+                log.display(),
+                state.display(),
+                prefix.display()
+            ),
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&brew).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&brew, permissions).unwrap();
+        (root, brew, log)
+    }
+
+    #[test]
     fn failed_install_after_replacement_reports_how_to_restore_previous_edition() {
         let (root, brew, log) = fake_brew(true, true);
         let error =
@@ -535,6 +604,24 @@ fn install_formula_with_brew(
     log: &(impl Fn(&str) + Sync),
     configure_environment: impl FnOnce(&std::path::Path, &str) -> Result<(), String>,
 ) -> Result<String, crate::operations::install::InstallError> {
+    install_formula_with_brew_at(
+        brew,
+        formula,
+        replace_conflict,
+        log,
+        configure_environment,
+        unix_time_now(),
+    )
+}
+
+fn install_formula_with_brew_at(
+    brew: &std::path::Path,
+    formula: &str,
+    replace_conflict: bool,
+    log: &(impl Fn(&str) + Sync),
+    configure_environment: impl FnOnce(&std::path::Path, &str) -> Result<(), String>,
+    now: u64,
+) -> Result<String, crate::operations::install::InstallError> {
     Stage::Framework.report(
         "Installing and verifying the selected Homebrew formula and its dependencies…",
         log,
@@ -570,16 +657,31 @@ fn install_formula_with_brew(
         log("No conflicting MayaFlux formula is installed.");
     }
 
+    let installed_development =
+        formula == "mayaflux-dev" && brew_formula_installed(brew, formula, log);
+    let fresh_development =
+        installed_development && development_formula_payload_is_fresh(brew, formula, now, log);
     let full_formula = format!("mayaflux/mayaflux/{formula}");
-    log(&format!("Installing {full_formula} with Homebrew…"));
-    run_brew_with_log(brew, &["install", &full_formula], log).map_err(|error| {
+    if fresh_development {
+        log(
+            "The installed development formula is fresh and its required payload files are present; skipping Homebrew reinstall.",
+        );
+    } else {
+        let action = if installed_development {
+            "reinstall"
+        } else {
+            "install"
+        };
+        log(&format!("{action} {full_formula} with Homebrew…"));
+        run_brew_with_log(brew, &[action, &full_formula], log).map_err(|error| {
         let recovery = if removed_conflict {
             format!(" The previous edition was removed; restore it with `{} install mayaflux/mayaflux/{conflicting}` or retry this install.", brew.display())
         } else {
             String::new()
         };
-        crate::operations::install::InstallError::Failed(format!("Homebrew could not install {formula}: {error}\nCheck network access and retry.{recovery}"))
-    })?;
+        crate::operations::install::InstallError::Failed(format!("Homebrew could not {action} {formula}: {error}\nCheck network access and retry.{recovery}"))
+        })?;
+    }
     log("Verifying the installed formula…");
     if !brew_formula_installed(brew, formula, log) {
         return Err(crate::operations::install::InstallError::Failed(format!(
@@ -596,6 +698,75 @@ fn install_formula_with_brew(
     Ok(format!(
         "{formula} installed and verified with Homebrew. Your zsh environment is configured."
     ))
+}
+
+fn development_formula_payload_is_fresh(
+    brew: &std::path::Path,
+    formula: &str,
+    now: u64,
+    log: &(impl Fn(&str) + Sync),
+) -> bool {
+    let prefix = match Command::new(brew).args(["--prefix", formula]).output() {
+        Ok(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        }
+        Ok(output) => {
+            log(&format!(
+                "Could not determine the installed {formula} prefix ({}); reinstalling.",
+                output.status
+            ));
+            return false;
+        }
+        Err(error) => {
+            log(&format!(
+                "Could not query the installed {formula} prefix ({error}); reinstalling."
+            ));
+            return false;
+        }
+    };
+    if prefix.is_empty() {
+        log(&format!(
+            "Homebrew returned an empty {formula} prefix; reinstalling."
+        ));
+        return false;
+    }
+    let prefix = PathBuf::from(prefix);
+    let version_path = prefix.join("share/MayaFlux/.version");
+    let metadata: serde_json::Value = match fs::read(&version_path)
+        .map_err(|error| error.to_string())
+        .and_then(|bytes| serde_json::from_slice(&bytes).map_err(|error| error.to_string()))
+    {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            log(&format!(
+                "Could not read MayaFlux build metadata at {} ({error}); reinstalling.",
+                version_path.display()
+            ));
+            return false;
+        }
+    };
+    let payload_files = [prefix.join("env.sh"), version_path];
+    if let Some(missing) = payload_files.iter().find(|path| !path.is_file()) {
+        log(&format!(
+            "Installed MayaFlux payload is incomplete at {}; reinstalling.",
+            missing.display()
+        ));
+        return false;
+    }
+    crate::operations::install::release::development_build_is_fresh(
+        metadata
+            .get("build_time")
+            .and_then(serde_json::Value::as_str),
+        now,
+        log,
+    )
+}
+
+fn unix_time_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
 }
 
 fn find_brew() -> Option<PathBuf> {

@@ -263,16 +263,21 @@ pub(crate) fn is_current(
     if channel == Channel::Stable {
         return true;
     }
-    let Some(build) = local
-        .get("build_time")
-        .and_then(Value::as_str)
-        .and_then(utc_timestamp)
-    else {
-        log("Development build_time is missing or invalid; downloading the selected release.");
+    development_build_is_fresh(local.get("build_time").and_then(Value::as_str), now, log)
+}
+
+/// Apply the shared strict 24-hour freshness policy to a MayaFlux build timestamp.
+pub(crate) fn development_build_is_fresh(
+    build_time: Option<&str>,
+    now: u64,
+    log: &impl Fn(&str),
+) -> bool {
+    let Some(build) = build_time.and_then(utc_timestamp) else {
+        log("Development build_time is missing or invalid; refreshing MayaFlux.");
         return false;
     };
     let Some(age) = now.checked_sub(build) else {
-        log("Development build_time is in the future; downloading the selected release.");
+        log("Development build_time is in the future; refreshing MayaFlux.");
         return false;
     };
     log(&format!(
@@ -283,7 +288,7 @@ pub(crate) fn is_current(
         log("Development build is fresh; verifying the existing payload.");
         true
     } else {
-        log("Development build is stale; updating MayaFlux.");
+        log("Development build is stale; refreshing MayaFlux.");
         false
     }
 }
@@ -342,6 +347,23 @@ fn utc_timestamp(text: &str) -> Option<u64> {
 #[cfg(test)]
 mod target_tests {
     use super::*;
+    #[test]
+    fn development_freshness_policy_is_shared_at_the_strict_24_hour_boundary() {
+        for (timestamp, expected) in [
+            (Some("2026-10-12 12:00:01 UTC"), true),
+            (Some("2026-10-12 12:00:00 UTC"), false),
+            (Some("2026-10-14 12:00:00 UTC"), false),
+            (Some("invalid"), false),
+            (None, false),
+        ] {
+            assert_eq!(
+                development_build_is_fresh(timestamp, 1_791_892_800, &|_| {}),
+                expected,
+                "{timestamp:?}"
+            );
+        }
+    }
+
     #[test]
     fn installed_development_release_keeps_its_stream_when_payload_version_has_no_suffix() {
         let temporary = filesystem::Temporary::create().unwrap();
