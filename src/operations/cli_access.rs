@@ -143,7 +143,7 @@ fn replace_cli_file(source: &Path, destination: &Path) -> io::Result<()> {
     result
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, test))]
 fn add_shell_path(original: &str, directory: &str) -> String {
     if original.contains("# Weave CLI\n") || original.contains(&format!("{directory}:$PATH")) {
         return original.to_owned();
