@@ -215,6 +215,56 @@ fn cli_help_exposes_project_and_install_operations() {
 }
 
 #[test]
+fn manage_refresh_lists_differences_and_skips_selected_file() {
+    let temporary = TestDirectory::new();
+    let binary = env!("CARGO_BIN_EXE_weave");
+    let created = Command::new(binary)
+        .args(["new", "RefreshDemo"])
+        .arg(&temporary.0)
+        .output()
+        .unwrap();
+    assert!(
+        created.status.success(),
+        "{}",
+        String::from_utf8_lossy(&created.stderr)
+    );
+    let project = temporary.0.join("RefreshDemo");
+    fs::write(project.join("src/main.cpp"), "custom main").unwrap();
+    fs::remove_file(project.join("CMakePresets.json")).unwrap();
+    let preview = Command::new(binary)
+        .arg("manage")
+        .arg(&project)
+        .arg("--refresh")
+        .output()
+        .unwrap();
+    assert!(
+        preview.status.success(),
+        "{}",
+        String::from_utf8_lossy(&preview.stderr)
+    );
+    let listing = String::from_utf8_lossy(&preview.stdout);
+    assert!(listing.contains("Changed: src/main.cpp"));
+    assert!(listing.contains("Missing: CMakePresets.json"));
+    assert!(!listing.contains("community.cmake"));
+    let applied = Command::new(binary)
+        .arg("manage")
+        .arg(&project)
+        .args(["--refresh-apply", "--refresh-skip", "src/main.cpp"])
+        .output()
+        .unwrap();
+    assert!(
+        applied.status.success(),
+        "{}",
+        String::from_utf8_lossy(&applied.stderr)
+    );
+    assert!(project.join("CMakePresets.json").is_file());
+    assert_eq!(
+        fs::read(project.join("src/main.cpp")).unwrap(),
+        b"custom main"
+    );
+}
+
+#[test]
 fn cli_rejects_invalid_install_channel_without_starting_an_install() {
     let result = Command::new(env!("CARGO_BIN_EXE_weave"))
         .args(["install", "nightly"])

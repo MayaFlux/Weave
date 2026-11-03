@@ -1,4 +1,3 @@
-use crate::MainWindow;
 use crate::operations::community::{CommunityModuleOptions, create_community_module};
 use crate::operations::install;
 use crate::operations::install::progress::{Event, Platform, Progress, Status};
@@ -9,12 +8,14 @@ use crate::operations::project_options::{
     FeatureStatus, ProjectOptionError, ShaderConflictPolicy, apply_project_options,
     inspect_project_options,
 };
+use crate::operations::project_refresh::{self, Difference, RefreshPreview};
 use crate::operations::project_run_report::{
     RunReportOptions, RunReportResult, run_project_report,
 };
 use crate::operations::project_validation::{ValidationResult, validate_project};
 use crate::operations::update;
 use crate::operations::weave_release;
+use crate::{MainWindow, RefreshChoice};
 use slint::{ComponentHandle, Model};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -62,6 +63,7 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
 
     let weak_window = window.as_weak();
     let active_project_operation: Arc<Mutex<Option<Arc<AtomicBool>>>> = Arc::new(Mutex::new(None));
+    let pending_refresh: Arc<Mutex<Option<RefreshPreview>>> = Arc::new(Mutex::new(None));
     let weak_window_for_picker = window.as_weak();
     window.on_choose_destination(move || {
         let Some(window) = weak_window_for_picker.upgrade() else {
@@ -78,11 +80,14 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let weak_window_for_manage_picker = window.as_weak();
+    let refresh_for_manage_picker = pending_refresh.clone();
     window.on_choose_manage_project(move || {
         let Some(window) = weak_window_for_manage_picker.upgrade() else {
             return;
         };
         if let Some(project_path) = rfd::FileDialog::new().pick_folder() {
+            *refresh_for_manage_picker.lock().unwrap() = None;
+            window.set_refresh_dialog_open(false);
             window.set_managed_project_path(project_path.display().to_string().into());
             window.set_screen(3);
             window.set_add_lila_option(false);
@@ -256,6 +261,123 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
             return;
         };
         start_project_option_application(&window, ShaderConflictPolicy::Reject);
+    });
+
+    let weak_window_for_refresh = window.as_weak();
+    let refresh_for_preview = pending_refresh.clone();
+    window.on_preview_project_refresh(move || {
+        let Some(window) = weak_window_for_refresh.upgrade() else {
+            return;
+        };
+        if window.get_busy() {
+            return;
+        }
+        let project = window.get_managed_project_path().to_string();
+        window.set_busy(true);
+        let weak = window.as_weak();
+        let pending = refresh_for_preview.clone();
+        std::thread::spawn(move || {
+            let result = project_refresh::preview(Path::new(&project));
+            let _ = slint::invoke_from_event_loop(move || {
+                let Some(window) = weak.upgrade() else {
+                    return;
+                };
+                window.set_busy(false);
+                match result {
+                    Ok(preview) if preview.files.is_empty() => {
+                        publish_result(
+                            &window,
+                            0,
+                            "Project files are current",
+                            "All refreshable files already match the current Weave templates."
+                                .to_owned(),
+                        );
+                    }
+                    Ok(preview) => {
+                        let choices = preview
+                            .files
+                            .iter()
+                            .map(|file| RefreshChoice {
+                                path: file.relative.display().to_string().into(),
+                                status: match file.difference {
+                                    Difference::Missing => "missing",
+                                    Difference::Changed => "will replace",
+                                }
+                                .into(),
+                                selected: true,
+                            })
+                            .collect::<Vec<_>>();
+                        *pending.lock().unwrap() = Some(preview);
+                        window.set_refresh_files(
+                            std::rc::Rc::new(slint::VecModel::from(choices)).into(),
+                        );
+                        window.set_refresh_dialog_open(true);
+                    }
+                    Err(error) => {
+                        publish_result(&window, 2, "Could not compare project files", error)
+                    }
+                }
+            });
+        });
+    });
+
+    let weak_window_for_refresh_toggle = window.as_weak();
+    window.on_toggle_refresh_file(move |index| {
+        let Some(window) = weak_window_for_refresh_toggle.upgrade() else {
+            return;
+        };
+        let model = window.get_refresh_files();
+        if let Some(mut row) = model.row_data(index as usize) {
+            row.selected = !row.selected;
+            model.set_row_data(index as usize, row);
+        }
+    });
+
+    let weak_window_for_refresh_apply = window.as_weak();
+    let refresh_for_apply = pending_refresh.clone();
+    window.on_apply_project_refresh(move || {
+        let Some(window) = weak_window_for_refresh_apply.upgrade() else {
+            return;
+        };
+        if window.get_busy() {
+            return;
+        }
+        let model = window.get_refresh_files();
+        let selected = (0..model.row_count())
+            .filter_map(|index| model.row_data(index))
+            .filter(|row| row.selected)
+            .map(|row| PathBuf::from(row.path.as_str()))
+            .collect::<Vec<_>>();
+        let Some(preview) = refresh_for_apply.lock().unwrap().clone() else {
+            return;
+        };
+        window.set_refresh_dialog_open(false);
+        if selected.is_empty() {
+            return;
+        }
+        window.set_busy(true);
+        let weak = window.as_weak();
+        std::thread::spawn(move || {
+            let result = project_refresh::apply(&preview, &selected);
+            let _ = slint::invoke_from_event_loop(move || {
+                let Some(window) = weak.upgrade() else {
+                    return;
+                };
+                window.set_busy(false);
+                match result {
+                    Ok(result) => {
+                        let mut message = format!("Refreshed {} project file(s).", result.replaced);
+                        if let Some(backup) = result.backup {
+                            message.push_str(&format!("\nOriginal files: {}", backup.display()));
+                        }
+                        publish_result(&window, 0, "Project files refreshed", message);
+                    }
+                    Err(error) => {
+                        publish_result(&window, 2, "Could not refresh project files", error)
+                    }
+                }
+            });
+        });
     });
 
     let weak_window_for_validate = window.as_weak();

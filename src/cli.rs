@@ -4,6 +4,7 @@ use crate::operations::community::{
 use crate::operations::install;
 use crate::operations::project::{ProjectCreationResult, ProjectOptions, create_project};
 use crate::operations::project_options::{ShaderConflictPolicy, apply_project_options};
+use crate::operations::project_refresh::{self, Difference};
 use crate::operations::project_run_report::{RunReportOptions, run_project_report};
 use crate::operations::project_validation::validate_project;
 use crate::operations::update;
@@ -197,12 +198,21 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
     let mut replace_shader_conflicts = false;
     let mut validate = false;
     let mut run_report = false;
+    let mut refresh_preview = false;
+    let mut refresh_apply = false;
+    let mut refresh_skip = Vec::new();
     let mut report_options = RunReportOptions::default();
     let mut arguments = arguments[1..].iter();
     while let Some(argument) = arguments.next() {
         match argument.as_str() {
             "--validate" => validate = true,
             "--run-report" => run_report = true,
+            "--refresh" => refresh_preview = true,
+            "--refresh-apply" => refresh_apply = true,
+            "--refresh-skip" => refresh_skip.push(
+                Path::new(arguments.next().ok_or("Missing value for --refresh-skip")?)
+                    .to_path_buf(),
+            ),
             "--with-lila" => with_lila = true,
             "--copy-shader-sources" => copy_shader_sources = true,
             "--replace-shader-conflicts" => replace_shader_conflicts = true,
@@ -246,6 +256,60 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
             || report_options.mayaflux_root.is_some())
     {
         return Err("Run-report options require --run-report.".to_owned());
+    }
+    if refresh_preview || refresh_apply {
+        if !module_names.is_empty()
+            || with_lila
+            || copy_shader_sources
+            || validate
+            || run_report
+            || (refresh_preview && refresh_apply)
+        {
+            return Err("Run project refresh separately from other Manage actions.".to_owned());
+        }
+        if !refresh_apply && !refresh_skip.is_empty() {
+            return Err("--refresh-skip requires --refresh-apply.".to_owned());
+        }
+        let preview = project_refresh::preview(Path::new(project_path))?;
+        if preview.files.is_empty() {
+            println!("All refreshable project files match the current Weave templates.");
+            return Ok(());
+        }
+        for file in &preview.files {
+            println!(
+                "{}: {}",
+                match file.difference {
+                    Difference::Missing => "Missing",
+                    Difference::Changed => "Changed",
+                },
+                file.relative.display()
+            );
+        }
+        if refresh_apply {
+            for skip in &refresh_skip {
+                if !preview.files.iter().any(|file| &file.relative == skip) {
+                    return Err(format!(
+                        "File is not in the refresh preview: {}",
+                        skip.display()
+                    ));
+                }
+            }
+            let selected = preview
+                .files
+                .iter()
+                .filter(|file| !refresh_skip.contains(&file.relative))
+                .map(|file| file.relative.clone())
+                .collect::<Vec<_>>();
+            let result = project_refresh::apply(&preview, &selected)?;
+            println!("Refreshed {} project file(s).", result.replaced);
+            if let Some(backup) = result.backup {
+                println!("Original files: {}", backup.display());
+            }
+        }
+        return Ok(());
+    }
+    if !refresh_skip.is_empty() {
+        return Err("--refresh-skip requires --refresh-apply.".to_owned());
     }
     if module_names.is_empty() && !with_lila && !copy_shader_sources && !validate && !run_report {
         return Err("Usage: Weave manage <project-dir> [module-name,...] [options]".to_owned());
@@ -347,7 +411,7 @@ fn print_usage() {
 }
 
 fn usage_text() -> &'static str {
-    "Weave: MayaFlux project tool\n\nUsage:\n  Weave                 Open the Projects screen\n  Weave new <name> [destination] [options]\n  Weave manage <project-dir> [module-name,...] [options]\n  Weave community <module-name> [destination-dir] [options]\n  Weave install <stable|development> [--replace-conflict] [--no-cli]\n  Weave install-cli         Make the CLI available without installing MayaFlux\n  Weave --help\n  Weave --license         Show the embedded license\n  Weave --package-info    Show build and package metadata\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n\nOptions for 'manage':\n  --with-lila             Add Lila live-coding integration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n  --replace-shader-conflicts Replace same-path project shader files\n  --validate              Run the project's validation script\n  --run-report            Run a built project and collect diagnostics\n  --configuration <name>  Select a build configuration for --run-report\n  --executable <path>     Select a custom project executable for --run-report\n  --mayaflux-root <path>  Select MayaFlux for --run-report\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila"
+    "Weave: MayaFlux project tool\n\nUsage:\n  Weave                 Open the Projects screen\n  Weave new <name> [destination] [options]\n  Weave manage <project-dir> [module-name,...] [options]\n  Weave community <module-name> [destination-dir] [options]\n  Weave install <stable|development> [--replace-conflict] [--no-cli]\n  Weave install-cli         Make the CLI available without installing MayaFlux\n  Weave --help\n  Weave --license         Show the embedded license\n  Weave --package-info    Show build and package metadata\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n\nOptions for 'manage':\n  --with-lila             Add Lila live-coding integration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n  --replace-shader-conflicts Replace same-path project shader files\n  --refresh               List missing or changed template files\n  --refresh-apply         Refresh all listed files\n  --refresh-skip <path>   Keep this file when refreshing (repeatable)\n  --validate              Run the project's validation script\n  --run-report            Run a built project and collect diagnostics\n  --configuration <name>  Select a build configuration for --run-report\n  --executable <path>     Select a custom project executable for --run-report\n  --mayaflux-root <path>  Select MayaFlux for --run-report\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila"
 }
 
 #[cfg(test)]

@@ -1,4 +1,5 @@
 build/
+.weave-refresh-backups/
 cmake-build-*/
 .vscode/
 .idea/

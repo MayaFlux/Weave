@@ -57,6 +57,8 @@ If the project was created without Lila or copied MayaFlux shader sources, choos
 
 Use **Validate Project** on the Manage screen to run the project's bundled validation script and review MayaFlux installation and project diagnostics in Weave. **Run & Report** starts an already built project, streams its output, and shows the generated report locations. Close the project app to finish collecting diagnostics; Weave does not build it.
 
+**Refresh Project Files** compares your project with Weave's current templates and lists only missing or changed files. All listed files start selected; uncheck any you want to keep. Selected existing files are backed up under `.weave-refresh-backups/` before replacement. This includes `src/main.cpp` if you leave it selected. Community module registrations and shader sources are preserved. From the CLI, use `Weave manage <project-dir> --refresh` to preview, or `--refresh-apply` to apply; repeat `--refresh-skip <relative-path>` to keep selected files.
+
 ## Community modules
 
 ### Add modules to a project

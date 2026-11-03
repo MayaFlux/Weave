@@ -1,0 +1,57 @@
+import { Button, CheckBox, HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
+import { WeaveTheme } from "../theme.slint";
+
+export struct RefreshChoice {
+    path: string,
+    status: string,
+    selected: bool,
+}
+
+export component RefreshProjectDialog inherits Rectangle {
+    in property <[RefreshChoice]> files;
+    callback toggle_file(int);
+    callback cancel;
+    callback apply;
+
+    x: 0px;
+    y: 0px;
+    width: 100%;
+    height: 100%;
+    z: 110;
+    background: WeaveTheme.overlay.with-alpha(0.82);
+    TouchArea { }
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: min(680px, parent.width - 32px);
+        height: min(560px, parent.height - 32px);
+        border-radius: 6px;
+        border-width: 1px;
+        border-color: WeaveTheme.border-strong;
+        background: WeaveTheme.panel-background;
+        VerticalBox {
+            x: 24px; y: 22px; width: parent.width - 48px; height: parent.height - 44px; spacing: 12px;
+            Text { text: "REFRESH PROJECT FILES"; color: WeaveTheme.accent; font-size: WeaveTheme.font-tiny; font-weight: 700; }
+            Text { text: "Choose the files to restore from Weave's current templates."; color: WeaveTheme.text-primary; font-size: WeaveTheme.font-dialog-title; font-weight: 650; wrap: word-wrap; }
+            Text { text: "Changed files will be backed up before replacement. Your source edits in selected files, including main.cpp, will be replaced."; color: WeaveTheme.warning-text; font-size: WeaveTheme.font-small; wrap: word-wrap; }
+            ScrollView {
+                vertical-stretch: 1;
+                VerticalBox {
+                    width: parent.width;
+                    spacing: 6px;
+                    for file[index] in root.files: CheckBox {
+                        text: file.path + "  (" + file.status + ")";
+                        checked: file.selected;
+                        toggled => { root.toggle_file(index); }
+                    }
+                }
+            }
+            Text { text: "community.cmake and shader sources are preserved."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-small; }
+            HorizontalBox {
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+                Button { text: "Cancel"; clicked => { root.cancel(); } }
+                Button { text: "Refresh Selected Files"; primary: true; clicked => { root.apply(); } }
+            }
+        }
+    }
+}

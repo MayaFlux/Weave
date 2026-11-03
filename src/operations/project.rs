@@ -150,6 +150,38 @@ fn populate_project(
     fs::create_dir(project_path.join("cmake"))?;
     fs::create_dir_all(project_path.join("data/shaders"))?;
 
+    for (relative, contents, executable) in project_template_files(name, options) {
+        let path = project_path.join(relative);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&path, contents.as_bytes())?;
+        #[cfg(unix)]
+        if executable {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o755))?;
+        }
+        #[cfg(not(unix))]
+        let _ = executable;
+    }
+
+    if let Some(sources) = shader_sources {
+        for (relative, contents) in sources {
+            let destination = project_path.join("data/shaders").join(relative);
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(destination, contents)?;
+        }
+    }
+
+    Ok(())
+}
+
+pub(crate) fn project_template_files(
+    name: &str,
+    options: ProjectOptions,
+) -> Vec<(PathBuf, String, bool)> {
     let mayaflux_cmake = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/resources/templates/project/cmake/mayaflux.cmake"
@@ -348,32 +380,10 @@ fn populate_project(
 
     files.push(("README.md", project_readme(name), false));
 
-    for (relative, contents, executable) in files {
-        let path = project_path.join(relative);
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::write(&path, contents.as_bytes())?;
-        #[cfg(unix)]
-        if executable {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&path, fs::Permissions::from_mode(0o755))?;
-        }
-        #[cfg(not(unix))]
-        let _ = executable;
-    }
-
-    if let Some(sources) = shader_sources {
-        for (relative, contents) in sources {
-            let destination = project_path.join("data/shaders").join(relative);
-            if let Some(parent) = destination.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            fs::write(destination, contents)?;
-        }
-    }
-
-    Ok(())
+    files
+        .into_iter()
+        .map(|(path, contents, executable)| (PathBuf::from(path), contents, executable))
+        .collect()
 }
 
 #[cfg(target_os = "windows")]
@@ -470,7 +480,7 @@ fn read_shader_sources_from_root(
     Ok(sources)
 }
 
-fn validate_name(name: &str) -> Result<(), ProjectCreationError> {
+pub(crate) fn validate_name(name: &str) -> Result<(), ProjectCreationError> {
     let mut characters = name.chars();
     let valid_start = characters
         .next()

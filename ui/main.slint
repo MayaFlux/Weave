@@ -8,6 +8,7 @@ import { CreateCommunityModuleScreen } from "./screens/create_community_module.s
 import { InstallMayaFluxScreen } from "./screens/install_mayaflux.slint";
 import { ResultDialog } from "./dialogs/result_dialog.slint";
 import { RunReportDialog } from "./dialogs/run_report_dialog.slint";
+import { RefreshProjectDialog, RefreshChoice } from "./dialogs/refresh_project_dialog.slint";
 import { ConfirmationDialog } from "./dialogs/confirmation_dialog.slint";
 import { ShaderConflictDialog } from "./dialogs/shader_conflict_dialog.slint";
 import { PasswordDialog } from "./dialogs/password_dialog.slint";
@@ -35,6 +36,8 @@ export component MainWindow inherits Window {
     in-out property <bool> add_lila_option: false;
     in-out property <bool> add_shader_sources_option: false;
     in-out property <bool> shader_conflict_open: false;
+    in-out property <bool> refresh_dialog_open: false;
+    in-out property <[RefreshChoice]> refresh_files;
     in-out property <string> shader_conflict_files: "";
     in-out property <int> screen: 0;
     in-out property <string> module_names: "";
@@ -89,6 +92,9 @@ export component MainWindow inherits Window {
     callback apply_project_options();
     callback validate_project();
     callback run_report();
+    callback preview_project_refresh();
+    callback toggle_refresh_file(int);
+    callback apply_project_refresh();
     callback choose_run_report_executable();
     callback choose_run_report_mayaflux_root();
     callback cancel_project_operation();
@@ -182,6 +188,7 @@ export component MainWindow inherits Window {
                 apply_options => { root.apply_project_options(); }
                 validate_project => { root.validate_project(); }
                 run_report => { root.run_report_dialog_open = true; }
+                refresh_project => { root.preview_project_refresh(); }
             }
             if root.screen == 5: InstallMayaFluxScreen {
                 busy: root.busy;
@@ -235,6 +242,12 @@ export component MainWindow inherits Window {
             choose_mayaflux_root => { root.choose_run_report_mayaflux_root(); }
             cancel => { root.run_report_dialog_open = false; }
             run_report => { root.run_report_dialog_open = false; root.run_report(); }
+        }
+        if root.refresh_dialog_open: RefreshProjectDialog {
+            files: root.refresh_files;
+            toggle_file(index) => { root.toggle_refresh_file(index); }
+            cancel => { root.refresh_dialog_open = false; }
+            apply => { root.apply_project_refresh(); }
         }
         if root.conflict_confirmation_open: ConfirmationDialog {
             title: root.conflict_confirmation_title;

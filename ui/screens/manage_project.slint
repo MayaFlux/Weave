@@ -17,6 +17,7 @@ export component ManageProjectScreen inherits VerticalBox {
     callback apply_options;
     callback validate_project;
     callback run_report;
+    callback refresh_project;
 
     spacing: 12px;
     AppButton { text: "←  Projects"; clicked => { root.back(); } }
@@ -47,6 +48,7 @@ export component ManageProjectScreen inherits VerticalBox {
             HorizontalBox {
                 AppButton { text: "Validate Project"; enabled: !root.busy; clicked => { root.validate_project(); } }
                 AppButton { text: "Run & Report"; enabled: !root.busy; clicked => { root.run_report(); } }
+                AppButton { text: "Refresh Project Files"; enabled: !root.busy; clicked => { root.refresh_project(); } }
                 Rectangle { horizontal-stretch: 1; background: transparent; }
                 AppButton { text: root.busy ? "Applying…" : "Apply Selected Options"; primary: true; enabled: !root.busy && (root.add_lila || root.add_shader_sources); clicked => { root.apply_options(); } }
             }
