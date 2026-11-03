@@ -32,6 +32,22 @@ pub fn run_gui() -> Result<(), Box<dyn std::error::Error>> {
     window.set_linux_install(true);
     window.set_destination(destination.into());
 
+    window.on_open_driver_download(|url| {
+        if [
+            "https://www.nvidia.com/",
+            "https://www.amd.com/",
+            "https://www.intel.com/",
+        ]
+        .iter()
+        .any(|prefix| url.starts_with(prefix))
+        {
+            let url = url.to_string();
+            std::thread::spawn(move || {
+                let _ = webbrowser::open(&url);
+            });
+        }
+    });
+
     let weak_window_for_update = window.as_weak();
     std::thread::spawn(move || {
         if let Some(notice) = weave_release::check_on_startup(env!("CARGO_PKG_VERSION")) {
@@ -623,6 +639,12 @@ fn start_mayaflux_install(window: &MainWindow, channel: String, replace_conflict
                         window.set_busy(false);
                         window.set_install_progress_open(false);
                         show_install_conflict(&window, &channel, &installed_formula);
+                        let progress = progress.lock().unwrap();
+                        let mut message = window.get_conflict_confirmation_message().to_string();
+                        for notice in &progress.advisories {
+                            message.push_str(&format!("\n\n{}\n{}", notice.message, notice.url));
+                        }
+                        window.set_conflict_confirmation_message(message.into());
                     }
                 });
             }
@@ -682,6 +704,16 @@ fn sync_install_progress(window: &MainWindow, progress: &Progress) {
     }
     window.set_install_summary(progress.summary.clone().into());
     window.set_install_fraction(progress.fraction.unwrap_or(-1.0));
+    let advisories: Vec<_> = progress
+        .advisories
+        .iter()
+        .map(|notice| crate::InstallationAdvisory {
+            vendor: notice.vendor.clone().into(),
+            message: notice.message.clone().into(),
+            url: notice.url.clone().into(),
+        })
+        .collect();
+    window.set_install_advisories(std::rc::Rc::new(slint::VecModel::from(advisories)).into());
 }
 
 fn start_manage_option_inspection(window: &MainWindow) {
@@ -1028,6 +1060,7 @@ mod tests {
     use crate::MainWindow;
     use crate::operations::project::{ProjectCreationResult, ProjectOptions, create_project};
     use crate::operations::weave_release;
+    use slint::Model;
     use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
     use slint::platform::{Platform, PlatformError, WindowAdapter, set_platform};
     use std::path::{Path, PathBuf};
@@ -1068,6 +1101,33 @@ mod tests {
             window.get_update_url().as_str(),
             "https://github.com/MayaFlux/Weave/releases/tag/v0.7.0"
         );
+
+        for result in [Ok("Installed".into()), Err("Consent cancelled".into())] {
+            let mut progress = crate::operations::install::progress::Progress::new(
+                crate::operations::install::progress::Platform::Windows,
+            );
+            progress.receive(crate::operations::install::progress::Event::Advisory(
+                crate::operations::install::progress::Advisory {
+                    vendor: "NVIDIA".into(),
+                    message: "Update the installed NVIDIA driver".into(),
+                    url: "https://www.nvidia.com/en-us/drivers/".into(),
+                },
+            ));
+            progress.finish(result);
+            super::sync_install_progress(&window, &progress);
+            assert_eq!(window.get_install_advisories().row_count(), 1);
+            assert_eq!(
+                window.get_install_advisories().row_data(0).unwrap().vendor,
+                "NVIDIA"
+            );
+        }
+        super::sync_install_progress(
+            &window,
+            &crate::operations::install::progress::Progress::new(
+                crate::operations::install::progress::Platform::Windows,
+            ),
+        );
+        assert_eq!(window.get_install_advisories().row_count(), 0);
         std::fs::remove_dir_all(directory).unwrap();
     }
 

@@ -3,6 +3,7 @@ mod authorization;
 mod discovery;
 pub(crate) mod environment;
 pub(crate) mod filesystem;
+pub(crate) mod graphics_drivers;
 mod install;
 pub(crate) mod process;
 pub use authorization::{install_windows, install_windows_worker};

@@ -1,5 +1,14 @@
 param([string]$MayaFluxRoot, [string]$ProjectRoot)
 
+# @WEAVE_DRIVER_ADVISORY@
+
+# Source-checkout use; generated and packaged scripts contain the helper above.
+if (-not (Get-Command Get-WeaveGraphicsDriverAdvisories -ErrorAction SilentlyContinue)) {
+    $helper = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'graphics-driver-advisory.ps1')
+    $rules = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'graphics-driver-rules.json')
+    . ([scriptblock]::Create($helper.Replace('# @WEAVE_DRIVER_RULES@', $rules)))
+}
+
 function Get-ValidationEnvironment($Name, $Target = 'Process') {
     [Environment]::GetEnvironmentVariable($Name, [EnvironmentVariableTarget]$Target)
 }
@@ -286,6 +295,7 @@ function Invoke-InstallValidation([string]$Root = $MayaFluxRoot, [string]$Projec
     else { Write-Host 'MayaFlux installation check' }
     Write-Host 'This diagnostic is run manually. It checks files, tools and terminal settings without building or changing anything. Nothing was changed.'
     Write-Host "Windows: $([Environment]::OSVersion.Version) | PowerShell: $($PSVersionTable.PSVersion) | 64-bit terminal: $([Environment]::Is64BitProcess)"
+    Write-GraphicsDriverAdvisory
     if (-not [Environment]::Is64BitProcess) { Write-ValidationResult 'FIX' 'Open the 64-bit version of PowerShell and try again.' }
     if (-not $Root) { $Root = Get-ValidationEnvironment 'MAYAFLUX_ROOT' }
     if (-not $Root) { $Root = Get-ValidationEnvironment 'MAYAFLUX_ROOT' 'User' }

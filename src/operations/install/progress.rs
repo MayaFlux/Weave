@@ -45,6 +45,14 @@ pub enum Event {
     Step(Stage, String),
     Transfer(Option<f32>),
     Output(String),
+    Advisory(Advisory),
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Advisory {
+    pub vendor: String,
+    pub message: String,
+    pub url: String,
 }
 
 impl Event {
@@ -58,6 +66,10 @@ impl Event {
                 "@weave-progress:{}",
                 serde_json::json!({"transfer": value})
             )),
+            Self::Advisory(notice) => Some(format!(
+                "@weave-progress:{}",
+                serde_json::json!({"advisory": notice})
+            )),
             Self::Output(_) => None,
         }
     }
@@ -66,6 +78,11 @@ impl Event {
         let parsed = || {
             let value: serde_json::Value =
                 serde_json::from_str(line.strip_prefix("@weave-progress:")?).ok()?;
+            if let Some(notice) = value.get("advisory") {
+                return serde_json::from_value(notice.clone())
+                    .ok()
+                    .map(Self::Advisory);
+            }
             if let Some(transfer) = value.get("transfer") {
                 if transfer.is_null() {
                     return Some(Self::Transfer(None));
@@ -96,6 +113,7 @@ impl Event {
             Self::Transfer(Some(value)) => format!("Download: {:.0}%", value * 100.0),
             Self::Transfer(None) => "Download transfer ended.".into(),
             Self::Output(line) => line.clone(),
+            Self::Advisory(notice) => format!("{}\n{}", notice.message, notice.url),
         }
     }
 }
@@ -143,6 +161,7 @@ pub struct Progress {
     pub active: usize,
     pub summary: String,
     pub fraction: Option<f32>,
+    pub advisories: Vec<Advisory>,
 }
 
 impl Progress {
@@ -175,6 +194,7 @@ impl Progress {
             active: 0,
             summary: String::new(),
             fraction: None,
+            advisories: Vec::new(),
         }
     }
 
@@ -200,6 +220,12 @@ impl Progress {
                 self.append(&line);
             }
             Event::Transfer(value) => self.fraction = value,
+            Event::Advisory(notice) => {
+                if !self.advisories.contains(&notice) {
+                    self.append(&format!("{}\n{}", notice.message, notice.url));
+                    self.advisories.push(notice);
+                }
+            }
         }
     }
 
@@ -234,6 +260,10 @@ impl Progress {
                 self.summary = error;
             }
         }
+        for notice in &self.advisories {
+            self.summary
+                .push_str(&format!("\n\n{}\n{}", notice.message, notice.url));
+        }
         self.append(&self.summary.clone());
     }
 }
@@ -241,6 +271,34 @@ impl Progress {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn driver_advisories_survive_success_failure_and_transport_but_reset_for_retry() {
+        let notice = Event::Advisory(Advisory {
+            vendor: "NVIDIA".into(),
+            message: "Your NVIDIA graphics driver is too old. Installed: 32.0.15.5000.".into(),
+            url: "https://www.nvidia.com/en-us/drivers/".into(),
+        });
+        assert_eq!(Event::decode(&notice.encode().unwrap()), notice);
+        for result in [Ok("Installed".into()), Err("Consent cancelled".into())] {
+            let mut state = Progress::new(Platform::Windows);
+            state.receive(notice.clone());
+            state.receive(notice.clone());
+            state.receive(Event::Step(
+                Stage::Dependencies,
+                "Checking dependencies".into(),
+            ));
+            state.finish(result);
+            assert_eq!(state.advisories.len(), 1);
+            assert!(state.steps[0].output.contains("too old"));
+            assert!(state.summary.contains("too old"));
+        }
+        assert!(Progress::new(Platform::Windows).advisories.is_empty());
+        assert!(matches!(
+            Event::decode("@weave-progress:{\"advisory\":{\"vendor\":\"AMD\"}}"),
+            Event::Output(_)
+        ));
+    }
 
     #[test]
     fn progress_survives_line_transport_without_parsing_human_output() {

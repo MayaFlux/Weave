@@ -32,6 +32,8 @@ Use this packaging build for distribution. It selects the x64 target and static 
 
 The downloadable executable needs no sidecar files. Its license is available through `--license` and its embedded build metadata through `--package-info`. Package validation checks both from the copied executable.
 
+Windows driver update advice reads installed display-driver records without initializing graphics. The policy is `resources/templates/scripts/windows/graphics-driver-rules.json`; use Windows driver versions, retain source links, and leave unverified minimums unset. The build embeds the shared PowerShell helper into standalone `validate.ps1` copies. Older project scripts receive the advisory through Weave without being rewritten. To run the controlled driver tests against a packaged executable, set `WEAVE_TEST_EXECUTABLE` to its absolute path and run `cargo test --locked --test windows_driver_advisory`.
+
 ### macOS
 
 ```sh

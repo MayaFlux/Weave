@@ -1,6 +1,10 @@
 //! Embedded Weave resources and platform-independent deployment.
 use crate::filesystem::{no_links, safe_directory, unique_id};
 use std::{fs, io::Write, path::Path};
+
+pub const WINDOWS_DRIVER_ADVISORY: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/graphics-driver-advisory.ps1"));
+pub const WINDOWS_VALIDATION: &str = include_str!(concat!(env!("OUT_DIR"), "/validate.ps1"));
 pub const RESOURCES: &[(&str, &str)] = &[
     (
         "validate.sh",
@@ -65,13 +69,7 @@ pub const RESOURCES: &[(&str, &str)] = &[
             "/resources/templates/project/.gitignore"
         )),
     ),
-    (
-        "validate.ps1",
-        include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/resources/templates/scripts/windows/validate.ps1"
-        )),
-    ),
+    ("validate.ps1", WINDOWS_VALIDATION),
     (
         "run-report.ps1",
         include_str!(concat!(

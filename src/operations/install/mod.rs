@@ -16,6 +16,12 @@ pub fn install_with_events(
     password: Option<&str>,
     events: impl Fn(progress::Event) + Sync,
 ) -> Result<String, InstallError> {
+    #[cfg(target_os = "windows")]
+    for notice in crate::platform::windows::graphics_drivers::check(
+        &std::sync::atomic::AtomicBool::new(false),
+    ) {
+        events(progress::Event::Advisory(notice));
+    }
     native_install(channel, replace_conflict, password, |line| {
         events(progress::Event::decode(line));
     })
@@ -27,9 +33,20 @@ pub fn install_mayaflux(
     password: Option<&str>,
     log: impl Fn(&str) + Sync,
 ) -> Result<String, InstallError> {
-    install_with_events(channel, replace_conflict, password, |event| {
-        log(&event.text())
-    })
+    let advisories = std::sync::Mutex::new(Vec::new());
+    let result = install_with_events(channel, replace_conflict, password, |event| {
+        if let progress::Event::Advisory(notice) = &event {
+            advisories.lock().unwrap().push(notice.clone());
+        }
+        log(&event.text());
+    });
+    for notice in advisories.into_inner().unwrap() {
+        log(&format!(
+            "Graphics driver update advice: {}\n{}",
+            notice.message, notice.url
+        ));
+    }
+    result
 }
 
 pub(crate) fn verify_weave_resources(log: &(impl Fn(&str) + Sync)) -> Result<(), String> {

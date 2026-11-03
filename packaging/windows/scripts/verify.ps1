@@ -75,6 +75,30 @@ try {
     }
     $presets = Get-Content -Raw -LiteralPath (Join-Path $project 'CMakePresets.json') | ConvertFrom-Json
     if (!$presets.configurePresets) { throw 'Generated presets are invalid.' }
+    # Exercise the advisory shipped by this executable, without querying the host.
+    $driverCheck = Join-Path $work 'check graphics driver advice.ps1'
+    @'
+param([string]$ValidationScript)
+$ErrorActionPreference = 'Stop'
+. $ValidationScript
+function Get-CimInstance {
+    @{ DriverProviderName = 'NVIDIA'; DriverVersion = '32.0.15.7215' }
+    @{ DriverProviderName = 'Advanced Micro Devices, Inc.'; DriverVersion = '32.0.23017.1001' }
+}
+$notices = @(Get-WeaveGraphicsDriverAdvisories)
+if ($notices.Count -ne 1 -or $notices[0].Vendor -ne 'NVIDIA' -or
+    $notices[0].Kind -ne 'outdated' -or $notices[0].Url -ne 'https://www.nvidia.com/en-us/drivers/') {
+    throw 'Packaged graphics driver version advice or download link is incorrect.'
+}
+$script:validationIssues = 0
+$script:validationWarnings = 0
+Write-GraphicsDriverAdvisory
+if ($script:validationIssues -ne 0 -or $script:validationWarnings -ne 1) {
+    throw 'Packaged graphics driver advice must remain a nonblocking warning.'
+}
+'@ | Set-Content -LiteralPath $driverCheck -Encoding utf8
+    & "$env:SystemRoot/System32/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $driverCheck (Join-Path $project 'validate.ps1')
+    if ($LASTEXITCODE -ne 0) { throw 'Packaged graphics driver advisory check failed.' }
     $modules = Join-Path $work 'generated modules'
     New-Item -ItemType Directory -Path $modules | Out-Null
     Invoke-PackagedCli @('community','package_smoke',$modules,'--description','Packaged resource check') | Write-Host

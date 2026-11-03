@@ -12,7 +12,7 @@ import { RefreshProjectDialog, RefreshChoice } from "./dialogs/refresh_project_d
 import { ConfirmationDialog } from "./dialogs/confirmation_dialog.slint";
 import { ShaderConflictDialog } from "./dialogs/shader_conflict_dialog.slint";
 import { PasswordDialog } from "./dialogs/password_dialog.slint";
-import { InstallDialog, InstallationStep } from "./dialogs/install_dialog.slint";
+import { InstallDialog, InstallationStep, InstallationAdvisory } from "./dialogs/install_dialog.slint";
 import { AppButton } from "./components/mod.slint";
 
 export component MainWindow inherits Window {
@@ -71,6 +71,7 @@ export component MainWindow inherits Window {
     in-out property <bool> install_failed: false;
     in-out property <string> install_summary;
     in-out property <float> install_fraction: -1;
+    in-out property <[InstallationAdvisory]> install_advisories;
     in property <bool> install_available: false;
     in property <bool> linux_install: false;
     in property <bool> windows_install: false;
@@ -107,6 +108,7 @@ export component MainWindow inherits Window {
     callback confirm_install_replacement();
     callback cancel_install_replacement();
     callback retry_install();
+    callback open_driver_download(string);
 
     Rectangle {
         width: 100%;
@@ -220,6 +222,8 @@ export component MainWindow inherits Window {
             channel: root.install_channel;
             summary: root.install_summary;
             fraction: root.install_fraction;
+            advisories: root.install_advisories;
+            open_driver_download(url) => { root.open_driver_download(url); }
             close => { root.install_progress_open = false; }
             retry => { root.retry_install(); }
         }

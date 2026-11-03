@@ -33,6 +33,8 @@ Open Weave and choose **Install MayaFlux**, then select **Stable** or **Developm
 
 Installation uses winget on Windows, Homebrew on macOS, and your distribution's package manager on supported Linux distributions. Follow any authorization prompts and restart your terminal or Windows if requested. Weave asks before replacing another MayaFlux edition. If installation fails, review the reported error and retry; project operations remain available.
 
+On Windows, setup and project validation also check installed graphics driver versions. Driver update advice includes download links and remains visible when installation finishes or fails. It does not block installation or cause validation to fail.
+
 ## Create a project
 
 Choose **Projects > Create Project**, enter a name, and select an existing destination folder. You can enable live coding with Lila, include VS Code configuration, and copy installed MayaFlux shader sources.

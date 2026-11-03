@@ -37,13 +37,51 @@ pub fn validate_project(
     cancellation: &std::sync::atomic::AtomicBool,
     log: &(impl Fn(&str) + Sync),
 ) -> Result<ValidationResult, String> {
+    validate_project_with_driver_check(project, cancellation, log, &|_signal| {
+        #[cfg(target_os = "windows")]
+        {
+            crate::platform::windows::graphics_drivers::check(_signal)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            Vec::new()
+        }
+    })
+}
+
+fn validate_project_with_driver_check(
+    project: &Path,
+    cancellation: &std::sync::atomic::AtomicBool,
+    log: &(impl Fn(&str) + Sync),
+    _driver_check: &impl Fn(&std::sync::atomic::AtomicBool) -> Vec<super::install::progress::Advisory>,
+) -> Result<ValidationResult, String> {
     let interpreter = crate::platform::validation_interpreter()?;
     let platform = current_platform();
     let command = build_validation_command_for(project, platform, &interpreter)?;
     refresh_legacy_optional_checks(&command.script_path, platform, log)?;
+    #[allow(unused_mut)]
+    let mut advisory_output = String::new();
+    #[cfg(target_os = "windows")]
+    if !std::fs::read_to_string(&command.script_path)
+        .map_err(|error| format!("Cannot read validation script: {error}"))?
+        .contains("# Weave graphics driver advisory v1.")
+    {
+        // Older and user-modified scripts remain untouched. New templates already
+        // run this exact advisory themselves, including when launched standalone.
+        for notice in _driver_check(cancellation) {
+            let text = format!(
+                "Graphics driver update advice: {}\n{}\n",
+                notice.message, notice.url
+            );
+            log(&text);
+            advisory_output.push_str(&text);
+        }
+    }
     let mut command = command.command();
     let output = crate::platform::run_validation_command(&mut command, cancellation, log)?;
-    classify_validation_output(output)
+    let mut result = classify_validation_output(output)?;
+    result.output.insert_str(0, &advisory_output);
+    Ok(result)
 }
 
 fn classify_validation_output(output: Output) -> Result<ValidationResult, String> {
@@ -218,6 +256,43 @@ mod tests {
     use std::fs;
     use std::path::Path;
     use std::time::Duration;
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn old_project_keeps_its_script_and_final_advisory_without_turning_it_into_a_failure() {
+        let root = std::env::temp_dir().join(format!(
+            "weave old validation {}",
+            crate::filesystem::unique_id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let script = "Write-Output 'custom validation passed'; exit 0\n";
+        fs::write(root.join("validate.ps1"), script).unwrap();
+        let cancellation = std::sync::atomic::AtomicBool::new(false);
+        let result = validate_project_with_driver_check(&root, &cancellation, &|_| {}, &|_| {
+            vec![super::super::install::progress::Advisory {
+                vendor: "NVIDIA".into(),
+                message: "Your installed driver needs an update".into(),
+                url: "https://www.nvidia.com/en-us/drivers/".into(),
+            }]
+        })
+        .unwrap();
+        assert!(!result.findings);
+        assert!(result.output.contains("installed driver needs an update"));
+        assert!(result.output.contains("custom validation passed"));
+        assert_eq!(
+            fs::read_to_string(root.join("validate.ps1")).unwrap(),
+            script
+        );
+
+        fs::write(root.join("validate.ps1"), "# Weave graphics driver advisory v1.\nWrite-Output 'self-contained validation'; exit 0\n").unwrap();
+        let result = validate_project_with_driver_check(&root, &cancellation, &|_| {}, &|_| {
+            panic!("New scripts must not get a duplicate inventory check")
+        })
+        .unwrap();
+        assert!(!result.findings);
+        assert!(result.output.contains("self-contained validation"));
+        fs::remove_dir_all(root).unwrap();
+    }
 
     fn write_validation_fixture(root: &Path, powershell: &str, bash: &str) {
         let (name, source) = if cfg!(target_os = "windows") {

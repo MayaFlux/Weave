@@ -1,4 +1,4 @@
-import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { Button, HorizontalBox, VerticalBox, ScrollView } from "std-widgets.slint";
 import { WeaveTheme } from "../theme.slint";
 import { InstallStepPage } from "../components/install_step.slint";
 import { CompletionNotice } from "../components/completion_notice.slint";
@@ -7,6 +7,12 @@ export struct InstallationStep {
     title: string,
     status: int,
     output: string,
+}
+
+export struct InstallationAdvisory {
+    vendor: string,
+    message: string,
+    url: string,
 }
 
 export component InstallDialog inherits Rectangle {
@@ -18,8 +24,10 @@ export component InstallDialog inherits Rectangle {
     in property <string> channel;
     in property <string> summary;
     in property <float> fraction;
+    in property <[InstallationAdvisory]> advisories;
     callback close;
     callback retry;
+    callback open_driver_download(string);
 
     width: 100%;
     height: 100%;
@@ -28,7 +36,7 @@ export component InstallDialog inherits Rectangle {
     TouchArea { }
     Rectangle {
         width: min(820px, parent.width - 32px);
-        height: min(660px, parent.height - 32px);
+        height: min(!root.busy && root.advisories.length > 0 ? 720px : 660px, parent.height - 32px);
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         background: WeaveTheme.panel-background;
@@ -37,7 +45,7 @@ export component InstallDialog inherits Rectangle {
         border-radius: 6px;
         VerticalBox {
             padding: 24px;
-            spacing: 18px;
+            spacing: !root.busy && root.advisories.length > 0 ? 12px : 18px;
             if root.busy: Text {
                 text: "Install MayaFlux (" + (root.channel == "development" ? "Development" : "Stable") + ")";
                 color: WeaveTheme.text-primary;
@@ -50,7 +58,7 @@ export component InstallDialog inherits Rectangle {
                 font-size: WeaveTheme.font-description;
             }
             if !root.busy: CompletionNotice {
-                kind: root.failed ? 2 : 0;
+                kind: root.failed ? 2 : root.advisories.length > 0 ? 1 : 0;
                 heading: root.failed ? "Installation needs attention" : "MayaFlux installed";
                 message: root.failed ? "Review the details below. You can retry or return to other operations." : (root.channel == "development" ? "Development" : "Stable") + " installation completed and verified.";
             }
@@ -80,13 +88,43 @@ export component InstallDialog inherits Rectangle {
                     fraction: root.selected == root.active ? root.fraction : -1;
                 }
             }
+            if !root.busy && root.advisories.length > 0: Rectangle {
+                background: WeaveTheme.warning-background;
+                border-radius: 6px;
+                height: 150px;
+                vertical-stretch: 0;
+                ScrollView {
+                    VerticalBox {
+                        padding: 12px;
+                        spacing: 12px;
+                        Text {
+                            text: "Graphics driver update advice";
+                            color: WeaveTheme.text-primary;
+                            font-weight: 650;
+                            wrap: word-wrap;
+                        }
+                        for notice in root.advisories: VerticalBox {
+                            spacing: 6px;
+                            Text {
+                                text: notice.message;
+                                color: WeaveTheme.text-primary;
+                                wrap: word-wrap;
+                            }
+                            if !notice.url.is-empty: Button {
+                                text: "Get " + notice.vendor + " drivers";
+                                clicked => { root.open_driver_download(notice.url); }
+                            }
+                        }
+                    }
+                }
+            }
             if !root.busy: Text {
                 text: root.summary;
                 color: root.failed ? WeaveTheme.error-text : WeaveTheme.text-body;
                 font-size: WeaveTheme.font-small;
                 wrap: word-wrap;
                 overflow: elide;
-                max-height: 90px;
+                max-height: root.advisories.length > 0 ? 48px : 90px;
             }
             HorizontalBox {
                 Rectangle { horizontal-stretch: 1; background: transparent; }

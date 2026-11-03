@@ -282,11 +282,7 @@ pub(crate) fn project_template_files(
     files.extend([
         (
             "validate.ps1",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/resources/templates/scripts/windows/validate.ps1"
-            ))
-            .to_owned(),
+            crate::resources::WINDOWS_VALIDATION.to_owned(),
             false,
         ),
         (

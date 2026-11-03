@@ -1,0 +1,31 @@
+{
+  "vendors": [
+    {
+      "name": "NVIDIA",
+      "providerPattern": "^NVIDIA(?: Corporation)?$",
+      "minimumWindowsVersion": "32.0.15.7216",
+      "release": "572.16",
+      "downloadUrl": "https://www.nvidia.com/en-us/drivers/",
+      "basis": "Production driver baseline for Vulkan 1.4 and Host Image Copy. Developer beta branches are not covered by this advisory.",
+      "sources": ["https://us.download.nvidia.com/Windows/572.16/572.16-win11-win10-release-notes.pdf", "https://developer.nvidia.com/vulkan-driver"]
+    },
+    {
+      "name": "AMD",
+      "providerPattern": "^(?:Advanced Micro Devices(?:,? Inc\\.?)?|AMD|ATI Technologies(?: Inc\\.?)?)$",
+      "minimumWindowsVersion": "32.0.22029.1019",
+      "release": "Adrenalin 25.11.1 feature branch",
+      "downloadUrl": "https://www.amd.com/en/support/download/drivers.html",
+      "basis": "First documented Windows Host Image Copy feature branch. Other branches with the same Adrenalin release name can have older Windows driver versions. This is an update advisory, not a hardware support determination.",
+      "sources": ["https://www.amd.com/en/resources/support-articles/release-notes/RN-RAD-WIN-VULKAN.html", "https://gpuopen.com/version-table/"]
+    },
+    {
+      "name": "Intel",
+      "providerPattern": "^Intel(?: Corporation|\\(R\\))?$",
+      "minimumWindowsVersion": null,
+      "release": null,
+      "downloadUrl": "https://www.intel.com/content/www/us/en/support/detect.html",
+      "basis": "A Windows driver minimum covering both Vulkan 1.4 and Host Image Copy has not been verified. Never label an Intel driver outdated using an invented cutoff.",
+      "sources": []
+    }
+  ]
+}
