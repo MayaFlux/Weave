@@ -263,6 +263,36 @@ fn source_build_can_install_cli_without_reinstalling_mayaflux() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn source_build_writes_zsh_path_to_resolved_zdotdir() {
+    let temporary = TestDirectory::new();
+    let bin = temporary.0.join("bin");
+    let zdotdir = temporary.0.join("zsh-config");
+    fs::create_dir(&bin).unwrap();
+    fs::create_dir(&zdotdir).unwrap();
+    write_fake_tool(&bin, "zsh", "#!/bin/sh\nprintf '%s' \"$ZDOTDIR\"\n");
+    let result = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .arg("install-cli")
+        .env_remove("APPIMAGE")
+        .env("HOME", &temporary.0)
+        .env("SHELL", bin.join("zsh"))
+        .env("ZDOTDIR", &zdotdir)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(
+        fs::read_to_string(zdotdir.join(".zshenv"))
+            .unwrap()
+            .contains("$HOME/.local/bin")
+    );
+    assert!(!temporary.0.join(".zshenv").exists());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn cli_installs_on_ubuntu_with_fake_package_tools_only() {
     use std::os::unix::fs::PermissionsExt;
     let temporary = TestDirectory::new();

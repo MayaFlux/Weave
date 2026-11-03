@@ -158,8 +158,8 @@ fn add_shell_path(original: &str, directory: &str) -> String {
 
 #[cfg(unix)]
 fn ensure_unix_path(home: &Path, directory: &str) -> Result<(), String> {
-    let shell = std::env::var_os("SHELL").unwrap_or_default();
-    let shell = Path::new(&shell)
+    let shell_path = std::env::var_os("SHELL").unwrap_or_default();
+    let shell = Path::new(&shell_path)
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("")
@@ -168,7 +168,15 @@ fn ensure_unix_path(home: &Path, directory: &str) -> Result<(), String> {
     let path = crate::platform::macos::user_zshenv_path(home);
     #[cfg(target_os = "linux")]
     let path = match shell.as_str() {
-        "zsh" => home.join(".zshenv"),
+        "zsh" => std::process::Command::new(&shell_path)
+            .args(["-lc", "printf %s \"${ZDOTDIR:-}\""])
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .map(|output| PathBuf::from(String::from_utf8_lossy(&output.stdout).trim()))
+            .filter(|path| path.is_dir())
+            .unwrap_or_else(|| home.to_path_buf())
+            .join(".zshenv"),
         "fish" => home.join(".config/fish/config.fish"),
         "bash" => home.join(".bashrc"),
         _ => home.join(".profile"),
