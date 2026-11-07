@@ -2,6 +2,7 @@ import { Button, HorizontalBox, VerticalBox, ScrollView } from "std-widgets.slin
 import { WeaveTheme } from "../theme.slint";
 import { InstallStepPage } from "../components/install_step.slint";
 import { CompletionNotice } from "../components/completion_notice.slint";
+import { ResultKind } from "../types.slint";
 
 export struct InstallationStep {
     title: string,
@@ -58,7 +59,7 @@ export component InstallDialog inherits Rectangle {
                 font-size: WeaveTheme.font-description;
             }
             if !root.busy: CompletionNotice {
-                kind: root.failed ? 2 : root.advisories.length > 0 ? 1 : 0;
+                kind: root.failed ? ResultKind.error : root.advisories.length > 0 ? ResultKind.warning : ResultKind.success;
                 heading: root.failed ? "Installation needs attention" : "MayaFlux installed";
                 message: root.failed ? "Review the details below. You can retry or return to other operations." : (root.channel == "development" ? "Development" : "Stable") + " installation completed and verified.";
             }

@@ -3,6 +3,7 @@ import { WeaveTheme } from "../theme.slint";
 import { AppButton } from "../components/mod.slint";
 
 export component CreateCommunityModuleScreen inherits VerticalBox {
+    in property <bool> busy;
     in-out property <string> module_name;
     in-out property <string> module_description;
     in-out property <string> module_min_version;
@@ -13,7 +14,7 @@ export component CreateCommunityModuleScreen inherits VerticalBox {
     callback create_community_module;
 
     spacing: 14px;
-    AppButton { text: "←  Projects"; clicked => { root.back(); } }
+    AppButton { text: "←  Projects"; enabled: !root.busy; clicked => { root.back(); } }
     Text { text: "Create a community module"; color: WeaveTheme.accent; font-size: WeaveTheme.font-heading; font-weight: 650; }
     Text { text: "Set up a reusable module with its manifest and standalone CMake test project."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-description; }
     Rectangle {
@@ -35,14 +36,14 @@ export component CreateCommunityModuleScreen inherits VerticalBox {
             HorizontalBox {
                 spacing: 12px;
                 Text { text: root.destination; color: WeaveTheme.text-primary; vertical-alignment: center; overflow: elide; }
-                AppButton { text: "Choose folder"; clicked => { root.choose_destination(); } }
+                AppButton { text: "Choose folder"; enabled: !root.busy; clicked => { root.choose_destination(); } }
             }
             CheckBox { text: "Requires Lila live coding"; checked <=> root.community_needs_lila; }
         }
     }
     HorizontalBox {
-        AppButton { text: "Back"; clicked => { root.back(); } }
+        AppButton { text: "Back"; enabled: !root.busy; clicked => { root.back(); } }
         Rectangle { horizontal-stretch: 1; background: transparent; }
-        AppButton { text: "Create module"; primary: true; clicked => { root.create_community_module(); } }
+        AppButton { text: root.busy ? "Creating…" : "Create module"; primary: true; enabled: !root.busy; clicked => { root.create_community_module(); } }
     }
 }

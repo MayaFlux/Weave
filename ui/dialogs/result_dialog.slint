@@ -1,9 +1,10 @@
 import { Button, HorizontalBox, TextEdit, VerticalBox } from "std-widgets.slint";
 import { WeaveTheme } from "../theme.slint";
 import { CompletionNotice } from "../components/completion_notice.slint";
+import { ResultKind } from "../types.slint";
 
 export component ResultDialog inherits Rectangle {
-    in property <int> result_kind;
+    in property <ResultKind> result_kind;
     in property <string> result_title;
     in property <string> result_message;
     in property <bool> result_busy;

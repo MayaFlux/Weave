@@ -20,7 +20,7 @@ export component ManageProjectScreen inherits VerticalBox {
     callback refresh_project;
 
     spacing: 12px;
-    AppButton { text: "←  Projects"; clicked => { root.back(); } }
+    AppButton { text: "←  Projects"; enabled: !root.busy; clicked => { root.back(); } }
     Text { text: "Manage Project"; color: WeaveTheme.accent; font-size: WeaveTheme.font-heading; font-weight: 650; }
     Text { text: "Selected project: " + root.project_path; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-small; overflow: elide; }
     Rectangle {

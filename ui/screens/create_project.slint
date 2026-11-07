@@ -3,6 +3,7 @@ import { WeaveTheme } from "../theme.slint";
 import { AppButton } from "../components/mod.slint";
 
 export component CreateProjectScreen inherits VerticalBox {
+    in property <bool> busy;
     in-out property <string> project_name;
     in-out property <string> destination;
     in-out property <bool> with_lila;
@@ -13,7 +14,7 @@ export component CreateProjectScreen inherits VerticalBox {
     callback create_project;
 
     spacing: 14px;
-    AppButton { text: "←  Projects"; clicked => { root.back(); } }
+    AppButton { text: "←  Projects"; enabled: !root.busy; clicked => { root.back(); } }
     Text { text: "Create a project"; color: WeaveTheme.accent; font-size: WeaveTheme.font-heading; font-weight: 650; }
     Text { text: "Choose a name and location, then select the project tools to include."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-description; }
     Rectangle {
@@ -31,7 +32,7 @@ export component CreateProjectScreen inherits VerticalBox {
             HorizontalBox {
                 spacing: 12px;
                 Text { text: root.destination; color: WeaveTheme.text-primary; vertical-alignment: center; overflow: elide; }
-                AppButton { text: "Choose folder"; clicked => { root.choose_destination(); } }
+                AppButton { text: "Choose folder"; enabled: !root.busy; clicked => { root.choose_destination(); } }
             }
             Text { text: "PROJECT OPTIONS"; color: WeaveTheme.accent; font-size: WeaveTheme.font-tiny; font-weight: 700; }
             HorizontalBox {
@@ -43,8 +44,8 @@ export component CreateProjectScreen inherits VerticalBox {
         }
     }
     HorizontalBox {
-        AppButton { text: "Back"; clicked => { root.back(); } }
+        AppButton { text: "Back"; enabled: !root.busy; clicked => { root.back(); } }
         Rectangle { horizontal-stretch: 1; background: transparent; }
-        AppButton { text: "Create project"; primary: true; clicked => { root.create_project(); } }
+        AppButton { text: root.busy ? "Creating…" : "Create project"; primary: true; enabled: !root.busy; clicked => { root.create_project(); } }
     }
 }

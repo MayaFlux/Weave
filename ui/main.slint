@@ -14,6 +14,7 @@ import { ShaderConflictDialog } from "./dialogs/shader_conflict_dialog.slint";
 import { PasswordDialog } from "./dialogs/password_dialog.slint";
 import { InstallDialog, InstallationStep, InstallationAdvisory } from "./dialogs/install_dialog.slint";
 import { AppButton } from "./components/mod.slint";
+import { AppScreen, ResultKind, RetryKind } from "./types.slint";
 
 export component MainWindow inherits Window {
     title: "Weave";
@@ -23,12 +24,24 @@ export component MainWindow inherits Window {
     background: WeaveTheme.window-background;
     init => { Palette.color-scheme = ColorScheme.dark; }
 
+    // Window and project creation
+    in-out property <AppScreen> screen: AppScreen.landing;
+    in-out property <bool> busy: false;
+    in-out property <string> destination: "";
     in-out property <string> project_name: "MyProject";
+    in-out property <bool> with_lila: false;
+    in-out property <bool> with_vscode: true;
+    in-out property <bool> copy_shader_sources: false;
+
+    // Community module creation
     in-out property <string> module_name: "my_module";
     in-out property <string> module_description: "";
     in-out property <string> module_min_version: "0.5.0";
-    in-out property <string> destination: "";
+    in-out property <bool> community_needs_lila: false;
+
+    // Managed project and optional features
     in-out property <string> managed_project_path: "";
+    in-out property <string> module_names: "";
     in-out property <string> lila_option_status: "Choose a project to inspect its options.";
     in-out property <string> shader_option_status: "Choose a project to inspect its options.";
     in-out property <bool> can_add_lila: false;
@@ -36,34 +49,40 @@ export component MainWindow inherits Window {
     in-out property <bool> add_lila_option: false;
     in-out property <bool> add_shader_sources_option: false;
     in-out property <bool> shader_conflict_open: false;
+    in-out property <string> shader_conflict_files: "";
     in-out property <bool> refresh_dialog_open: false;
     in-out property <[RefreshChoice]> refresh_files;
-    in-out property <string> shader_conflict_files: "";
-    in-out property <int> screen: 0;
-    in-out property <string> module_names: "";
-    in-out property <bool> result_open: false;
-    in-out property <bool> result_busy: false;
-    in-out property <bool> result_cancel_enabled: false;
-    in-out property <bool> result_retry_visible: false;
-    in-out property <int> result_retry_kind: 0;
+
+    // Run & Report inputs
     in-out property <bool> run_report_dialog_open: false;
     in-out property <string> run_report_configuration: "";
     in-out property <string> run_report_executable: "";
     in-out property <string> run_report_mayaflux_root: "";
-    in-out property <bool> conflict_confirmation_open: false;
-    in-out property <bool> password_dialog_open: false;
-    in-out property <int> result_kind: 0;
+
+    // Shared operation result
+    in-out property <bool> result_open: false;
+    in-out property <bool> result_busy: false;
+    in-out property <bool> result_cancel_enabled: false;
+    in-out property <bool> result_retry_visible: false;
+    in-out property <RetryKind> result_retry_kind: RetryKind.none;
+    in-out property <ResultKind> result_kind: ResultKind.success;
     in-out property <string> result_title: "";
     in-out property <string> result_message: "";
+
+    // MayaFlux installation and confirmation
+    in property <bool> install_available: false;
+    in property <bool> linux_install: false;
+    in property <bool> windows_install: false;
+    in-out property <string> install_channel: "stable";
+    in-out property <bool> install_cli_access: true;
+    in-out property <string> install_password: "";
+    in-out property <bool> password_dialog_open: false;
+    in-out property <bool> conflict_confirmation_open: false;
     in-out property <string> conflict_confirmation_title: "";
     in-out property <string> conflict_confirmation_message: "";
     in-out property <string> pending_install_channel: "";
     in-out property <bool> install_replace_confirmed: false;
     in-out property <bool> install_retry_replace_confirmed: false;
-    in-out property <string> install_password: "";
-    in-out property <string> install_channel: "stable";
-    in-out property <bool> install_cli_access: true;
-    in-out property <bool> busy: false;
     in-out property <bool> install_progress_open: false;
     in-out property <[InstallationStep]> install_progress_steps;
     in-out property <int> install_active_page: 0;
@@ -72,22 +91,20 @@ export component MainWindow inherits Window {
     in-out property <string> install_summary;
     in-out property <float> install_fraction: -1;
     in-out property <[InstallationAdvisory]> install_advisories;
-    in property <bool> install_available: false;
-    in property <bool> linux_install: false;
-    in property <bool> windows_install: false;
-    in-out property <bool> community_needs_lila: false;
-    in-out property <bool> with_lila: false;
-    in-out property <bool> with_vscode: true;
-    in-out property <bool> copy_shader_sources: false;
+
+    // Release notice
     in property <string> weave_version;
     in-out property <string> update_version: "";
     in-out property <string> update_url: "";
     in-out property <bool> update_available: false;
+
     callback view_update();
     callback dismiss_update();
+
     callback choose_destination();
     callback create_project();
     callback create_community_module();
+
     callback choose_manage_project();
     callback add_community_modules();
     callback apply_project_options();
@@ -103,6 +120,7 @@ export component MainWindow inherits Window {
     callback replace_shader_conflicts();
     callback skip_shader_conflicts();
     callback cancel_shader_conflicts();
+
     callback install_mayaflux(string);
     callback prepare_install_mayaflux(string);
     callback confirm_install_replacement();
@@ -147,7 +165,7 @@ export component MainWindow inherits Window {
                     AppButton { text: "Dismiss"; clicked => { root.dismiss_update(); } }
                 }
             }
-            if root.screen == 0: LandingScreen {
+            if root.screen == AppScreen.landing: LandingScreen {
                 install_available: root.install_available;
                 linux_install: root.linux_install;
                 windows_install: root.windows_install;
@@ -155,27 +173,28 @@ export component MainWindow inherits Window {
                     root.install_password = "";
                     root.password_dialog_open = false;
                     root.install_replace_confirmed = false;
-                    root.screen = 5;
+                    root.screen = AppScreen.install;
                 }
-                projects => { root.screen = 1; }
+                projects => { root.screen = AppScreen.projects; }
             }
-            if root.screen == 1: ProjectsScreen {
-                back => { root.screen = 0; }
-                create_project => { root.screen = 2; }
+            if root.screen == AppScreen.projects: ProjectsScreen {
+                back => { root.screen = AppScreen.landing; }
+                create_project => { root.screen = AppScreen.create-project; }
                 manage_project => { root.choose_manage_project(); }
-                create_community_module => { root.screen = 4; }
+                create_community_module => { root.screen = AppScreen.community-module; }
             }
-            if root.screen == 2: CreateProjectScreen {
+            if root.screen == AppScreen.create-project: CreateProjectScreen {
+                busy: root.busy;
                 project_name <=> root.project_name;
                 destination <=> root.destination;
                 with_lila <=> root.with_lila;
                 with_vscode <=> root.with_vscode;
                 copy_shader_sources <=> root.copy_shader_sources;
-                back => { root.screen = 1; }
+                back => { root.screen = AppScreen.projects; }
                 choose_destination => { root.choose_destination(); }
                 create_project => { root.create_project(); }
             }
-            if root.screen == 3: ManageProjectScreen {
+            if root.screen == AppScreen.manage-project: ManageProjectScreen {
                 project_path <=> root.managed_project_path;
                 module_names <=> root.module_names;
                 busy: root.busy;
@@ -185,30 +204,31 @@ export component MainWindow inherits Window {
                 can_copy_shader_sources: root.can_copy_shader_sources;
                 add_lila <=> root.add_lila_option;
                 add_shader_sources <=> root.add_shader_sources_option;
-                back => { root.screen = 1; }
+                back => { root.screen = AppScreen.projects; }
                 add_community_modules => { root.add_community_modules(); }
                 apply_options => { root.apply_project_options(); }
                 validate_project => { root.validate_project(); }
                 run_report => { root.run_report_dialog_open = true; }
                 refresh_project => { root.preview_project_refresh(); }
             }
-            if root.screen == 5: InstallMayaFluxScreen {
+            if root.screen == AppScreen.install: InstallMayaFluxScreen {
                 busy: root.busy;
                 linux_install: root.linux_install;
                 windows_install: root.windows_install;
                 install_channel <=> root.install_channel;
                 install_cli_access <=> root.install_cli_access;
-                back => { root.install_password = ""; root.password_dialog_open = false; root.screen = 0; }
+                back => { root.install_password = ""; root.password_dialog_open = false; root.screen = AppScreen.landing; }
                 install_mayaflux(channel) => { root.install_mayaflux(channel); }
                 prepare_install_mayaflux(channel) => { root.prepare_install_mayaflux(channel); }
             }
-            if root.screen == 4: CreateCommunityModuleScreen {
+            if root.screen == AppScreen.community-module: CreateCommunityModuleScreen {
+                busy: root.busy;
                 module_name <=> root.module_name;
                 module_description <=> root.module_description;
                 module_min_version <=> root.module_min_version;
                 destination <=> root.destination;
                 community_needs_lila <=> root.community_needs_lila;
-                back => { root.screen = 1; }
+                back => { root.screen = AppScreen.projects; }
                 choose_destination => { root.choose_destination(); }
                 create_community_module => { root.create_community_module(); }
             }
@@ -234,7 +254,7 @@ export component MainWindow inherits Window {
             result_kind: root.result_kind;
             result_title: root.result_title;
             result_message: root.result_message;
-            close => { root.result_open = false; root.result_retry_visible = false; root.result_retry_kind = 0; }
+            close => { root.result_open = false; root.result_retry_visible = false; root.result_retry_kind = RetryKind.none; }
             cancel => { root.cancel_project_operation(); }
             retry => { root.retry_project_operation(); }
         }
