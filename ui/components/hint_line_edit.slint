@@ -1,0 +1,44 @@
+import { LineEdit } from "std-widgets.slint";
+import { WeaveTheme } from "../theme.slint";
+
+/// Keeps guidance legible and visually distinct from entered text.
+export component HintLineEdit inherits Rectangle {
+    in-out property <string> text;
+    in property <string> hint;
+    in property <bool> enabled: true;
+    in property <InputType> input-type: InputType.text;
+    callback edited(string);
+
+    min-height: edit.min-height;
+    preferred-height: edit.preferred-height;
+    vertical-stretch: 0;
+    horizontal-stretch: 1;
+    forward-focus: edit;
+
+    edit := LineEdit {
+        width: 100%;
+        height: 100%;
+        text <=> root.text;
+        enabled: root.enabled;
+        input-type: root.input-type;
+        accessible-placeholder-text: root.hint;
+        edited(value) => { root.edited(value); }
+    }
+
+    if root.text.is-empty && !root.hint.is-empty: Text {
+        x: 12px;
+        width: parent.width - 24px;
+        height: parent.height;
+        text: root.hint;
+        color: root.enabled ? WeaveTheme.text-body : WeaveTheme.text-muted;
+        font-size: WeaveTheme.font-body;
+        font-italic: true;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    if root.text.is-empty && !root.hint.is-empty: TouchArea {
+        enabled: root.enabled;
+        clicked => { edit.focus(); }
+    }
+}

@@ -1,49 +1,202 @@
-import { CheckBox, HorizontalBox, LineEdit, VerticalBox } from "std-widgets.slint";
+import { CheckBox, HorizontalBox, LineEdit, ScrollView, VerticalBox } from "std-widgets.slint";
 import { WeaveTheme } from "../theme.slint";
 import { AppButton } from "../components/mod.slint";
+import { HintLineEdit } from "../components/hint_line_edit.slint";
 
 export component CreateCommunityModuleScreen inherits VerticalBox {
     in property <bool> busy;
     in-out property <string> module_name;
+    in-out property <string> module_name_error;
     in-out property <string> module_description;
     in-out property <string> module_min_version;
+    in-out property <string> module_min_version_error;
     in-out property <string> destination;
+    in-out property <string> destination_error;
     in-out property <bool> community_needs_lila;
+
     callback back;
     callback choose_destination;
     callback create_community_module;
 
     spacing: 14px;
-    AppButton { text: "←  Projects"; enabled: !root.busy; clicked => { root.back(); } }
-    Text { text: "Create a community module"; color: WeaveTheme.accent; font-size: WeaveTheme.font-heading; font-weight: 650; }
-    Text { text: "Set up a reusable module with its manifest and standalone CMake test project."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-description; }
-    Rectangle {
-        height: 420px;
-        background: WeaveTheme.panel-background;
-        border-width: 1px;
-        border-color: WeaveTheme.border;
-        border-radius: 6px;
+
+    AppButton {
+        text: "←  Projects";
+        enabled: !root.busy;
+        clicked => { root.back(); }
+    }
+
+    Text {
+        text: "Create a community module";
+        color: WeaveTheme.accent;
+        font-size: WeaveTheme.font-heading;
+        font-weight: 650;
+    }
+
+    Text {
+        text: "Set up a reusable module with its manifest and standalone CMake test project.";
+        color: WeaveTheme.text-secondary;
+        font-size: WeaveTheme.font-body;
+        preferred-width: 0px;
+        horizontal-stretch: 1;
+        wrap: word-wrap;
+    }
+
+    ScrollView {
+        vertical-stretch: 1;
+
         VerticalBox {
-            x: 24px; y: 20px; width: parent.width - 48px; height: parent.height - 40px; spacing: 9px;
-            Text { text: "MODULE DETAILS"; color: WeaveTheme.accent; font-size: WeaveTheme.font-tiny; font-weight: 700; }
-            Text { text: "Module name"; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; }
-            LineEdit { text <=> root.module_name; placeholder-text: "snake_case name"; }
-            Text { text: "Description"; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; }
-            LineEdit { text <=> root.module_description; placeholder-text: "What does this module do?"; }
-            Text { text: "Minimum MayaFlux version"; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; }
-            LineEdit { text <=> root.module_min_version; placeholder-text: "0.5.0"; }
-            Text { text: "Create in"; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; }
-            HorizontalBox {
-                spacing: 12px;
-                Text { text: root.destination; color: WeaveTheme.text-primary; vertical-alignment: center; overflow: elide; }
-                AppButton { text: "Choose folder"; enabled: !root.busy; clicked => { root.choose_destination(); } }
+            width: parent.width;
+
+            Rectangle {
+                // ScrollView uses minimum content height for its scroll range.
+                height: fields.preferred-height + 40px;
+                preferred-height: fields.preferred-height + 40px;
+                vertical-stretch: 0;
+                background: WeaveTheme.panel-background;
+                border-width: 1px;
+                border-color: WeaveTheme.border;
+                border-radius: 6px;
+
+                fields := VerticalBox {
+                    x: 24px;
+                    y: 20px;
+                    width: parent.width - 48px;
+                    height: self.preferred-height;
+                    spacing: 18px;
+
+                    Text {
+                        text: "MODULE DETAILS";
+                        color: WeaveTheme.accent;
+                        font-size: WeaveTheme.font-tiny;
+                        font-weight: 700;
+                    }
+
+                    VerticalBox {
+                        spacing: 5px;
+
+                        Text {
+                            text: "Module name";
+                            color: WeaveTheme.text-secondary;
+                            font-size: WeaveTheme.font-caption;
+                        }
+                        HintLineEdit {
+                            text <=> root.module_name;
+                            hint: "Example: audio_tools";
+                            enabled: !root.busy;
+                            edited => { root.module_name_error = ""; }
+                        }
+                        Text {
+                            text: "Use a snake_case name, such as audio_tools.";
+                            color: WeaveTheme.text-secondary;
+                            font-size: WeaveTheme.font-description;
+                        }
+                        if !root.module_name_error.is-empty: Text {
+                            text: root.module_name_error;
+                            color: WeaveTheme.error-text;
+                            font-size: WeaveTheme.font-small;
+                            preferred-width: 0px;
+                            horizontal-stretch: 1;
+                            wrap: word-wrap;
+                        }
+                    }
+
+                    VerticalBox {
+                        spacing: 5px;
+
+                        Text {
+                            text: "Description";
+                            color: WeaveTheme.text-secondary;
+                            font-size: WeaveTheme.font-caption;
+                        }
+                        HintLineEdit {
+                            text <=> root.module_description;
+                            hint: "What does this module do?";
+                            enabled: !root.busy;
+                        }
+                    }
+
+                    VerticalBox {
+                        spacing: 5px;
+
+                        Text {
+                            text: "Minimum MayaFlux version (optional, defaults to 0.5.0)";
+                            color: WeaveTheme.text-secondary;
+                            font-size: WeaveTheme.font-caption;
+                            preferred-width: 0px;
+                            horizontal-stretch: 1;
+                            wrap: word-wrap;
+                        }
+                        HintLineEdit {
+                            text <=> root.module_min_version;
+                            hint: "Leave blank for 0.5.0";
+                            enabled: !root.busy;
+                            edited => { root.module_min_version_error = ""; }
+                        }
+                        if !root.module_min_version_error.is-empty: Text {
+                            text: root.module_min_version_error;
+                            color: WeaveTheme.error-text;
+                            font-size: WeaveTheme.font-small;
+                            preferred-width: 0px;
+                            horizontal-stretch: 1;
+                            wrap: word-wrap;
+                        }
+                    }
+
+                    VerticalBox {
+                        spacing: 5px;
+
+                        Text {
+                            text: "Create in";
+                            color: WeaveTheme.text-secondary;
+                            font-size: WeaveTheme.font-caption;
+                        }
+                        HorizontalBox {
+                            spacing: 12px;
+                            LineEdit {
+                                text: root.destination;
+                                read-only: true;
+                                horizontal-stretch: 1;
+                            }
+                            AppButton {
+                                text: "Choose folder";
+                                enabled: !root.busy;
+                                clicked => { root.choose_destination(); }
+                            }
+                        }
+                        if !root.destination_error.is-empty: Text {
+                            text: root.destination_error;
+                            color: WeaveTheme.error-text;
+                            font-size: WeaveTheme.font-small;
+                            preferred-width: 0px;
+                            horizontal-stretch: 1;
+                            wrap: word-wrap;
+                        }
+                    }
+
+                    CheckBox {
+                        text: "Requires Lila live coding";
+                        checked <=> root.community_needs_lila;
+                        enabled: !root.busy;
+                    }
+                }
             }
-            CheckBox { text: "Requires Lila live coding"; checked <=> root.community_needs_lila; }
         }
     }
+
     HorizontalBox {
-        AppButton { text: "Back"; enabled: !root.busy; clicked => { root.back(); } }
+        AppButton {
+            text: "Back";
+            enabled: !root.busy;
+            clicked => { root.back(); }
+        }
+
         Rectangle { horizontal-stretch: 1; background: transparent; }
-        AppButton { text: root.busy ? "Creating…" : "Create module"; primary: true; enabled: !root.busy; clicked => { root.create_community_module(); } }
+        AppButton {
+            text: root.busy ? "Creating…" : "Create module";
+            primary: true;
+            enabled: !root.busy;
+            clicked => { root.create_community_module(); }
+        }
     }
 }

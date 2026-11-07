@@ -1,6 +1,7 @@
-import { CheckBox, HorizontalBox, LineEdit, VerticalBox } from "std-widgets.slint";
+import { CheckBox, HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
 import { WeaveTheme } from "../theme.slint";
 import { AppButton } from "../components/mod.slint";
+import { HintLineEdit } from "../components/hint_line_edit.slint";
 
 export component ManageProjectScreen inherits VerticalBox {
     in-out property <string> project_path;
@@ -12,6 +13,7 @@ export component ManageProjectScreen inherits VerticalBox {
     in property <bool> can_copy_shader_sources;
     in-out property <bool> add_lila;
     in-out property <bool> add_shader_sources;
+
     callback back;
     callback add_community_modules;
     callback apply_options;
@@ -20,54 +22,261 @@ export component ManageProjectScreen inherits VerticalBox {
     callback refresh_project;
 
     spacing: 12px;
-    AppButton { text: "←  Projects"; enabled: !root.busy; clicked => { root.back(); } }
-    Text { text: "Manage Project"; color: WeaveTheme.accent; font-size: WeaveTheme.font-heading; font-weight: 650; }
-    Text { text: "Selected project: " + root.project_path; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-small; overflow: elide; }
-    Rectangle {
-        height: 310px;
-        background: WeaveTheme.panel-background;
-        border-width: 1px;
-        border-color: WeaveTheme.border;
-        border-radius: 6px;
+
+    AppButton {
+        text: "←  Projects";
+        enabled: !root.busy;
+        clicked => { root.back(); }
+    }
+
+    Text {
+        text: "Manage Project";
+        color: WeaveTheme.accent;
+        font-size: WeaveTheme.font-heading;
+        font-weight: 650;
+    }
+
+    Text {
+        text: "Selected project: " + root.project_path;
+        color: WeaveTheme.text-secondary;
+        font-size: WeaveTheme.font-small;
+        overflow: elide;
+    }
+
+    ScrollView {
+        vertical-stretch: 1;
+
         VerticalBox {
-            x: 22px; y: 16px; width: parent.width - 44px; height: parent.height - 32px; spacing: 7px;
-            Text { text: "PROJECT OPTIONS"; color: WeaveTheme.accent; font-size: WeaveTheme.font-tiny; font-weight: 700; }
-            VerticalBox {
-                spacing: 3px;
-                CheckBox { text: "Add Lila live coding"; checked <=> root.add_lila; enabled: !root.busy && root.can_add_lila; }
-                Text { text: root.lila_status; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; wrap: word-wrap; }
-            }
-            VerticalBox {
-                spacing: 3px;
-                CheckBox { text: "Copy MayaFlux shader sources"; checked <=> root.add_shader_sources; enabled: !root.busy && root.can_copy_shader_sources; }
-                Text { text: root.shader_status; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; wrap: word-wrap; }
-            }
-            Text { text: "Lila updates the project's MayaFlux CMake integration. Existing shader files are checked before copying."; color: WeaveTheme.text-muted; font-size: WeaveTheme.font-caption; wrap: word-wrap; }
-            Text { text: "Run the project's validation script to check project files and the MayaFlux installation."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-small; wrap: word-wrap; }
-            Rectangle { vertical-stretch: 1; background: transparent; }
+            width: parent.width;
+            spacing: 16px;
+
             HorizontalBox {
-                AppButton { text: "Validate Project"; enabled: !root.busy; clicked => { root.validate_project(); } }
-                AppButton { text: "Run & Report"; enabled: !root.busy; clicked => { root.run_report(); } }
-                AppButton { text: "Refresh Project Files"; enabled: !root.busy; clicked => { root.refresh_project(); } }
-                Rectangle { horizontal-stretch: 1; background: transparent; }
-                AppButton { text: root.busy ? "Applying…" : "Apply Selected Options"; primary: true; enabled: !root.busy && (root.add_lila || root.add_shader_sources); clicked => { root.apply_options(); } }
+                spacing: 16px;
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: max(options_content.preferred-height, modules_content.preferred-height) + 32px;
+                    preferred-height: self.height;
+                    vertical-stretch: 0;
+                    background: WeaveTheme.panel-background;
+                    border-width: 1px;
+                    border-color: WeaveTheme.border;
+                    border-radius: 6px;
+
+                    options_content := VerticalBox {
+                        x: 22px;
+                        y: 16px;
+                        width: parent.width - 44px;
+                        height: self.preferred-height;
+                        spacing: 12px;
+
+                        Text {
+                            text: "PROJECT OPTIONS";
+                            color: WeaveTheme.accent;
+                            font-size: WeaveTheme.font-tiny;
+                            font-weight: 700;
+                        }
+
+                        VerticalBox {
+                            spacing: 4px;
+                            CheckBox {
+                                text: "Add Lila live coding";
+                                checked <=> root.add_lila;
+                                enabled: !root.busy && root.can_add_lila;
+                            }
+                            Text {
+                                text: root.lila_status;
+                                color: WeaveTheme.text-secondary;
+                                font-size: WeaveTheme.font-description;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
+                                wrap: word-wrap;
+                            }
+                        }
+
+                        VerticalBox {
+                            spacing: 4px;
+                            CheckBox {
+                                text: "Copy MayaFlux shader sources";
+                                checked <=> root.add_shader_sources;
+                                enabled: !root.busy && root.can_copy_shader_sources;
+                            }
+                            Text {
+                                text: root.shader_status;
+                                color: WeaveTheme.text-secondary;
+                                font-size: WeaveTheme.font-description;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
+                                wrap: word-wrap;
+                            }
+                        }
+
+                        Text {
+                            text: "Lila updates the project's MayaFlux CMake integration. Existing shader files are checked before copying.";
+                            color: WeaveTheme.text-muted;
+                            font-size: WeaveTheme.font-description;
+                            preferred-width: 0px;
+                            horizontal-stretch: 1;
+                            wrap: word-wrap;
+                        }
+
+                        AppButton {
+                            text: root.busy ? "Applying…" : "Apply Selected Options";
+                            primary: true;
+                            enabled: !root.busy && (root.add_lila || root.add_shader_sources);
+                            clicked => { root.apply_options(); }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: max(options_content.preferred-height, modules_content.preferred-height) + 32px;
+                    preferred-height: self.height;
+                    vertical-stretch: 0;
+                    background: WeaveTheme.panel-background;
+                    border-width: 1px;
+                    border-color: WeaveTheme.border;
+                    border-radius: 6px;
+
+                    modules_content := VerticalBox {
+                        x: 22px;
+                        y: 16px;
+                        width: parent.width - 44px;
+                        height: self.preferred-height;
+                        spacing: 10px;
+
+                        Text {
+                            text: "ADD COMMUNITY MODULES";
+                            color: WeaveTheme.accent;
+                            font-size: WeaveTheme.font-tiny;
+                            font-weight: 700;
+                        }
+
+                        Text {
+                            text: "Module names";
+                            color: WeaveTheme.text-secondary;
+                            font-size: WeaveTheme.font-caption;
+                        }
+
+                        HintLineEdit {
+                            text <=> root.module_names;
+                            hint: "Example: terrain_field, audio_tools";
+                            enabled: !root.busy;
+                        }
+
+                        Text {
+                            text: "Separate names with commas. Weave checks registry and MayaFlux compatibility, validates module files, then registers them in community.cmake.";
+                            color: WeaveTheme.text-secondary;
+                            font-size: WeaveTheme.font-body;
+                            preferred-width: 0px;
+                            horizontal-stretch: 1;
+                            wrap: word-wrap;
+                        }
+
+                        AppButton {
+                            text: root.busy ? "Working…" : "Add Community Modules";
+                            enabled: !root.busy;
+                            clicked => { root.add_community_modules(); }
+                        }
+                    }
+                }
+            }
+
+            HorizontalBox {
+                spacing: 16px;
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: max(diagnostics_content.preferred-height, refresh_content.preferred-height) + 32px;
+                    preferred-height: self.height;
+                    vertical-stretch: 0;
+                    background: WeaveTheme.panel-background;
+                    border-width: 1px;
+                    border-color: WeaveTheme.border;
+                    border-radius: 6px;
+
+                    diagnostics_content := VerticalBox {
+                        x: 22px;
+                        y: 16px;
+                        width: parent.width - 44px;
+                        height: self.preferred-height;
+                        spacing: 12px;
+
+                        Text {
+                            text: "PROJECT DIAGNOSTICS";
+                            color: WeaveTheme.accent;
+                            font-size: WeaveTheme.font-tiny;
+                            font-weight: 700;
+                        }
+
+                        Text {
+                            text: "Validate project files and the MayaFlux installation, or run an already built project and collect a report.";
+                            color: WeaveTheme.text-secondary;
+                            font-size: WeaveTheme.font-body;
+                            preferred-width: 0px;
+                            horizontal-stretch: 1;
+                            wrap: word-wrap;
+                        }
+
+                        HorizontalBox {
+                            spacing: 12px;
+                            AppButton {
+                                text: "Validate Project";
+                                enabled: !root.busy;
+                                clicked => { root.validate_project(); }
+                            }
+
+                            AppButton {
+                                text: "Run & Report";
+                                enabled: !root.busy;
+                                clicked => { root.run_report(); }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: max(diagnostics_content.preferred-height, refresh_content.preferred-height) + 32px;
+                    preferred-height: self.height;
+                    vertical-stretch: 0;
+                    background: WeaveTheme.panel-background;
+                    border-width: 1px;
+                    border-color: WeaveTheme.border;
+                    border-radius: 6px;
+
+                    refresh_content := VerticalBox {
+                        x: 22px;
+                        y: 16px;
+                        width: parent.width - 44px;
+                        height: self.preferred-height;
+                        spacing: 12px;
+
+                        Text {
+                            text: "PROJECT FILES";
+                            color: WeaveTheme.accent;
+                            font-size: WeaveTheme.font-tiny;
+                            font-weight: 700;
+                        }
+
+                        Text {
+                            text: "Compare project templates with this Weave version. Review individual files and backups before applying a refresh.";
+                            color: WeaveTheme.text-secondary;
+                            font-size: WeaveTheme.font-body;
+                            preferred-width: 0px;
+                            horizontal-stretch: 1;
+                            wrap: word-wrap;
+                        }
+
+                        AppButton {
+                            text: "Refresh Project Files";
+                            enabled: !root.busy;
+                            clicked => { root.refresh_project(); }
+                        }
+                    }
+                }
             }
         }
     }
-    Rectangle {
-        height: 190px;
-        background: WeaveTheme.panel-background;
-        border-width: 1px;
-        border-color: WeaveTheme.border;
-        border-radius: 6px;
-        VerticalBox {
-            x: 22px; y: 16px; width: parent.width - 44px; height: parent.height - 32px; spacing: 10px;
-            Text { text: "ADD COMMUNITY MODULES"; color: WeaveTheme.accent; font-size: WeaveTheme.font-tiny; font-weight: 700; }
-            LineEdit { text <=> root.module_names; placeholder-text: "terrain_field, audio_tools"; }
-            Text { text: "Weave checks registry and MayaFlux compatibility, validates module files, then registers the modules in community.cmake."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-small; wrap: word-wrap; }
-            Rectangle { vertical-stretch: 1; background: transparent; }
-            AppButton { text: root.busy ? "Working…" : "Add Community Modules"; enabled: !root.busy; clicked => { root.add_community_modules(); } }
-        }
-    }
-    Rectangle { vertical-stretch: 1; background: transparent; }
 }

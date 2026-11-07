@@ -1,4 +1,4 @@
-import { Button, HorizontalBox, VerticalBox, ScrollView } from "std-widgets.slint";
+import { Button, HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
 import { WeaveTheme } from "../theme.slint";
 import { InstallStepPage } from "../components/install_step.slint";
 import { CompletionNotice } from "../components/completion_notice.slint";
@@ -119,13 +119,21 @@ export component InstallDialog inherits Rectangle {
                     }
                 }
             }
-            if !root.busy: Text {
-                text: root.summary;
-                color: root.failed ? WeaveTheme.error-text : WeaveTheme.text-body;
-                font-size: WeaveTheme.font-small;
-                wrap: word-wrap;
-                overflow: elide;
-                max-height: root.advisories.length > 0 ? 48px : 90px;
+            if !root.busy: ScrollView {
+                vertical-stretch: 0;
+                preferred-height: min(max(48px, summary_text.preferred-height + 12px), parent.height / 4);
+                content-height: summary_text.preferred-height + 12px;
+
+                summary_text := Text {
+                    x: 8px;
+                    y: 6px;
+                    width: parent.width - 16px;
+                    height: self.preferred-height;
+                    text: root.summary;
+                    color: root.failed ? WeaveTheme.error-text : WeaveTheme.text-body;
+                    font-size: WeaveTheme.font-small;
+                    wrap: word-wrap;
+                }
             }
             HorizontalBox {
                 Rectangle { horizontal-stretch: 1; background: transparent; }

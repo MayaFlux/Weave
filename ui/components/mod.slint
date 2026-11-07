@@ -1,6 +1,7 @@
 import { WeaveTheme } from "../theme.slint";
 import { VerticalBox } from "std-widgets.slint";
 
+/// Opens a primary task from the landing or Projects screen.
 export component ActionCard inherits Rectangle {
     in property <string> eyebrow;
     in property <string> heading;
@@ -8,11 +9,16 @@ export component ActionCard inherits Rectangle {
     in property <color> accent: WeaveTheme.action-accent;
     callback clicked;
 
-    height: 104px;
+    height: max(104px, card_content.preferred-height + 36px);
     border-radius: 6px;
     border-width: 1px;
     border-color: WeaveTheme.border;
     background: WeaveTheme.panel-background;
+    forward-focus: focus-scope;
+
+    accessible-role: button;
+    accessible-label: root.heading + ". " + root.detail;
+    accessible-action-default => { root.clicked(); }
 
     Rectangle {
         x: 0px;
@@ -23,15 +29,23 @@ export component ActionCard inherits Rectangle {
         background: root.accent;
     }
 
-    VerticalBox {
+    card_content := VerticalBox {
         x: 24px;
         y: 18px;
         width: parent.width - 76px;
-        height: parent.height - 36px;
+        height: self.preferred-height;
         spacing: 3px;
-        Text { text: root.eyebrow; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-tiny; font-weight: 600; }
-        Text { text: root.heading; color: WeaveTheme.accent; font-size: WeaveTheme.font-card-title; font-weight: 600; }
-        Text { text: root.detail; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-small; wrap: word-wrap; }
+        Text { text: root.eyebrow; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-tiny; font-weight: 600; accessible-role: none; }
+        Text { text: root.heading; color: WeaveTheme.accent; font-size: WeaveTheme.font-card-title; font-weight: 600; accessible-role: none; }
+        Text {
+            text: root.detail;
+            color: WeaveTheme.text-secondary;
+            font-size: WeaveTheme.font-small;
+            preferred-width: 0px;
+            horizontal-stretch: 1;
+            wrap: word-wrap;
+            accessible-role: none;
+        }
     }
 
     Text {
@@ -40,9 +54,29 @@ export component ActionCard inherits Rectangle {
         text: "→";
         color: root.accent;
         font-size: WeaveTheme.font-arrow;
+        accessible-role: none;
     }
 
     touch-area := TouchArea { clicked => { root.clicked(); } }
+
+    focus-scope := FocusScope {
+        x: 0px;
+        width: 0px;
+        key-pressed(event) => {
+            if (event.text == Key.Space || event.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    if focus-scope.has-focus: Rectangle {
+        border-width: 2px;
+        border-color: root.accent;
+        border-radius: 6px;
+        background: transparent;
+    }
 
     states [
         hovered when touch-area.has-hover: {
@@ -53,6 +87,7 @@ export component ActionCard inherits Rectangle {
     ]
 }
 
+/// Displays a themed action with mouse, keyboard, and assistive activation.
 export component AppButton inherits Rectangle {
     in property <string> text;
     in property <bool> primary: false;
@@ -67,6 +102,12 @@ export component AppButton inherits Rectangle {
     border-width: root.primary ? 0px : 1px;
     border-color: WeaveTheme.border;
     opacity: root.enabled ? 1 : 0.48;
+    forward-focus: focus-scope;
+
+    accessible-role: button;
+    accessible-enabled: root.enabled;
+    accessible-label: root.text;
+    accessible-action-default => { if (root.enabled) { root.clicked(); } }
 
     Text {
         x: 18px;
@@ -77,11 +118,32 @@ export component AppButton inherits Rectangle {
         font-size: WeaveTheme.font-body;
         font-weight: 650;
         horizontal-alignment: center;
+        accessible-role: none;
     }
 
     touch-area := TouchArea {
         enabled: root.enabled;
         clicked => { root.clicked(); }
+    }
+
+    focus-scope := FocusScope {
+        x: 0px;
+        width: 0px;
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if (event.text == Key.Space || event.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    if focus-scope.has-focus && root.enabled: Rectangle {
+        border-width: 2px;
+        border-color: root.accent;
+        border-radius: 4px;
+        background: transparent;
     }
 
     states [

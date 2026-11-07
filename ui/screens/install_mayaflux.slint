@@ -1,4 +1,4 @@
-import { Button, CheckBox, GroupBox, HorizontalBox, ProgressIndicator, VerticalBox } from "std-widgets.slint";
+import { Button, CheckBox, GroupBox, ProgressIndicator, RadioGroup, VerticalBox } from "std-widgets.slint";
 import { WeaveTheme } from "../theme.slint";
 
 export component InstallMayaFluxScreen inherits VerticalBox {
@@ -20,40 +20,32 @@ export component InstallMayaFluxScreen inherits VerticalBox {
             ? "Install MayaFlux using your distribution's package manager. Package dependencies are handled by the package manager."
             : "Check Apple developer tools and Homebrew, then install MayaFlux and its dependencies through Homebrew. Missing prerequisites may open a native macOS installer.";
         color: WeaveTheme.text-secondary;
-        font-size: WeaveTheme.font-description;
+        font-size: WeaveTheme.font-body;
+        preferred-width: 0px;
+        horizontal-stretch: 1;
         wrap: word-wrap;
     }
     GroupBox {
-        title: "Release channel";
+        title: "Install options";
         vertical-stretch: 0;
         VerticalBox {
             spacing: 16px;
-            HorizontalBox {
-                spacing: 18px;
-                VerticalBox {
-                    preferred-width: 0px;
-                    horizontal-stretch: 1;
-                    spacing: 10px;
-                    Button {
-                        text: root.install_channel == "stable" ? "Stable (selected)" : "Stable";
-                        primary: root.install_channel == "stable";
-                        enabled: !root.busy;
-                        clicked => { root.install_channel = "stable"; }
-                    }
-                    Text { text: "Current stable release. Recommended for most projects."; color: WeaveTheme.text-body; font-size: WeaveTheme.font-description; wrap: word-wrap; }
-                }
-                VerticalBox {
-                    preferred-width: 0px;
-                    horizontal-stretch: 1;
-                    spacing: 10px;
-                    Button {
-                        text: root.install_channel == "development" ? "Development (selected)" : "Development";
-                        primary: root.install_channel == "development";
-                        enabled: !root.busy;
-                        clicked => { root.install_channel = "development"; }
-                    }
-                    Text { text: "Latest development build."; color: WeaveTheme.text-body; font-size: WeaveTheme.font-description; wrap: word-wrap; }
-                }
+            RadioGroup {
+                title: "Release channel";
+                orientation: horizontal;
+                enabled: !root.busy;
+                RadioButton { text: "Stable"; checked: root.install_channel == "stable"; }
+                RadioButton { text: "Development"; checked: root.install_channel == "development"; }
+                selected(value) => { root.install_channel = value == "Stable" ? "stable" : "development"; }
+            }
+
+            Text {
+                text: "Stable: Current release, recommended for most projects. Development: Latest development build.";
+                color: WeaveTheme.text-body;
+                font-size: WeaveTheme.font-body;
+                preferred-width: 0px;
+                horizontal-stretch: 1;
+                wrap: word-wrap;
             }
             CheckBox {
                 text: "Make the Weave CLI available in new terminals";
@@ -81,12 +73,16 @@ export component InstallMayaFluxScreen inherits VerticalBox {
             : "System check → MayaFlux → Environment → Templates / CLI";
         color: WeaveTheme.text-secondary;
         font-size: WeaveTheme.font-caption;
+        preferred-width: 0px;
+        horizontal-stretch: 1;
         wrap: word-wrap;
     }
     Text {
         text: "Weave asks before replacing another MayaFlux edition. Templates are built into Weave; the same executable provides the GUI and CLI.";
         color: WeaveTheme.text-muted;
         font-size: WeaveTheme.font-caption;
+        preferred-width: 0px;
+        horizontal-stretch: 1;
         wrap: word-wrap;
     }
     Button { text: "Back"; enabled: !root.busy; clicked => { root.back(); } }

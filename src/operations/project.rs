@@ -109,7 +109,8 @@ fn create_project_with_shader_root(
     })
 }
 
-fn resolve_destination(destination: &Path) -> Result<PathBuf, ProjectCreationError> {
+/// Resolves a project destination without creating or changing it.
+pub(crate) fn resolve_destination(destination: &Path) -> Result<PathBuf, ProjectCreationError> {
     let absolute = if destination.is_absolute() {
         destination.to_path_buf()
     } else {

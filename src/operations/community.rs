@@ -99,7 +99,8 @@ pub fn create_community_module(
     })
 }
 
-fn validate_name(name: &str) -> Result<(), CommunityCreationError> {
+/// Checks a module name before creating its destination.
+pub(crate) fn validate_name(name: &str) -> Result<(), CommunityCreationError> {
     let mut characters = name.chars();
     let valid_start = characters
         .next()
@@ -119,7 +120,8 @@ fn validate_name(name: &str) -> Result<(), CommunityCreationError> {
     Ok(())
 }
 
-fn validate_min_version(version: &str) -> Result<(), CommunityCreationError> {
+/// Checks the manifest's minimum MayaFlux version format.
+pub(crate) fn validate_min_version(version: &str) -> Result<(), CommunityCreationError> {
     let components: Vec<_> = version.split('.').collect();
     let valid = components.len() == 3
         && components.iter().all(|component| {

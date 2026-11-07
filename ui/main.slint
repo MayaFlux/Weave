@@ -22,8 +22,8 @@ import { ProjectsScreen } from "./screens/projects.slint";
 /// Owns the Rust-facing GUI state, navigation, and dialog composition.
 export component MainWindow inherits Window {
     title: "Weave";
-    width: 900px;
-    height: 760px;
+    preferred-width: 900px;
+    preferred-height: 760px;
     default-font-family: WeaveTheme.font-family;
     background: WeaveTheme.window-background;
 
@@ -35,15 +35,19 @@ export component MainWindow inherits Window {
     in-out property <bool> busy: false;
 
     in-out property <string> destination: "";
-    in-out property <string> project_name: "MyProject";
+    in-out property <string> destination_error: "";
+    in-out property <string> project_name: "";
+    in-out property <string> project_name_error: "";
     in-out property <bool> with_lila: false;
     in-out property <bool> with_vscode: true;
     in-out property <bool> copy_shader_sources: false;
 
     // Community module creation
-    in-out property <string> module_name: "my_module";
+    in-out property <string> module_name: "";
+    in-out property <string> module_name_error: "";
     in-out property <string> module_description: "";
-    in-out property <string> module_min_version: "0.5.0";
+    in-out property <string> module_min_version: "";
+    in-out property <string> module_min_version_error: "";
     in-out property <bool> community_needs_lila: false;
 
     // Managed project and optional features
@@ -187,15 +191,26 @@ export component MainWindow inherits Window {
 
             if root.screen == AppScreen.projects: ProjectsScreen {
                 back => { root.screen = AppScreen.landing; }
-                create_project => { root.screen = AppScreen.create-project; }
+                create_project => {
+                    root.project_name_error = "";
+                    root.destination_error = "";
+                    root.screen = AppScreen.create-project;
+                }
                 manage_project => { root.choose_manage_project(); }
-                create_community_module => { root.screen = AppScreen.community-module; }
+                create_community_module => {
+                    root.module_name_error = "";
+                    root.module_min_version_error = "";
+                    root.destination_error = "";
+                    root.screen = AppScreen.community-module;
+                }
             }
 
             if root.screen == AppScreen.create-project: CreateProjectScreen {
                 busy: root.busy;
                 project_name <=> root.project_name;
+                project_name_error <=> root.project_name_error;
                 destination <=> root.destination;
+                destination_error <=> root.destination_error;
                 with_lila <=> root.with_lila;
                 with_vscode <=> root.with_vscode;
                 copy_shader_sources <=> root.copy_shader_sources;
@@ -244,9 +259,12 @@ export component MainWindow inherits Window {
             if root.screen == AppScreen.community-module: CreateCommunityModuleScreen {
                 busy: root.busy;
                 module_name <=> root.module_name;
+                module_name_error <=> root.module_name_error;
                 module_description <=> root.module_description;
                 module_min_version <=> root.module_min_version;
+                module_min_version_error <=> root.module_min_version_error;
                 destination <=> root.destination;
+                destination_error <=> root.destination_error;
                 community_needs_lila <=> root.community_needs_lila;
 
                 back => { root.screen = AppScreen.projects; }
@@ -274,6 +292,7 @@ export component MainWindow inherits Window {
 
         if root.result_open: ResultDialog {
             result_busy: root.result_busy;
+            detailed_output: root.result_retry_kind != RetryKind.none;
             cancel_enabled: root.result_cancel_enabled;
             retry_visible: root.result_retry_visible;
             result_kind: root.result_kind;

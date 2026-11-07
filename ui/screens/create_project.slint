@@ -1,51 +1,180 @@
-import { CheckBox, HorizontalBox, LineEdit, VerticalBox } from "std-widgets.slint";
+import { CheckBox, HorizontalBox, LineEdit, ScrollView, VerticalBox } from "std-widgets.slint";
 import { WeaveTheme } from "../theme.slint";
 import { AppButton } from "../components/mod.slint";
+import { HintLineEdit } from "../components/hint_line_edit.slint";
 
 export component CreateProjectScreen inherits VerticalBox {
     in property <bool> busy;
     in-out property <string> project_name;
+    in-out property <string> project_name_error;
     in-out property <string> destination;
+    in-out property <string> destination_error;
     in-out property <bool> with_lila;
     in-out property <bool> with_vscode;
     in-out property <bool> copy_shader_sources;
+
     callback back;
     callback choose_destination;
     callback create_project;
 
     spacing: 14px;
-    AppButton { text: "←  Projects"; enabled: !root.busy; clicked => { root.back(); } }
-    Text { text: "Create a project"; color: WeaveTheme.accent; font-size: WeaveTheme.font-heading; font-weight: 650; }
-    Text { text: "Choose a name and location, then select the project tools to include."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-description; }
-    Rectangle {
-        height: 360px;
-        background: WeaveTheme.panel-background;
-        border-width: 1px;
-        border-color: WeaveTheme.border;
-        border-radius: 6px;
+
+    AppButton {
+        text: "←  Projects";
+        enabled: !root.busy;
+        clicked => { root.back(); }
+    }
+
+    Text {
+        text: "Create a project";
+        color: WeaveTheme.accent;
+        font-size: WeaveTheme.font-heading;
+        font-weight: 650;
+    }
+
+    Text {
+        text: "Choose a name and location, then select the project tools to include.";
+        color: WeaveTheme.text-secondary;
+        font-size: WeaveTheme.font-body;
+        preferred-width: 0px;
+        horizontal-stretch: 1;
+        wrap: word-wrap;
+    }
+
+    ScrollView {
+        vertical-stretch: 1;
+
         VerticalBox {
-            x: 24px; y: 20px; width: parent.width - 48px; height: parent.height - 40px; spacing: 10px;
-            Text { text: "PROJECT DETAILS"; color: WeaveTheme.accent; font-size: WeaveTheme.font-tiny; font-weight: 700; }
-            Text { text: "Project name"; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; }
-            LineEdit { text <=> root.project_name; placeholder-text: "For example, AudioDemo"; }
-            Text { text: "Create in"; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-caption; }
-            HorizontalBox {
-                spacing: 12px;
-                Text { text: root.destination; color: WeaveTheme.text-primary; vertical-alignment: center; overflow: elide; }
-                AppButton { text: "Choose folder"; enabled: !root.busy; clicked => { root.choose_destination(); } }
+            width: parent.width;
+
+            Rectangle {
+                // ScrollView uses minimum content height for its scroll range.
+                height: fields.preferred-height + 40px;
+                preferred-height: fields.preferred-height + 40px;
+                vertical-stretch: 0;
+                background: WeaveTheme.panel-background;
+                border-width: 1px;
+                border-color: WeaveTheme.border;
+                border-radius: 6px;
+
+                fields := VerticalBox {
+                    x: 24px;
+                    y: 20px;
+                    width: parent.width - 48px;
+                    height: self.preferred-height;
+                    spacing: 18px;
+
+                    Text {
+                        text: "PROJECT DETAILS";
+                        color: WeaveTheme.accent;
+                        font-size: WeaveTheme.font-tiny;
+                        font-weight: 700;
+                    }
+
+                    VerticalBox {
+                        spacing: 5px;
+
+                        Text {
+                            text: "Project name";
+                            color: WeaveTheme.text-secondary;
+                            font-size: WeaveTheme.font-caption;
+                        }
+                        HintLineEdit {
+                            text <=> root.project_name;
+                            hint: "Example: AudioDemo";
+                            enabled: !root.busy;
+                            edited => { root.project_name_error = ""; }
+                        }
+                        if !root.project_name_error.is-empty: Text {
+                            text: root.project_name_error;
+                            color: WeaveTheme.error-text;
+                            font-size: WeaveTheme.font-small;
+                            preferred-width: 0px;
+                            horizontal-stretch: 1;
+                            wrap: word-wrap;
+                        }
+                    }
+
+                    VerticalBox {
+                        spacing: 5px;
+
+                        Text {
+                            text: "Create in";
+                            color: WeaveTheme.text-secondary;
+                            font-size: WeaveTheme.font-caption;
+                        }
+                        HorizontalBox {
+                            spacing: 12px;
+                            LineEdit {
+                                text: root.destination;
+                                read-only: true;
+                                horizontal-stretch: 1;
+                            }
+                            AppButton {
+                                text: "Choose folder";
+                                enabled: !root.busy;
+                                clicked => { root.choose_destination(); }
+                            }
+                        }
+                        if !root.destination_error.is-empty: Text {
+                            text: root.destination_error;
+                            color: WeaveTheme.error-text;
+                            font-size: WeaveTheme.font-small;
+                            preferred-width: 0px;
+                            horizontal-stretch: 1;
+                            wrap: word-wrap;
+                        }
+                    }
+
+                    VerticalBox {
+                        spacing: 10px;
+
+                        Text {
+                            text: "PROJECT OPTIONS";
+                            color: WeaveTheme.accent;
+                            font-size: WeaveTheme.font-tiny;
+                            font-weight: 700;
+                        }
+
+                        HorizontalBox {
+                            spacing: 18px;
+                            CheckBox {
+                                text: "Live coding (Lila)";
+                                checked <=> root.with_lila;
+                                enabled: !root.busy;
+                            }
+
+                            CheckBox {
+                                text: "VS Code setup";
+                                checked <=> root.with_vscode;
+                                enabled: !root.busy;
+                            }
+                        }
+
+                        CheckBox {
+                            text: "Copy MayaFlux shader sources";
+                            checked <=> root.copy_shader_sources;
+                            enabled: !root.busy;
+                        }
+                    }
+                }
             }
-            Text { text: "PROJECT OPTIONS"; color: WeaveTheme.accent; font-size: WeaveTheme.font-tiny; font-weight: 700; }
-            HorizontalBox {
-                spacing: 18px;
-                CheckBox { text: "Live coding (Lila)"; checked <=> root.with_lila; }
-                CheckBox { text: "VS Code setup"; checked <=> root.with_vscode; }
-            }
-            CheckBox { text: "Copy MayaFlux shader sources"; checked <=> root.copy_shader_sources; }
         }
     }
+
     HorizontalBox {
-        AppButton { text: "Back"; enabled: !root.busy; clicked => { root.back(); } }
+        AppButton {
+            text: "Back";
+            enabled: !root.busy;
+            clicked => { root.back(); }
+        }
+
         Rectangle { horizontal-stretch: 1; background: transparent; }
-        AppButton { text: root.busy ? "Creating…" : "Create project"; primary: true; enabled: !root.busy; clicked => { root.create_project(); } }
+        AppButton {
+            text: root.busy ? "Creating…" : "Create project";
+            primary: true;
+            enabled: !root.busy;
+            clicked => { root.create_project(); }
+        }
     }
 }
