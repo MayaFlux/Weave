@@ -1,0 +1,56 @@
+import { HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { AppButton } from "./mod.slint";
+import { WeaveTheme } from "../theme.slint";
+
+/// Presents a release notice and delegates its actions to the window.
+export component UpdateBanner inherits Rectangle {
+    in property <string> version;
+
+    /// Opens the advertised release page.
+    callback view_release();
+
+    /// Hides the notice through the Rust release state.
+    callback dismiss();
+
+    height: 82px;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: WeaveTheme.action-accent;
+    background: WeaveTheme.panel-background;
+
+    HorizontalBox {
+        padding: 14px;
+        spacing: 12px;
+
+        VerticalBox {
+            horizontal-stretch: 1;
+            spacing: 4px;
+
+            Text {
+                text: "Weave " + root.version + " is available";
+                color: WeaveTheme.text-primary;
+                font-size: WeaveTheme.font-body;
+                font-weight: 650;
+            }
+
+            Text {
+                text: "A new stable release is ready to download.";
+                color: WeaveTheme.text-secondary;
+                font-size: WeaveTheme.font-small;
+            }
+        }
+
+        AppButton {
+            text: "View release";
+            primary: true;
+
+            clicked => { root.view_release(); }
+        }
+
+        AppButton {
+            text: "Dismiss";
+
+            clicked => { root.dismiss(); }
+        }
+    }
+}

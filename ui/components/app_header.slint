@@ -1,0 +1,40 @@
+import { HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { WeaveTheme } from "../theme.slint";
+
+/// Displays Weave's identity and the current application version.
+export component AppHeader inherits HorizontalBox {
+    in property <string> version;
+
+    height: 48px;
+    spacing: 12px;
+
+    VerticalBox {
+        spacing: 2px;
+
+        Text {
+            text: "MAYAFLUX";
+            color: WeaveTheme.accent;
+            font-size: WeaveTheme.font-caption;
+            font-weight: 700;
+        }
+
+        Text {
+            text: "WEAVE  /  MAYAFLUX TOOLCHAIN";
+            color: WeaveTheme.text-primary;
+            font-size: WeaveTheme.font-body;
+            font-weight: 650;
+        }
+    }
+
+    Rectangle {
+        horizontal-stretch: 1;
+        background: transparent;
+    }
+
+    Text {
+        text: root.version;
+        color: WeaveTheme.text-secondary;
+        font-size: WeaveTheme.font-caption;
+        vertical-alignment: center;
+    }
+}
