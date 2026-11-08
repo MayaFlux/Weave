@@ -3,12 +3,13 @@
 use super::super::controller::GuiController;
 use super::super::state::OperationKind;
 use super::super::view::publish_result;
+use super::report_output::{ReportOutput, format_run_report_output};
 use crate::operations::project_options::{
     FeatureStatus, ProjectOptionError, ShaderConflictPolicy, apply_project_options,
     inspect_project_options,
 };
 use crate::operations::project_run_report::{
-    RunReportOptions, RunReportResult, run_project_report,
+    RunReportOptions, RunReportResult, run_project_report, supports_stop_and_collect,
 };
 use crate::operations::project_validation::{ValidationResult, validate_project};
 use crate::{MainWindow, ResultKind, RetryKind};
@@ -172,11 +173,20 @@ fn start_project_task(controller: &GuiController, window: &MainWindow, task: Pro
         return;
     };
 
+    let stop_supported =
+        task.kind() == OperationKind::RunReport && supports_stop_and_collect(&project);
+
     window.set_result_kind(ResultKind::Success);
     window.set_result_title(task.title().into());
-    window.set_result_message("".into());
+    window.set_result_message(if task.kind() == OperationKind::RunReport && !stop_supported {
+        "This project's run-report script predates Stop and collect. Refresh the project script to enable it. Force stop remains available."
+    } else {
+        ""
+    }.into());
     window.set_result_busy(true);
-    window.set_result_cancel_enabled(true);
+    window.set_result_cancel_enabled(task.kind() == OperationKind::Validation);
+    window.set_result_stop_enabled(stop_supported);
+    window.set_result_force_enabled(task.kind() == OperationKind::RunReport);
     window.set_result_retry_visible(false);
     window.set_result_retry_kind(task.retry_kind());
     window.set_result_open(true);
@@ -185,6 +195,7 @@ fn start_project_task(controller: &GuiController, window: &MainWindow, task: Pro
     std::thread::spawn(move || {
         let task_kind = task.kind();
         let streamed = Mutex::new(String::new());
+        let report_output = Mutex::new(ReportOutput::default());
         let output_controller = Mutex::new(worker.clone());
         let log = |line: &str| {
             {
@@ -195,7 +206,11 @@ fn start_project_task(controller: &GuiController, window: &MainWindow, task: Pro
                 output.push_str(line);
             }
 
-            let line = line.to_owned();
+            let line = if task_kind == OperationKind::RunReport {
+                report_output.lock().unwrap().push(line)
+            } else {
+                line.to_owned()
+            };
             output_controller
                 .lock()
                 .unwrap()
@@ -212,17 +227,22 @@ fn start_project_task(controller: &GuiController, window: &MainWindow, task: Pro
         let result = match task {
             ProjectTask::Validation => validate_project(&project, &ticket.cancellation, &log)
                 .map(ProjectTaskResult::Validation),
-            ProjectTask::RunReport(options) => {
-                run_project_report(&project, &options, &ticket.cancellation, &log)
-                    .map(ProjectTaskResult::RunReport)
-            }
+            ProjectTask::RunReport(options) => run_project_report(
+                &project,
+                &options,
+                stop_supported.then_some(ticket.stop_requested.as_ref()),
+                &ticket.cancellation,
+                &log,
+            )
+            .map(ProjectTaskResult::RunReport),
         };
 
         let cancelled = ticket.cancellation.load(Ordering::Relaxed);
+        let stopped = ticket.stop_requested.load(Ordering::Relaxed);
         let streamed = streamed.into_inner().unwrap();
 
         worker.complete(ticket.id, move |window| {
-            present_project_result(window, task_kind, result, cancelled, streamed);
+            present_project_result(window, task_kind, result, cancelled, stopped, streamed);
         });
     });
 }
@@ -233,9 +253,12 @@ fn present_project_result(
     task_kind: OperationKind,
     result: Result<ProjectTaskResult, String>,
     cancelled: bool,
+    stopped: bool,
     streamed: String,
 ) {
     window.set_result_cancel_enabled(false);
+    window.set_result_stop_enabled(false);
+    window.set_result_force_enabled(false);
     window.set_result_retry_visible(true);
     match result {
         Ok(ProjectTaskResult::Validation(ValidationResult {
@@ -257,10 +280,29 @@ fn present_project_result(
             output,
         ),
         Ok(ProjectTaskResult::RunReport(RunReportResult {
+            application_exit_code,
+            output,
+            ..
+        })) if stopped => publish_result(
+            window,
+            if application_exit_code == 0 {
+                ResultKind::Success
+            } else {
+                ResultKind::Warning
+            },
+            "Run stopped, report collected",
+            format_run_report_output(&output),
+        ),
+        Ok(ProjectTaskResult::RunReport(RunReportResult {
             application_exit_code: 0,
             output,
             ..
-        })) => publish_result(window, ResultKind::Success, "Run & Report complete", output),
+        })) => publish_result(
+            window,
+            ResultKind::Success,
+            "Run & Report complete",
+            format_run_report_output(&output),
+        ),
         Ok(ProjectTaskResult::RunReport(RunReportResult {
             application_exit_code,
             output,
@@ -269,20 +311,28 @@ fn present_project_result(
             window,
             ResultKind::Warning,
             &format!("Project exited with code {application_exit_code}"),
-            output,
+            format_run_report_output(&output),
         ),
         Err(error) if cancelled => publish_result(
             window,
             ResultKind::Warning,
             failure_title(task_kind, true),
-            append_error(streamed, error),
+            display_project_output(task_kind, append_error(streamed, error)),
         ),
         Err(error) => publish_result(
             window,
             ResultKind::Error,
             failure_title(task_kind, false),
-            append_error(streamed, error),
+            display_project_output(task_kind, append_error(streamed, error)),
         ),
+    }
+}
+
+fn display_project_output(kind: OperationKind, output: String) -> String {
+    if kind == OperationKind::RunReport {
+        format_run_report_output(&output)
+    } else {
+        output
     }
 }
 
@@ -295,7 +345,7 @@ fn failure_title(kind: OperationKind, cancelled: bool) -> &'static str {
     match (kind, cancelled) {
         (OperationKind::Validation, true) => "Validation cancelled",
         (OperationKind::Validation, false) => "Could not run project validation",
-        (OperationKind::RunReport, true) => "Project run cancelled",
+        (OperationKind::RunReport, true) => "Project force stopped",
         (OperationKind::RunReport, false) => "Could not run project and collect diagnostics",
         _ => unreachable!("only project processes use this title"),
     }
@@ -340,7 +390,7 @@ mod tests {
         );
         assert_eq!(
             failure_title(OperationKind::RunReport, true),
-            "Project run cancelled"
+            "Project force stopped"
         );
         assert_eq!(
             failure_title(OperationKind::RunReport, false),

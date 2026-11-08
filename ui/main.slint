@@ -77,6 +77,8 @@ export component MainWindow inherits Window {
     in-out property <bool> result_open: false;
     in-out property <bool> result_busy: false;
     in-out property <bool> result_cancel_enabled: false;
+    in-out property <bool> result_stop_enabled: false;
+    in-out property <bool> result_force_enabled: false;
     in-out property <bool> result_retry_visible: false;
     /// Identifies the operation retried from the shared result dialog.
     in-out property <RetryKind> result_retry_kind: RetryKind.none;
@@ -138,6 +140,8 @@ export component MainWindow inherits Window {
     callback choose_run_report_executable();
     callback choose_run_report_mayaflux_root();
     callback cancel_project_operation();
+    callback stop_project_run();
+    callback force_stop_project_run();
     callback retry_project_operation();
 
     // Shader conflict actions
@@ -294,6 +298,8 @@ export component MainWindow inherits Window {
             result_busy: root.result_busy;
             detailed_output: root.result_retry_kind != RetryKind.none;
             cancel_enabled: root.result_cancel_enabled;
+            stop_enabled: root.result_stop_enabled;
+            force_enabled: root.result_force_enabled;
             retry_visible: root.result_retry_visible;
             result_kind: root.result_kind;
             result_title: root.result_title;
@@ -306,6 +312,8 @@ export component MainWindow inherits Window {
             }
 
             cancel => { root.cancel_project_operation(); }
+            stop => { root.stop_project_run(); }
+            force_stop => { root.force_stop_project_run(); }
             retry => { root.retry_project_operation(); }
         }
 

@@ -351,6 +351,7 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
         let result = run_project_report(
             Path::new(project_path),
             &report_options,
+            None,
             &cancellation,
             &|line| println!("{line}"),
         )

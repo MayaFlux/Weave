@@ -1,10 +1,43 @@
+# Weave stop protocol 1
 param(
     [string]$ProjectRoot = $PSScriptRoot,
     [string]$Executable,
     [string]$MayaFluxRoot,
     [string]$ProjectName = '@PROJECT_NAME@',
-    [string]$Configuration
+    [string]$Configuration,
+    [string]$StopFile
 )
+
+# A private console lets Weave interrupt this run without affecting other apps.
+if ($StopFile) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class WeaveRunConsole {
+    private delegate bool ConsoleHandler(uint eventType);
+    private static readonly ConsoleHandler Handler = HandleEvent;
+
+    [DllImport("kernel32.dll")] private static extern bool AllocConsole();
+    [DllImport("kernel32.dll")] private static extern IntPtr GetConsoleWindow();
+    [DllImport("kernel32.dll")] private static extern bool SetConsoleCtrlHandler(ConsoleHandler handler, bool add);
+    [DllImport("kernel32.dll")] private static extern bool GenerateConsoleCtrlEvent(uint eventType, uint groupId);
+    [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr window, int command);
+
+    private static bool HandleEvent(uint eventType) { return eventType == 1; }
+
+    public static void Prepare() {
+        if (!AllocConsole()) throw new InvalidOperationException("Could not create a console for application shutdown.");
+        ShowWindow(GetConsoleWindow(), 0);
+        if (!SetConsoleCtrlHandler(Handler, true)) throw new InvalidOperationException("Could not set the report console handler.");
+    }
+
+    public static void RequestStop() {
+        if (!GenerateConsoleCtrlEvent(1, 0)) throw new InvalidOperationException("Could not send Ctrl-Break to the application.");
+    }
+}
+'@
+}
 
 function Resolve-ReportPath([string]$Value, [string]$BaseDirectory) {
     $value = [Environment]::ExpandEnvironmentVariables($Value.Trim().Trim('"'))
@@ -103,11 +136,18 @@ try {
     $request.UseShellExecute = $false
     $request.RedirectStandardOutput = $true
     $request.RedirectStandardError = $true
+    if ($StopFile) { [WeaveRunConsole]::Prepare() }
     $process = [Diagnostics.Process]::Start($request)
     if (-not $process) { throw 'The project executable could not be started.' }
     $stdout = $process.StandardOutput.ReadLineAsync()
     $stderr = $process.StandardError.ReadLineAsync()
+    $stopSent = $false
     while ($null -ne $stdout -or $null -ne $stderr) {
+        if ($StopFile -and -not $stopSent -and [IO.File]::Exists($StopFile) -and -not $process.HasExited) {
+            Write-ReportLine 'Stop requested; waiting for application shutdown.' $writer
+            [WeaveRunConsole]::RequestStop()
+            $stopSent = $true
+        }
         $received = $false
         if ($null -ne $stdout -and $stdout.IsCompleted) {
             $line = $stdout.GetAwaiter().GetResult()

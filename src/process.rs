@@ -1,6 +1,7 @@
 //! Shared output streaming, execution deadlines and installer lifetime policy.
 use std::{
     io::Read,
+    path::Path,
     process::{Command, Output},
     time::Duration,
 };
@@ -113,7 +114,7 @@ pub fn run_with<R: ProcessRuntime>(
     timeout: Duration,
     log: &(impl Fn(&str) + Sync),
 ) -> Result<Output, String> {
-    run_inner(runtime, command, installer, Some(timeout), log, None)
+    run_inner(runtime, command, installer, Some(timeout), log, None, None)
 }
 
 pub fn run_cancellable_with<R: ProcessRuntime>(
@@ -131,6 +132,7 @@ pub fn run_cancellable_with<R: ProcessRuntime>(
         Some(timeout),
         log,
         Some(cancellation),
+        None,
     )
 }
 
@@ -141,7 +143,34 @@ pub fn run_cancellable_until_exit_with<R: ProcessRuntime>(
     cancellation: &std::sync::atomic::AtomicBool,
     log: &(impl Fn(&str) + Sync),
 ) -> Result<Output, String> {
-    run_inner(runtime, command, installer, None, log, Some(cancellation))
+    run_inner(
+        runtime,
+        command,
+        installer,
+        None,
+        log,
+        Some(cancellation),
+        None,
+    )
+}
+
+/// Runs a report collector and sends a stop request without killing it.
+pub fn run_report_with_stop<R: ProcessRuntime>(
+    runtime: &R,
+    command: &mut Command,
+    stop_requested: Option<(&std::sync::atomic::AtomicBool, &Path)>,
+    cancellation: &std::sync::atomic::AtomicBool,
+    log: &(impl Fn(&str) + Sync),
+) -> Result<Output, String> {
+    run_inner(
+        runtime,
+        command,
+        false,
+        None,
+        log,
+        Some(cancellation),
+        stop_requested,
+    )
 }
 
 fn run_inner<R: ProcessRuntime>(
@@ -151,6 +180,7 @@ fn run_inner<R: ProcessRuntime>(
     timeout: Option<Duration>,
     log: &(impl Fn(&str) + Sync),
     cancellation: Option<&std::sync::atomic::AtomicBool>,
+    stop_requested: Option<(&std::sync::atomic::AtomicBool, &Path)>,
 ) -> Result<Output, String> {
     use std::process::Stdio;
     use std::sync::mpsc;
@@ -197,6 +227,7 @@ fn run_inner<R: ProcessRuntime>(
         let start = std::time::Instant::now();
         let mut timed_out = false;
         let mut cancelled = false;
+        let mut stop_sent = false;
         loop {
             match receiver.recv_timeout(Duration::from_millis(50)) {
                 Ok((error, bytes)) => {
@@ -221,6 +252,23 @@ fn run_inner<R: ProcessRuntime>(
                     }
                     format!("Cannot wait for {label}: {e}")
                 })?;
+            }
+            if status.is_none()
+                && !stop_sent
+                && let Some((requested, path)) = stop_requested
+                && requested.load(std::sync::atomic::Ordering::Relaxed)
+            {
+                if let Err(error) = std::fs::write(path, b"stop\n") {
+                    if let Some(job) = &job {
+                        job.terminate();
+                    }
+                    let _ = child.kill();
+                    return Err(format!("Could not request application shutdown: {error}"));
+                }
+                stop_sent = true;
+                log(
+                    "Stop requested. Waiting for the application to close and the report to finish.",
+                );
             }
             if !cancelled
                 && cancellation
@@ -254,7 +302,9 @@ fn run_inner<R: ProcessRuntime>(
             ));
         }
         if cancelled {
-            return Err("Validation was cancelled. Retry when you are ready.".to_owned());
+            return Err(
+                "The process was cancelled before completion. Retry when you are ready.".to_owned(),
+            );
         }
         Ok(Output {
             status: status.unwrap(),

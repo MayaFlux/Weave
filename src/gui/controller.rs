@@ -93,4 +93,8 @@ impl GuiController {
     pub fn cancel_active(&self) -> bool {
         self.state.lock().unwrap().cancel_active()
     }
+
+    pub fn stop_active_run(&self) -> bool {
+        self.state.lock().unwrap().stop_active_run()
+    }
 }

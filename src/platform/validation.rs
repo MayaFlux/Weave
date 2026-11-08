@@ -151,6 +151,7 @@ pub(crate) fn run_validation_command(
 
 pub(crate) fn run_project_process(
     command: &mut Command,
+    stop_requested: Option<(&AtomicBool, &std::path::Path)>,
     cancellation: &AtomicBool,
     log: &(impl Fn(&str) + Sync),
 ) -> Result<Output, String> {
@@ -158,7 +159,7 @@ pub(crate) fn run_project_process(
     let runtime = crate::platform::windows::process::Runtime;
     #[cfg(not(target_os = "windows"))]
     let runtime = ValidationRuntime;
-    crate::process::run_cancellable_until_exit_with(&runtime, command, false, cancellation, log)
+    crate::process::run_report_with_stop(&runtime, command, stop_requested, cancellation, log)
 }
 
 #[cfg(not(target_os = "windows"))]

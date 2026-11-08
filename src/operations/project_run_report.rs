@@ -37,15 +37,34 @@ pub struct RunReportResult {
     pub output: String,
 }
 
+/// Reports whether this project's script can stop the app and finish collection.
+pub fn supports_stop_and_collect(project: &Path) -> bool {
+    let script = if cfg!(target_os = "windows") {
+        project.join("run-report.ps1")
+    } else {
+        project.join("run-report.sh")
+    };
+
+    std::fs::read_to_string(script).is_ok_and(|contents| {
+        contents
+            .lines()
+            .any(|line| line.trim() == "# Weave stop protocol 1")
+    })
+}
+
 pub fn run_project_report(
     project: &Path,
     options: &RunReportOptions,
+    stop_requested: Option<&AtomicBool>,
     cancellation: &AtomicBool,
     log: &(impl Fn(&str) + Sync),
 ) -> Result<RunReportResult, String> {
     let platform = current_platform();
     let interpreter = crate::platform::validation_interpreter()?;
     let command = build_run_report_command_for(project, options, platform, &interpreter)?;
+    if stop_requested.is_some() && !supports_stop_and_collect(&command.working_directory) {
+        return Err("This project's run-report script does not support Stop and collect. Refresh the project script in Manage Project, then retry.".to_owned());
+    }
     crate::filesystem::no_links(&command.working_directory.join("mayaflux_run.txt"))?;
     crate::filesystem::no_links(
         &command
@@ -53,8 +72,54 @@ pub fn run_project_report(
             .join("data/log/mayaflux_report.log"),
     )?;
     let mut command = command.command();
-    let output = crate::platform::run_project_process(&mut command, cancellation, log)?;
+    let stop_file = stop_requested.map(|_| StopRequest::new()).transpose()?;
+    if let Some(stop_file) = &stop_file {
+        #[cfg(target_os = "windows")]
+        command.args(["-StopFile".as_ref(), stop_file.path.as_os_str()]);
+        #[cfg(not(target_os = "windows"))]
+        command.args(["--stop-file".as_ref(), stop_file.path.as_os_str()]);
+    }
+    let stop = stop_requested
+        .zip(stop_file.as_ref())
+        .map(|(requested, file)| (requested, file.path.as_path()));
+    let output = crate::platform::run_project_process(&mut command, stop, cancellation, log)?;
     parse_run_report_output(output)
+}
+
+/// Owns the private shutdown request file for one report run.
+struct StopRequest {
+    directory: PathBuf,
+    path: PathBuf,
+}
+
+impl StopRequest {
+    fn new() -> Result<Self, String> {
+        let directory =
+            std::env::temp_dir().join(format!("weave-run-{}", crate::filesystem::unique_id()));
+        std::fs::create_dir(&directory)
+            .map_err(|error| format!("Could not prepare application shutdown: {error}"))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Err(error) =
+                std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700))
+            {
+                let _ = std::fs::remove_dir(&directory);
+                return Err(format!("Could not secure application shutdown: {error}"));
+            }
+        }
+        Ok(Self {
+            path: directory.join("stop"),
+            directory,
+        })
+    }
+}
+
+impl Drop for StopRequest {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+        let _ = std::fs::remove_dir(&self.directory);
+    }
 }
 
 fn parse_run_report_output(output: Output) -> Result<RunReportResult, String> {
@@ -428,6 +493,206 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn stop_request_allows_application_cleanup_and_report_collection() {
+        use std::sync::atomic::Ordering;
+
+        let root = std::env::temp_dir().join(format!(
+            "weave stop report {}",
+            crate::filesystem::unique_id()
+        ));
+        let project = root.join("Project with spaces");
+        let install = root.join("MayaFlux install");
+        fs::create_dir_all(project.join("build")).unwrap();
+        fs::create_dir_all(install.join("share/MayaFlux/report")).unwrap();
+        #[cfg(target_os = "macos")]
+        let template = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/templates/scripts/macos/run-report-macos.sh"
+        ));
+        #[cfg(target_os = "linux")]
+        let template = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/templates/scripts/linux/run-report.sh"
+        ));
+        fs::write(
+            project.join("run-report.sh"),
+            template.replace("@PROJECT_NAME@", "FixtureApp"),
+        )
+        .unwrap();
+        let executable = project.join("build/FixtureApp");
+        let source = root.join("fixture.c");
+        fs::write(
+            &source,
+            r#"
+#include <signal.h>
+#include <stdio.h>
+#include <sys/stat.h>
+#include <unistd.h>
+static volatile sig_atomic_t stopped = 0;
+static void on_signal(int signal) { (void)signal; stopped = 1; }
+int main(void) {
+    signal(SIGINT, on_signal);
+    puts("fixture ready");
+    fflush(stdout);
+    while (!stopped) usleep(10000);
+    mkdir("data", 0755);
+    mkdir("data/log", 0755);
+    FILE *report = fopen("data/log/mayaflux_report.log", "w");
+    if (!report) return 2;
+    fputs("clean shutdown\n", report);
+    fclose(report);
+    puts("fixture stopped");
+    return 0;
+}
+"#,
+        )
+        .unwrap();
+        let compiled = Command::new("cc")
+            .args([source.as_os_str(), "-o".as_ref(), executable.as_os_str()])
+            .output()
+            .unwrap();
+        assert!(
+            compiled.status.success(),
+            "{}",
+            String::from_utf8_lossy(&compiled.stderr)
+        );
+        fs::write(
+            install.join("share/MayaFlux/report/mayaflux.report.json"),
+            "{}\n",
+        )
+        .unwrap();
+
+        let stop = AtomicBool::new(false);
+        let force = AtomicBool::new(false);
+        let result = run_project_report(
+            &project,
+            &RunReportOptions {
+                mayaflux_root: Some(install),
+                ..RunReportOptions::default()
+            },
+            Some(&stop),
+            &force,
+            &|line| {
+                if line.contains("fixture ready") {
+                    stop.store(true, Ordering::Relaxed);
+                }
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.application_exit_code, 0);
+        assert!(result.output.contains("fixture stopped"));
+        assert!(result.console_log.is_some());
+        assert!(result.application_report.is_some());
+        assert_eq!(
+            fs::read_to_string(project.join("data/log/mayaflux_report.log")).unwrap(),
+            "clean shutdown\n"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_stop_request_reaches_the_console_handler_and_collects_report() {
+        use std::sync::atomic::Ordering;
+        use std::sync::{Arc, mpsc};
+        use std::time::Duration;
+
+        let root = std::env::temp_dir().join(format!(
+            "weave stop report {}",
+            crate::filesystem::unique_id()
+        ));
+        let project = root.join("Project with spaces");
+        let install = root.join("MayaFlux install");
+        fs::create_dir_all(project.join("build")).unwrap();
+        fs::create_dir_all(install.join("share/MayaFlux/report")).unwrap();
+        fs::write(
+            project.join("run-report.ps1"),
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/resources/templates/scripts/windows/run-report.ps1"
+            ))
+            .replace("@PROJECT_NAME@", "FixtureApp"),
+        )
+        .unwrap();
+        fs::write(
+            install.join("share/MayaFlux/report/mayaflux.report.json"),
+            "{}\n",
+        )
+        .unwrap();
+        let source = root.join("fixture.rs");
+        fs::write(&source, r#"
+use std::io::Write;
+use std::sync::atomic::{AtomicBool, Ordering};
+static STOPPED: AtomicBool = AtomicBool::new(false);
+#[link(name = "kernel32")]
+unsafe extern "system" {
+    fn SetConsoleCtrlHandler(handler: Option<unsafe extern "system" fn(u32) -> i32>, add: i32) -> i32;
+}
+unsafe extern "system" fn handle(event: u32) -> i32 {
+    if event == 1 { STOPPED.store(true, Ordering::SeqCst); 1 } else { 0 }
+}
+fn main() {
+    assert_ne!(unsafe { SetConsoleCtrlHandler(Some(handle), 1) }, 0);
+    println!("fixture ready");
+    std::io::stdout().flush().unwrap();
+    while !STOPPED.load(Ordering::SeqCst) { std::thread::sleep(std::time::Duration::from_millis(10)); }
+    std::fs::create_dir_all("data/log").unwrap();
+    std::fs::write("data/log/mayaflux_report.log", "clean shutdown\n").unwrap();
+    println!("fixture stopped");
+}
+"#).unwrap();
+        let executable = project.join("build/FixtureApp.exe");
+        let compiled = Command::new("rustc")
+            .arg(&source)
+            .arg("-o")
+            .arg(&executable)
+            .output()
+            .unwrap();
+        assert!(
+            compiled.status.success(),
+            "{}",
+            String::from_utf8_lossy(&compiled.stderr)
+        );
+
+        let stop = AtomicBool::new(false);
+        let force = Arc::new(AtomicBool::new(false));
+        let (done, timeout) = mpsc::channel();
+        let watchdog = Arc::clone(&force);
+        let timer = std::thread::spawn(move || {
+            if timeout.recv_timeout(Duration::from_secs(15)).is_err() {
+                watchdog.store(true, Ordering::Relaxed);
+            }
+        });
+        let result = run_project_report(
+            &project,
+            &RunReportOptions {
+                executable: Some(executable),
+                mayaflux_root: Some(install),
+                ..RunReportOptions::default()
+            },
+            Some(&stop),
+            &force,
+            &|line| {
+                if line.contains("fixture ready") {
+                    stop.store(true, Ordering::Relaxed);
+                }
+            },
+        );
+        done.send(()).unwrap();
+        timer.join().unwrap();
+        let result = result.unwrap();
+        assert_eq!(result.application_exit_code, 0);
+        assert!(result.output.contains("fixture stopped"));
+        assert_eq!(
+            fs::read_to_string(project.join("data/log/mayaflux_report.log")).unwrap(),
+            "clean shutdown\n"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn bundled_unix_run_report_runs_a_built_fixture_and_saves_both_reports() {
         use std::os::unix::fs::PermissionsExt;
         let root = std::env::temp_dir().join(format!(
@@ -481,6 +746,7 @@ mod tests {
                 mayaflux_root: Some(install),
                 ..RunReportOptions::default()
             },
+            None,
             &AtomicBool::new(false),
             &|_| {},
         )
@@ -525,8 +791,14 @@ mod tests {
         symlink(&external, root.join("data/log")).unwrap();
         let cancellation = AtomicBool::new(false);
 
-        let error = run_project_report(&root, &RunReportOptions::default(), &cancellation, &|_| {})
-            .unwrap_err();
+        let error = run_project_report(
+            &root,
+            &RunReportOptions::default(),
+            None,
+            &cancellation,
+            &|_| {},
+        )
+        .unwrap_err();
 
         assert!(error.contains("symbolic link"));
         let _ = fs::remove_dir_all(root);

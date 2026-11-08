@@ -1,10 +1,12 @@
 #!/bin/bash
+# Weave stop protocol 1
 
 project_name='@PROJECT_NAME@'
 project_root=''
 executable=''
 mayaflux_root=''
 configuration=''
+stop_file=''
 unresolved_name='@PROJECT_''NAME@'
 
 usage() {
@@ -20,6 +22,7 @@ Options:
   --mayaflux-root PATH   MayaFlux installation folder
   --project-name NAME    Executable name when it differs from the project
   --project-root PATH    Project folder (default: this script's folder)
+  --stop-file PATH       Weave shutdown request file
   -h, --help             Show this help
 EOF
 }
@@ -79,7 +82,7 @@ save_previous() {
 while [ "$#" -gt 0 ]; do
     case "$1" in
         -h|--help) usage; exit 0 ;;
-        --configuration|--executable|--mayaflux-root|--project-name|--project-root)
+        --configuration|--executable|--mayaflux-root|--project-name|--project-root|--stop-file)
             [ "$#" -ge 2 ] && [ -n "$2" ] || fail "Option $1 requires a value."
             case "$1" in
                 --configuration) configuration="$2" ;;
@@ -87,6 +90,7 @@ while [ "$#" -gt 0 ]; do
                 --mayaflux-root) mayaflux_root="$2" ;;
                 --project-name) project_name="$2" ;;
                 --project-root) project_root="$2" ;;
+                --stop-file) stop_file="$2" ;;
             esac
             shift 2
             ;;
@@ -183,7 +187,34 @@ save_previous "$console_log" "$suffix"
 } | tee -a "$console_log"
 printf 'Reproduce the problem, then close the application to finish collecting logs.\n'
 
-( cd "$project" && exec "$executable_path" --config "$config" ) 2>&1 | tee -a "$console_log"
+if [ -n "$stop_file" ]; then
+    (
+        cd "$project" || exit 1
+        "$executable_path" --config "$config" &
+        app_pid=$!
+        (
+            while kill -0 "$app_pid" 2>/dev/null; do
+                if [ -f "$stop_file" ]; then
+                    printf 'Stop requested; waiting for application shutdown.\n'
+                    while kill -0 "$app_pid" 2>/dev/null; do
+                        kill -INT "$app_pid" 2>/dev/null || break
+                        sleep 0.5
+                    done
+                    exit
+                fi
+                sleep 0.1
+            done
+        ) &
+        watcher_pid=$!
+        wait "$app_pid"
+        app_code=$?
+        kill "$watcher_pid" 2>/dev/null || true
+        wait "$watcher_pid" 2>/dev/null || true
+        exit "$app_code"
+    ) 2>&1 | tee -a "$console_log"
+else
+    ( cd "$project" && exec "$executable_path" --config "$config" ) 2>&1 | tee -a "$console_log"
+fi
 code="${PIPESTATUS[0]}"
 if [ "$code" -eq 126 ] || [ "$code" -eq 127 ]; then
     fail 'The project executable could not be started.'

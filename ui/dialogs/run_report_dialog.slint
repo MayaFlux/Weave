@@ -31,7 +31,7 @@ export component RunReportDialog inherits Rectangle {
         VerticalBox {
             x: 28px; y: 24px; width: parent.width - 56px; height: parent.height - 48px; spacing: 12px;
             Text { text: "Run & Report"; color: WeaveTheme.accent; font-size: WeaveTheme.font-heading; font-weight: 700; }
-            Text { text: "Runs an already built project. Close the project app to finish collecting diagnostics. Weave does not build the project."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-body; wrap: word-wrap; }
+            Text { text: "Runs an already built project. Close the app or choose Stop and collect when ready. Force stop is available if it does not respond. Weave does not build the project."; color: WeaveTheme.text-secondary; font-size: WeaveTheme.font-body; wrap: word-wrap; }
             Text { text: "Configuration (optional)"; color: WeaveTheme.text-primary; font-size: WeaveTheme.font-caption; font-weight: 650; }
             ComboBox {
                 model: ["Auto-detect", "Debug", "Release", "RelWithDebInfo", "MinSizeRel"];

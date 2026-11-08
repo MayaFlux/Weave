@@ -37,6 +37,19 @@ fn cancellation_only_targets_the_current_operation() {
 }
 
 #[test]
+fn stopping_a_run_requests_collection_without_forcing_termination() {
+    let mut state = GuiState::default();
+    let run = state.begin(OperationKind::RunReport).unwrap();
+
+    assert!(state.stop_active_run());
+    assert!(run.stop_requested.load(Ordering::Relaxed));
+    assert!(!run.cancellation.load(Ordering::Relaxed));
+
+    assert!(state.cancel_active());
+    assert!(run.cancellation.load(Ordering::Relaxed));
+}
+
+#[test]
 fn project_cancel_does_not_stop_an_installation() {
     let mut state = GuiState::default();
     let installation = state.begin(OperationKind::Install).unwrap();

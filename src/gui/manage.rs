@@ -1,5 +1,6 @@
 //! Collects Manage Project input and delegates work to shared operations.
 
+mod report_output;
 mod tasks;
 
 use super::controller::GuiController;
@@ -268,6 +269,27 @@ fn register_processes(window: &MainWindow, controller: &GuiController) {
             cancel.with_window(|window| {
                 window.set_result_cancel_enabled(false);
                 window.set_result_title("Stopping project operation…".into());
+            });
+        }
+    });
+
+    let stop = controller.clone();
+    window.on_stop_project_run(move || {
+        if stop.stop_active_run() {
+            stop.with_window(|window| {
+                window.set_result_stop_enabled(false);
+                window.set_result_title("Stopping application and collecting report…".into());
+            });
+        }
+    });
+
+    let force = controller.clone();
+    window.on_force_stop_project_run(move || {
+        if force.cancel_active() {
+            force.with_window(|window| {
+                window.set_result_stop_enabled(false);
+                window.set_result_force_enabled(false);
+                window.set_result_title("Force stopping project run…".into());
             });
         }
     });

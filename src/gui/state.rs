@@ -27,12 +27,14 @@ pub(super) enum OperationKind {
 pub(super) struct OperationTicket {
     pub id: u64,
     pub cancellation: Arc<AtomicBool>,
+    pub stop_requested: Arc<AtomicBool>,
 }
 
 struct ActiveOperation {
     id: u64,
     kind: OperationKind,
     cancellation: Arc<AtomicBool>,
+    stop_requested: Arc<AtomicBool>,
 }
 
 /// Owns the selected project, its refresh preview, and one active operation.
@@ -56,12 +58,14 @@ impl GuiState {
         let ticket = OperationTicket {
             id: self.next_operation_id,
             cancellation: Arc::new(AtomicBool::new(false)),
+            stop_requested: Arc::new(AtomicBool::new(false)),
         };
 
         self.active = Some(ActiveOperation {
             id: ticket.id,
             kind,
             cancellation: ticket.cancellation.clone(),
+            stop_requested: ticket.stop_requested.clone(),
         });
         Some(ticket)
     }
@@ -92,6 +96,18 @@ impl GuiState {
         {
             operation.cancellation.store(true, Ordering::Relaxed);
             return true;
+        }
+
+        false
+    }
+
+    /// Requests a graceful stop while leaving report collection active.
+    pub fn stop_active_run(&self) -> bool {
+        if let Some(operation) = &self.active
+            && operation.kind == OperationKind::RunReport
+            && !operation.cancellation.load(Ordering::Relaxed)
+        {
+            return !operation.stop_requested.swap(true, Ordering::Relaxed);
         }
 
         false
