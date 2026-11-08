@@ -81,7 +81,7 @@ cmake --build --preset release
 ctest --test-dir test/build
 ```
 
-See the [community manifest contract](docs/COMMUNITY_MANIFEST.md) for the supported metadata and dependency declarations. To share a module, publish its repository and submit it to the community registry.
+See the [community manifest contract](docs/community_manifest.md) for the supported metadata and dependency declarations. To share a module, publish its repository and submit it to the community registry.
 
 ## Command line
 

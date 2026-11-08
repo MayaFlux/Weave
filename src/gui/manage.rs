@@ -67,8 +67,19 @@ fn register_modules(window: &MainWindow, controller: &GuiController) {
 
             std::thread::spawn(move || {
                 let mut output = Vec::new();
-                let result =
-                    community_modules::add_to_project(&project, &[names], |line| output.push(line));
+                let result = community_modules::add_to_project(
+                    &project,
+                    &[names],
+                    |url| {
+                        rfd::MessageDialog::new()
+                            .set_title("Open community URL?")
+                            .set_description(format!("Open this URL in your browser?\n\n{url}"))
+                            .set_buttons(rfd::MessageButtons::YesNo)
+                            .show()
+                            == rfd::MessageDialogResult::Yes
+                    },
+                    |line| output.push(line),
+                );
                 let output = output.join("\n");
 
                 let (kind, title, message) = match result {

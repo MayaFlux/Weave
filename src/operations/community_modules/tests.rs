@@ -39,6 +39,9 @@ struct FixtureServices {
     partial_clone: Cell<bool>,
     invalid_clone: RefCell<Option<String>>,
     clone_requests: RefCell<Vec<(String, PathBuf)>>,
+    opened_urls: RefCell<Vec<String>>,
+    open_error: Cell<bool>,
+    allow_browser: Cell<bool>,
 }
 
 impl FixtureServices {
@@ -64,6 +67,9 @@ impl FixtureServices {
             partial_clone: Cell::new(false),
             invalid_clone: RefCell::new(None),
             clone_requests: RefCell::new(Vec::new()),
+            opened_urls: RefCell::new(Vec::new()),
+            open_error: Cell::new(false),
+            allow_browser: Cell::new(true),
         }
     }
 }
@@ -103,6 +109,19 @@ impl ModuleServices for FixtureServices {
         };
         fs::write(destination.join("community.json"), manifest).unwrap();
         Ok(())
+    }
+
+    fn open_url(&self, url: &str) -> Result<(), ModuleAddError> {
+        self.opened_urls.borrow_mut().push(url.to_owned());
+        if self.open_error.get() {
+            Err(fail("fixture browser failed"))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn confirm_open_url(&self, _url: &str) -> bool {
+        self.allow_browser.get()
     }
 }
 
@@ -383,6 +402,118 @@ fn utf8_bom_manifest_is_accepted_and_declared_requirements_are_reported() {
         fs::read_to_string(fixture.directory.0.join("community.cmake")).unwrap(),
         "terrain_field\n"
     );
+}
+
+#[test]
+fn all_urls_open_in_browser_and_destination_remains_pending() {
+    let fixture = ProjectFixture::new(&["terrain_field"]);
+    let module = fixture.module("terrain_field", r#"{"schema_version":1,"name":"terrain_field","min_version":"0.6.0","urls":[{"url":"https://example.org/data.bin","destination":"assets/data.bin","destination_root":"module"},{"url":"https://example.org/account/download"}]}"#);
+    let mut output = Vec::new();
+    fixture.run(&["terrain_field"], &mut output).unwrap();
+    assert!(!module.join("assets/data.bin").exists());
+    assert_eq!(
+        fixture.services.opened_urls.borrow().as_slice(),
+        &[
+            "https://example.org/data.bin",
+            "https://example.org/account/download"
+        ]
+    );
+    assert!(
+        output
+            .iter()
+            .any(|line| line.contains("assets/data.bin") && line.contains("pending"))
+    );
+}
+
+#[test]
+fn existing_url_destination_is_preserved_without_browser_handoff() {
+    let fixture = ProjectFixture::new(&["terrain_field"]);
+    let module = fixture.module("terrain_field", r#"{"schema_version":1,"name":"terrain_field","min_version":"0.6.0","urls":[{"url":"https://example.org/data.bin","destination":"assets/data.bin","destination_root":"module"}]}"#);
+    fs::create_dir_all(module.join("assets")).unwrap();
+    fs::write(module.join("assets/data.bin"), b"existing").unwrap();
+    fixture.run(&["terrain_field"], &mut Vec::new()).unwrap();
+    assert_eq!(
+        fs::read(module.join("assets/data.bin")).unwrap(),
+        b"existing"
+    );
+    assert!(fixture.services.opened_urls.borrow().is_empty());
+}
+
+#[test]
+fn browser_failure_reports_manual_url_and_keeps_registration() {
+    let fixture = ProjectFixture::new(&["terrain_field"]);
+    fixture.module("terrain_field", r#"{"schema_version":1,"name":"terrain_field","min_version":"0.6.0","urls":[{"url":"https://example.org/data","destination":"data.bin","destination_root":"module"}]}"#);
+    fixture.services.open_error.set(true);
+    let mut output = Vec::new();
+    fixture.run(&["terrain_field"], &mut output).unwrap();
+    assert!(
+        output
+            .iter()
+            .any(|line| line.contains("https://example.org/data")
+                && line.contains("pending")
+                && line.contains("fixture browser failed"))
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.directory.0.join("community.cmake")).unwrap(),
+        "terrain_field\n"
+    );
+}
+
+#[test]
+fn declining_browser_handoff_leaves_destination_pending() {
+    let fixture = ProjectFixture::new(&["terrain_field"]);
+    let module = fixture.module("terrain_field", r#"{"schema_version":1,"name":"terrain_field","min_version":"0.6.0","urls":[{"url":"https://example.org/data","destination":"data.bin","destination_root":"module"}]}"#);
+    fixture.services.allow_browser.set(false);
+    let mut output = Vec::new();
+    fixture.run(&["terrain_field"], &mut output).unwrap();
+    assert!(fixture.services.opened_urls.borrow().is_empty());
+    assert!(!module.join("data.bin").exists());
+    assert!(
+        output
+            .iter()
+            .any(|line| line.contains("https://example.org/data") && line.contains("pending"))
+    );
+}
+
+#[test]
+fn live_url_boundaries_reject_invalid_targets_before_open() {
+    let services = LiveModuleServices {
+        confirm_url: &|_| true,
+    };
+    for url in [
+        "file:///tmp/secret",
+        "http://example.org/file",
+        "https://user@example.org/file",
+        "https://example.org/with\\backslash",
+        "https://example.org/%xx",
+    ] {
+        assert!(services.open_url(url).is_err(), "opened {url}");
+    }
+    assert!(webbrowser::open("file:///tmp/secret").is_err());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn browser_handoff_does_not_wait_for_launcher_process() {
+    let mut command = Command::new("sleep");
+    command.arg("2");
+    let started = std::time::Instant::now();
+    spawn_detached_browser_command(&mut command).unwrap();
+    assert!(started.elapsed() < std::time::Duration::from_secs(1));
+}
+
+#[cfg(unix)]
+#[test]
+fn linked_url_destination_is_rejected_without_touching_target() {
+    use std::os::unix::fs::symlink;
+    let fixture = ProjectFixture::new(&["terrain_field"]);
+    let module = fixture.module("terrain_field", r#"{"schema_version":1,"name":"terrain_field","min_version":"0.6.0","urls":[{"url":"https://example.org/data","destination":"data.bin","destination_root":"module"}]}"#);
+    let target = fixture.directory.0.join("target.bin");
+    fs::write(&target, b"original").unwrap();
+    symlink(&target, module.join("data.bin")).unwrap();
+    assert!(fixture.run(&["terrain_field"], &mut Vec::new()).is_err());
+    assert_eq!(fs::read(&target).unwrap(), b"original");
+    assert!(fixture.services.opened_urls.borrow().is_empty());
 }
 
 #[test]

@@ -25,13 +25,18 @@
     "assets": {
       "type": "array",
       "items": { "$ref": "#/$defs/asset" }
+    },
+    "urls": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/url_entry" }
     }
   },
 
   "dependentRequired": {
     "packages": ["schema_version"],
     "manual_installs": ["schema_version"],
-    "assets": ["schema_version"]
+    "assets": ["schema_version"],
+    "urls": ["schema_version"]
   },
 
   "$defs": {
@@ -54,6 +59,11 @@
       "format": "uri",
       "pattern": "^https://[^\\s/@?#]+(?:[/?][^\\s#]*)?(?![\\s\\S])"
     },
+    "general_https_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://[^\\s/@?#]+(?:[/?][^\\s#]*)?(?:#[^\\s]*)?(?![\\s\\S])"
+    },
     "relative_path": {
       "type": "string",
       "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/\\\\:<>\"|?*\\u0000-\\u001f\\u007f]+(?:/[^/\\\\:<>\"|?*\\u0000-\\u001f\\u007f]+)*(?![\\s\\S])"
@@ -69,6 +79,20 @@
       "minItems": 1,
       "uniqueItems": true,
       "items": { "enum": ["linux", "macos", "windows"] }
+    },
+
+    "url_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url"],
+      "properties": {
+        "url": { "$ref": "#/$defs/general_https_url" },
+        "description": { "$ref": "#/$defs/description" },
+        "destination": { "$ref": "#/$defs/relative_path" },
+        "destination_root": { "enum": ["project", "module"] },
+        "platforms": { "$ref": "#/$defs/platforms" }
+      },
+      "dependentRequired": { "destination_root": ["destination"] }
     },
 
     "package_name": {

@@ -196,6 +196,7 @@ const TOP_FIELDS: &[&str] = &[
     "packages",
     "manual_installs",
     "assets",
+    "urls",
 ];
 
 fn validate_manifest(data: &Value, expected_name: &str) -> Result<String, ManifestError> {
@@ -220,7 +221,7 @@ fn validate_manifest(data: &Value, expected_name: &str) -> Result<String, Manife
         if revision.as_u64() != Some(1) {
             return Err(error("$.schema_version", "Unsupported schema revision"));
         }
-    } else if ["packages", "manual_installs", "assets"]
+    } else if ["packages", "manual_installs", "assets", "urls"]
         .iter()
         .any(|field| object.contains_key(*field))
     {
@@ -247,6 +248,11 @@ fn validate_manifest(data: &Value, expected_name: &str) -> Result<String, Manife
         validate_manual,
     )?;
     validate_requirement_list(object.get("assets"), "assets", validate_asset)?;
+    if let Some(urls) = object.get("urls") {
+        for (index, value) in array(urls, "$.urls")?.iter().enumerate() {
+            validate_url_entry(value, &format!("$.urls[{index}]"))?;
+        }
+    }
     Ok(minimum_version)
 }
 
@@ -409,10 +415,18 @@ fn validate_platforms(value: &Value, path: &str) -> Result<Vec<String>, Manifest
 }
 
 fn validate_url(value: &Value, path: &str) -> Result<(), ManifestError> {
+    validate_url_with_fragment(value, path, false)
+}
+
+fn validate_url_with_fragment(
+    value: &Value,
+    path: &str,
+    allow_fragment: bool,
+) -> Result<(), ManifestError> {
     let value = text(value, path, true)?;
     if !value.starts_with("https://")
         || value.chars().any(char::is_whitespace)
-        || value.contains('#')
+        || (!allow_fragment && value.contains('#'))
         || value.contains('\\')
     {
         return Err(error(
@@ -436,7 +450,7 @@ fn validate_url(value: &Value, path: &str) -> Result<(), ManifestError> {
         }
     }
     let rest = &value[8..];
-    let authority = rest.split(['/', '?']).next().unwrap_or_default();
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
     if authority.is_empty() || authority.contains('@') {
         return Err(error(
             path,
@@ -474,6 +488,66 @@ fn validate_url(value: &Value, path: &str) -> Result<(), ManifestError> {
         };
         if port == 0 {
             return Err(error(path, "Invalid HTTPS URL"));
+        }
+    }
+    let parsed = url::Url::parse(value).map_err(|_| error(path, "Invalid HTTPS URL"))?;
+    if parsed.scheme() != "https"
+        || parsed.host().is_none()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || (!allow_fragment && parsed.fragment().is_some())
+    {
+        return Err(error(
+            path,
+            "Expected HTTPS URL without credentials or fragment",
+        ));
+    }
+    Ok(())
+}
+
+/// Rechecks a module URL at the browser boundary.
+pub(crate) fn validate_runtime_url(value: &str) -> Result<(), ManifestError> {
+    validate_url_with_fragment(&Value::String(value.to_owned()), "$.urls[].url", true)
+}
+
+fn validate_url_entry(value: &Value, path: &str) -> Result<(), ManifestError> {
+    const FIELDS: &[&str] = &[
+        "url",
+        "description",
+        "destination",
+        "destination_root",
+        "platforms",
+    ];
+    let entry = object(value, path, FIELDS, &["url"])?;
+    validate_url_with_fragment(required(entry, "url", path)?, &format!("{path}.url"), true)?;
+    if let Some(value) = entry.get("description") {
+        text(value, &format!("{path}.description"), true)?;
+    }
+    let platforms = if let Some(value) = entry.get("platforms") {
+        validate_platforms(value, &format!("{path}.platforms"))?
+    } else {
+        vec!["linux".to_owned(), "macos".to_owned(), "windows".to_owned()]
+    };
+    if let Some(value) = entry.get("destination") {
+        validate_relative_path(
+            value,
+            &format!("{path}.destination"),
+            platforms.iter().any(|p| p == "windows"),
+        )?;
+    }
+    if let Some(value) = entry.get("destination_root") {
+        if !entry.contains_key("destination") {
+            return Err(error(
+                &format!("{path}.destination_root"),
+                "Destination root requires a destination",
+            ));
+        }
+        let root = text(value, &format!("{path}.destination_root"), true)?;
+        if !matches!(root, "project" | "module") {
+            return Err(error(
+                &format!("{path}.destination_root"),
+                "Unsupported destination root",
+            ));
         }
     }
     Ok(())
@@ -915,6 +989,9 @@ fn insert_defaults(data: &mut Value) {
     object
         .entry("assets")
         .or_insert_with(|| Value::Array(Vec::new()));
+    object
+        .entry("urls")
+        .or_insert_with(|| Value::Array(Vec::new()));
     if let Some(manuals) = object
         .get_mut("manual_installs")
         .and_then(Value::as_array_mut)
@@ -958,6 +1035,36 @@ mod tests {
 
     fn fixture_directory() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/community")
+    }
+
+    #[test]
+    fn general_urls_do_not_require_asset_metadata() {
+        let source = r#"{"schema_version":1,"name":"sample_module","min_version":"0.6.0","urls":[{"url":"https://example.org/weights.bin?version=2"},{"url":"https://example.org:443#files","destination":"data/model.bin","destination_root":"module","description":"Model data"}]}"#;
+        let manifest = parse_manifest(source, "sample_module").unwrap();
+        assert_eq!(manifest.data["urls"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            manifest.data["urls"][0]["url"],
+            "https://example.org/weights.bin?version=2"
+        );
+    }
+
+    #[test]
+    fn urls_reject_unsafe_destinations_and_invalid_addresses() {
+        for entry in [
+            r#"{"url":"http://example.org/file"}"#,
+            r#"{"url":"https://user@example.org/file"}"#,
+            r#"{"url":"https://example.org/file","destination":"../outside"}"#,
+            r#"{"url":"https://example.org/file","destination_root":"module"}"#,
+            r#"{"url":"https://example.org/file","optional":true}"#,
+        ] {
+            let source = format!(
+                r#"{{"schema_version":1,"name":"sample_module","min_version":"0.6.0","urls":[{entry}]}}"#
+            );
+            assert!(
+                parse_manifest(&source, "sample_module").is_err(),
+                "accepted {entry}"
+            );
+        }
     }
 
     #[test]

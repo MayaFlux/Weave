@@ -99,12 +99,16 @@ trait ModuleServices {
     fn registry(&self) -> Result<std::collections::HashMap<String, RegistryEntry>, ModuleAddError>;
     fn installed_version(&self) -> Result<(String, [u64; 3]), ModuleAddError>;
     fn clone_module(&self, repository: &str, destination: &Path) -> Result<(), ModuleAddError>;
+    fn confirm_open_url(&self, url: &str) -> bool;
+    fn open_url(&self, url: &str) -> Result<(), ModuleAddError>;
 }
 
 /// Uses the host tools and filesystem for a real module addition.
-struct LiveModuleServices;
+struct LiveModuleServices<'a> {
+    confirm_url: &'a dyn Fn(&str) -> bool,
+}
 
-impl ModuleServices for LiveModuleServices {
+impl ModuleServices for LiveModuleServices<'_> {
     fn registry(&self) -> Result<std::collections::HashMap<String, RegistryEntry>, ModuleAddError> {
         registry()
     }
@@ -127,6 +131,43 @@ impl ModuleServices for LiveModuleServices {
         }
         Ok(())
     }
+    fn confirm_open_url(&self, url: &str) -> bool {
+        (self.confirm_url)(url)
+    }
+    fn open_url(&self, url: &str) -> Result<(), ModuleAddError> {
+        crate::operations::community_manifest::validate_runtime_url(url)
+            .map_err(|error| fail(error.to_string()))?;
+        open_browser_without_waiting(url)
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn open_browser_without_waiting(url: &str) -> Result<(), ModuleAddError> {
+    let mut command = Command::new("xdg-open");
+    command.arg(url);
+    spawn_detached_browser_command(&mut command)
+}
+
+#[cfg(target_os = "linux")]
+fn spawn_detached_browser_command(command: &mut Command) -> Result<(), ModuleAddError> {
+    use std::process::Stdio;
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| fail(format!("Could not start browser handoff: {error}")))?;
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn open_browser_without_waiting(url: &str) -> Result<(), ModuleAddError> {
+    webbrowser::open(url)
+        .map(|_| ())
+        .map_err(|error| fail(format!("Could not hand URL to the browser: {error}")))
 }
 
 /// Adds the requested community modules to an existing MayaFlux project.
@@ -134,9 +175,17 @@ impl ModuleServices for LiveModuleServices {
 pub fn add_to_project(
     project_path: &Path,
     values: &[String],
+    confirm_url: impl Fn(&str) -> bool,
     report: impl FnMut(String),
 ) -> Result<(), ModuleAddError> {
-    add_to_project_with(project_path, values, &LiveModuleServices, report)
+    add_to_project_with(
+        project_path,
+        values,
+        &LiveModuleServices {
+            confirm_url: &confirm_url,
+        },
+        report,
+    )
 }
 
 /// Resolves a project and rejects linked community paths before any network work.
@@ -285,10 +334,101 @@ fn prepare_modules(
                 .is_some_and(|value| value.as_array().is_some_and(|items| !items.is_empty()));
         if has_requirements {
             report(format!(
-                "{name} declares requirements in community/{name}/community.json. Weave does not install them; install them with your package manager."
+                "{name} declares requirements in community/{name}/community.json. Review package and legacy declarations in the manifest."
             ));
         }
+        resolve_urls(
+            &manifest,
+            name,
+            &module,
+            community.parent().expect("community has project parent"),
+            services,
+            report,
+        )?;
         report(format!("Validated {name}"));
+    }
+    Ok(())
+}
+
+fn resolve_urls(
+    manifest: &Value,
+    name: &str,
+    module: &Path,
+    project: &Path,
+    services: &impl ModuleServices,
+    report: &mut impl FnMut(String),
+) -> Result<(), ModuleAddError> {
+    let Some(urls) = manifest.get("urls").and_then(Value::as_array) else {
+        return Ok(());
+    };
+    for entry in urls {
+        let url = entry["url"].as_str().expect("validated URL");
+        let description = entry["description"].as_str();
+        if entry["platforms"].as_array().is_some_and(|platforms| {
+            !platforms
+                .iter()
+                .any(|platform| platform.as_str() == Some(std::env::consts::OS))
+        }) {
+            continue;
+        }
+        if let Some(relative) = entry["destination"].as_str() {
+            let root = if entry["destination_root"].as_str() == Some("module") {
+                module
+            } else {
+                project
+            };
+            let destination = root.join(relative);
+            crate::filesystem::no_links(&destination).map_err(fail)?;
+            if destination.exists() {
+                if !destination.is_file() {
+                    return Err(fail(format!(
+                        "URL destination is not a file: {}",
+                        destination.display()
+                    )));
+                }
+                report(format!(
+                    "File already exists at {}. Review it against {url}.",
+                    destination.display()
+                ));
+                continue;
+            }
+            if !services.confirm_open_url(url) {
+                report(format!(
+                    "Browser opening declined for {url}. Place any downloaded file at {}. This remains pending.",
+                    destination.display()
+                ));
+                continue;
+            }
+            match services.open_url(url) {
+                Ok(()) => report(format!(
+                    "Handed {url} to the browser. Place the downloaded file at {}. This remains pending until then. {}",
+                    destination.display(),
+                    description.unwrap_or("")
+                )),
+                Err(error) => report(format!(
+                    "Open {url} in a browser and place the downloaded file at {}. This remains pending. {} {error}",
+                    destination.display(),
+                    description.unwrap_or("")
+                )),
+            }
+        } else {
+            if !services.confirm_open_url(url) {
+                report(format!(
+                    "Browser opening declined for {url}. Open it manually if needed by {name}; this remains pending."
+                ));
+                continue;
+            }
+            match services.open_url(url) {
+                Ok(()) => report(format!(
+                    "Handed {url} to the browser for user action. {}",
+                    description.unwrap_or("Complete any steps required by the module.")
+                )),
+                Err(error) => report(format!(
+                    "Open {url} to complete any steps required by {name}. {} {error}",
+                    description.unwrap_or("")
+                )),
+            }
+        }
     }
     Ok(())
 }
@@ -330,7 +470,10 @@ fn register_modules(
             format!("{name} was already registered")
         });
     }
-    report("Done. Rebuild the project to include the validated modules.".to_owned());
+    report(
+        "Done. Rebuild the project to include the modules. Review any pending URL actions above."
+            .to_owned(),
+    );
     Ok(())
 }
 

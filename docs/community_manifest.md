@@ -10,11 +10,10 @@ that the schema cannot express. Rust project updates use the shared parser
 before accepting a cloned community module. Community-module creation writes
 the basic metadata fields and does not execute or acquire declared requirements.
 
-Module installation and acquisition execution are later phases. Weave reads and
-validates these declarations and reports that a module declares them, but it does
-not install packages, run installers or download assets in this release. Module
-users install the requirements themselves. Passing validation does not mean
-requirements have been installed.
+Weave opens `urls` in the user's browser when adding modules. Package declarations and
+the existing `manual_installs` and `assets` sections remain declarations for
+manual handling. Passing manifest validation alone does not establish that a
+requirement has been installed.
 
 All platforms use `parse_manifest(source, expected_name)` in
 [src/operations/community_manifest.rs](../src/operations/community_manifest.rs).
@@ -22,14 +21,14 @@ The parser receives JSON text and the expected module name. It returns
 a validated document with explicit defaults, or reports a field path and reason.
 
 Parsing does not access the filesystem, inspect installed packages, perform
-network operations, or execute commands. Callers will supply operation context
-and handle host preconditions and recovery in subsequent phases.
+network operations, or execute commands. The module addition operation resolves
+URLs after validating the manifest and MayaFlux version.
 
 ## Revision and compatibility
 
 | Field | Meaning |
 | ----- | ------- |
-| `schema_version` | Manifest revision. New manifests use `1`. |
+| `schema_version` | Manifest revision. Use `1` for acquisition declarations. |
 | `name` | Required lowercase snake_case module name, beginning with a letter. |
 | `min_version` | Required minimum MayaFlux version, such as `0.5.0`. Separate from the schema revision. |
 | `needs_lila` | Optional boolean. Missing means false. |
@@ -37,14 +36,62 @@ and handle host preconditions and recovery in subsequent phases.
 | `$schema` | Optional editor hint. Weave never fetches or executes its target. |
 
 Existing metadata-only manifests without `schema_version` remain valid. Any
-manifest containing `packages`, `manual_installs`, or `assets` must declare
-`schema_version: 1`, even when that section is empty.
+manifest containing acquisition sections must declare a schema revision.
+The current revision is `1`; `urls` is an expansion of that revision.
 
 Missing acquisition sections declare no operations. Unknown fields and
 unsupported schema revisions are rejected.
 
 `min_version` has three nonnegative decimal components. Each component is `0`
 or a number without a leading zero.
+
+## URLs
+
+`urls` is one general URL declaration. Only `url` is required:
+
+```json
+{
+  "schema_version": 1,
+  "name": "terrain_field",
+  "min_version": "0.6.0",
+  "urls": [
+    {
+      "url": "https://example.org/download",
+      "description": "Open the provider's download page and follow its instructions."
+    },
+    {
+      "url": "https://example.org/data/model.bin",
+      "destination": "data/model.bin",
+      "destination_root": "module"
+    }
+  ]
+}
+```
+
+A URL can open in the user's browser for any action the site requires. Weave
+asks for permission before each browser launch in the GUI or CLI. If the
+user declines or the browser cannot open, Weave reports the URL for manual
+use. Browser handoff lets the browser apply its site and download warnings.
+Weave continues module addition as soon as it hands the URL to the browser;
+it does not wait for the page or download. Opening a URL does not establish
+that any site action or download is complete. A URL can point to any web
+content, including a file or a page that requires user interaction.
+
+`destination` is an optional relative file path telling the user where to
+place a downloaded file. `destination_root` selects `project` (the default)
+or `module`. Weave does not write or overwrite the destination. If a file
+already exists, Weave reports it for review and does not assume its contents
+match the URL. `platforms` optionally limits resolution to `linux`, `macos`,
+and `windows`; absent means all three. Browser handoffs and missing files
+remain pending user actions while module registration proceeds.
+
+The URL must use HTTPS and contain no embedded credentials. URL fragments are
+allowed for links to pages. Weave rechecks the URL before browser handoff.
+The browser handles certificate validation and any configured protection
+against known malicious sites and downloads. Weave does not claim a malware
+verdict or treat browser launch as proof of completed user actions. A URL may
+lead to a page that needs login or other user steps. The declaration does not
+promise that a transfer yields a file or that site actions can be automated.
 
 ## Package declarations
 
@@ -147,7 +194,7 @@ The native community acquisition workflow handles vcpkg discovery, root
 selection, bootstrap review, and triplet selection. Authors cannot select an
 installation root, inject options, or silently request global integration.
 
-## Manual installation and environment
+## Legacy manual installation and environment
 
 ```json
 {
@@ -221,7 +268,7 @@ the user resolves them. Differing scopes must not silently mask incompatible
 values. On Windows, variable names compare case-insensitively. Preserve prior
 values for recovery.
 
-## Verified assets
+## Legacy verified assets
 
 ```json
 {

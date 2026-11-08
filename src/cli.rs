@@ -342,9 +342,12 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
     }
 
     if !module_names.is_empty() {
-        community_modules::add_to_project(Path::new(project_path), &module_names, |message| {
-            println!("{message}")
-        })
+        community_modules::add_to_project(
+            Path::new(project_path),
+            &module_names,
+            confirm_community_url,
+            |message| println!("{message}"),
+        )
         .map_err(|error| error.to_string())?;
     }
 
@@ -383,6 +386,21 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn confirm_community_url(url: &str) -> bool {
+    use std::io::{IsTerminal, Write};
+    if !std::io::stdin().is_terminal() {
+        return false;
+    }
+    eprint!("Open community URL in your browser?\n{url}\n[y/N]: ");
+    if std::io::stderr().flush().is_err() {
+        return false;
+    }
+    let mut answer = String::new();
+    std::io::stdin()
+        .read_line(&mut answer)
+        .is_ok_and(|bytes| bytes > 0 && answer.trim().eq_ignore_ascii_case("y"))
 }
 
 fn run_community(arguments: &[String]) -> Result<CommunityCreationResult, String> {
