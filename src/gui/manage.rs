@@ -5,9 +5,9 @@ mod tasks;
 use super::controller::GuiController;
 use super::state::OperationKind;
 use super::view::publish_result;
+use crate::operations::community_modules;
 use crate::operations::project_options::ShaderConflictPolicy;
 use crate::operations::project_refresh::{self, Difference};
-use crate::operations::update;
 use crate::{AppScreen, MainWindow, RefreshChoice, ResultKind, RetryKind};
 use slint::Model;
 use std::path::PathBuf;
@@ -66,7 +66,8 @@ fn register_modules(window: &MainWindow, controller: &GuiController) {
 
             std::thread::spawn(move || {
                 let mut output = Vec::new();
-                let result = update::update_project(&project, &[names], |line| output.push(line));
+                let result =
+                    community_modules::add_to_project(&project, &[names], |line| output.push(line));
                 let output = output.join("\n");
 
                 let (kind, title, message) = match result {

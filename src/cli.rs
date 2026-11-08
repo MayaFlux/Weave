@@ -1,13 +1,13 @@
 use crate::operations::community::{
     CommunityCreationResult, CommunityModuleOptions, create_community_module,
 };
+use crate::operations::community_modules;
 use crate::operations::install;
 use crate::operations::project::{ProjectCreationResult, ProjectOptions, create_project};
 use crate::operations::project_options::{ShaderConflictPolicy, apply_project_options};
 use crate::operations::project_refresh::{self, Difference};
 use crate::operations::project_run_report::{RunReportOptions, run_project_report};
 use crate::operations::project_validation::validate_project;
-use crate::operations::update;
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -331,7 +331,7 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
         }
     }
     if !module_names.is_empty() {
-        update::update_project(Path::new(project_path), &module_names, |message| {
+        community_modules::add_to_project(Path::new(project_path), &module_names, |message| {
             println!("{message}")
         })
         .map_err(|error| error.to_string())?;

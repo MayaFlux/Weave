@@ -1,11 +1,11 @@
 pub mod cli_access;
 pub mod community;
 pub mod community_manifest;
+pub mod community_modules;
 pub mod install;
 pub mod project;
 pub mod project_options;
 pub mod project_refresh;
 pub mod project_run_report;
 pub mod project_validation;
-pub mod update;
 pub mod weave_release;
