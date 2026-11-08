@@ -19,6 +19,7 @@ public static class WeaveRunConsole {
     private static readonly ConsoleHandler Handler = HandleEvent;
 
     [DllImport("kernel32.dll")] private static extern bool AllocConsole();
+    [DllImport("kernel32.dll")] private static extern bool FreeConsole();
     [DllImport("kernel32.dll")] private static extern IntPtr GetConsoleWindow();
     [DllImport("kernel32.dll")] private static extern bool SetConsoleCtrlHandler(ConsoleHandler handler, bool add);
     [DllImport("kernel32.dll")] private static extern bool GenerateConsoleCtrlEvent(uint eventType, uint groupId);
@@ -27,6 +28,8 @@ public static class WeaveRunConsole {
     private static bool HandleEvent(uint eventType) { return eventType == 1; }
 
     public static void Prepare() {
+        // PowerShell may already be attached to a console, even when hidden.
+        FreeConsole();
         if (!AllocConsole()) throw new InvalidOperationException("Could not create a console for application shutdown.");
         ShowWindow(GetConsoleWindow(), 0);
         if (!SetConsoleCtrlHandler(Handler, true)) throw new InvalidOperationException("Could not set the report console handler.");
