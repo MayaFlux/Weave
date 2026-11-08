@@ -1,3 +1,5 @@
+//! Project creation and the templates used by project refresh.
+
 use crate::git::initialize_repository;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -10,6 +12,7 @@ pub(crate) const SHADER_EXTENSIONS: &[&str] = &[
     "rahit", "rmiss", "rint", "rcall",
 ];
 
+/// Choices applied when creating a project.
 #[derive(Clone, Copy, Debug)]
 pub struct ProjectOptions {
     pub with_lila: bool,
@@ -17,6 +20,7 @@ pub struct ProjectOptions {
     pub copy_shader_sources: bool,
 }
 
+/// Location of a created project and any nonfatal Git setup warning.
 #[derive(Debug)]
 pub struct ProjectCreationResult {
     pub path: PathBuf,
@@ -33,6 +37,7 @@ impl Default for ProjectOptions {
     }
 }
 
+/// Failure to create or populate a project.
 #[derive(Debug)]
 pub struct ProjectCreationError(String);
 
@@ -50,6 +55,7 @@ impl From<io::Error> for ProjectCreationError {
     }
 }
 
+/// Creates a project in a new directory beneath `destination`.
 pub fn create_project(
     name: &str,
     destination: &Path,
@@ -84,6 +90,7 @@ fn create_project_with_shader_root(
         None
     };
 
+    // Populate only after inputs are checked, so a failed read leaves no project directory.
     fs::create_dir(&project_path).map_err(|error| {
         ProjectCreationError(format!(
             "Could not create project directory {}: {error}",

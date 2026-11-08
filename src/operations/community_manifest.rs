@@ -5,6 +5,7 @@ use serde::de::{self, DeserializeSeed, MapAccess, SeqAccess, Visitor};
 use serde_json::Value;
 use std::fmt::{Display, Formatter};
 
+/// A manifest error with the JSON path of the invalid value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ManifestError {
     pub path: String,
@@ -19,12 +20,14 @@ impl Display for ManifestError {
 
 impl std::error::Error for ManifestError {}
 
+/// A validated manifest with defaults filled in.
 #[derive(Debug, Clone)]
 pub struct CommunityManifest {
     pub minimum_version: String,
     pub data: Value,
 }
 
+/// Parses a manifest and checks that it names the requested module.
 pub fn parse_manifest(
     source: &str,
     expected_name: &str,
@@ -37,11 +40,13 @@ pub fn parse_manifest(
     }
     .deserialize(&mut deserializer)
     .map_err(|error| parse_error(&error.to_string()))?;
+
     deserializer
         .end()
         .map_err(|error| parse_error(&error.to_string()))?;
     let minimum_version = validate_manifest(&data, expected_name)?;
     insert_defaults(&mut data);
+
     Ok(CommunityManifest {
         minimum_version,
         data,

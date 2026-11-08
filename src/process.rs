@@ -1,13 +1,18 @@
-//! Shared output streaming, execution deadlines and installer lifetime policy.
+//! Shared process execution, output streaming, and shutdown policy.
+
 use std::{
     io::Read,
     path::Path,
     process::{Command, Output},
     time::Duration,
 };
+
+/// Terminates a supervised process and any children owned by its runtime.
 pub trait ProcessGuard {
     fn terminate(&self);
 }
+
+/// Supplies platform-specific process setup and supervision.
 pub trait ProcessRuntime {
     type Guard: ProcessGuard;
     fn prepare(&self, command: &mut Command);
@@ -54,6 +59,8 @@ impl Lines {
         }
     }
 }
+
+/// Runs a Windows command while streaming its output.
 #[cfg(target_os = "windows")]
 pub fn run(
     command: &mut Command,
@@ -69,6 +76,8 @@ pub fn run(
         log,
     )
 }
+
+/// Runs a Windows command and requires a successful exit status.
 #[cfg(target_os = "windows")]
 pub fn checked(
     command: &mut Command,
@@ -82,6 +91,8 @@ pub fn checked(
         log,
     )
 }
+
+/// Runs a command with the supplied runtime and requires a successful exit status.
 pub fn checked_with<R: ProcessRuntime>(
     runtime: &R,
     command: &mut Command,
@@ -107,6 +118,7 @@ pub fn checked_with<R: ProcessRuntime>(
     }
 }
 
+/// Runs a command with a deadline while streaming its output.
 pub fn run_with<R: ProcessRuntime>(
     runtime: &R,
     command: &mut Command,
@@ -117,6 +129,7 @@ pub fn run_with<R: ProcessRuntime>(
     run_inner(runtime, command, installer, Some(timeout), log, None, None)
 }
 
+/// Runs a command with a deadline and a cancellation token.
 pub fn run_cancellable_with<R: ProcessRuntime>(
     runtime: &R,
     command: &mut Command,
@@ -136,6 +149,7 @@ pub fn run_cancellable_with<R: ProcessRuntime>(
     )
 }
 
+/// Runs a command until it exits or cancellation is requested.
 pub fn run_cancellable_until_exit_with<R: ProcessRuntime>(
     runtime: &R,
     command: &mut Command,
@@ -154,7 +168,8 @@ pub fn run_cancellable_until_exit_with<R: ProcessRuntime>(
     )
 }
 
-/// Runs a report collector and sends a stop request without killing it.
+/// Runs a report collector and writes its stop request when asked.
+/// Cancellation still terminates the supervised process.
 pub fn run_report_with_stop<R: ProcessRuntime>(
     runtime: &R,
     command: &mut Command,
@@ -184,6 +199,7 @@ fn run_inner<R: ProcessRuntime>(
 ) -> Result<Output, String> {
     use std::process::Stdio;
     use std::sync::mpsc;
+
     command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -197,6 +213,7 @@ fn run_inner<R: ProcessRuntime>(
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
     let (sender, receiver) = mpsc::channel();
+
     std::thread::scope(|scope| {
         for (error, mut reader) in [
             (false, Box::new(stdout) as Box<dyn Read + Send>),
@@ -218,6 +235,7 @@ fn run_inner<R: ProcessRuntime>(
             });
         }
         drop(sender);
+
         let mut output = Vec::new();
         let mut errors = Vec::new();
         let mut stdout_lines = Lines::default();
@@ -228,6 +246,7 @@ fn run_inner<R: ProcessRuntime>(
         let mut timed_out = false;
         let mut cancelled = false;
         let mut stop_sent = false;
+
         loop {
             match receiver.recv_timeout(Duration::from_millis(50)) {
                 Ok((error, bytes)) => {
@@ -253,6 +272,7 @@ fn run_inner<R: ProcessRuntime>(
                     format!("Cannot wait for {label}: {e}")
                 })?;
             }
+
             if status.is_none()
                 && !stop_sent
                 && let Some((requested, path)) = stop_requested
@@ -270,6 +290,7 @@ fn run_inner<R: ProcessRuntime>(
                     "Stop requested. Waiting for the application to close and the report to finish.",
                 );
             }
+
             if !cancelled
                 && cancellation
                     .is_some_and(|token| token.load(std::sync::atomic::Ordering::Relaxed))
@@ -280,6 +301,7 @@ fn run_inner<R: ProcessRuntime>(
                 }
                 let _ = child.kill();
             }
+
             if !timed_out && timeout.is_some_and(|deadline| start.elapsed() >= deadline) {
                 timed_out = true;
                 if installer {
@@ -294,6 +316,7 @@ fn run_inner<R: ProcessRuntime>(
                 }
             }
         }
+
         stdout_lines.finish(&mut logger);
         stderr_lines.finish(&mut logger);
         if timed_out {

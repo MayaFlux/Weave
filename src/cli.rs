@@ -1,3 +1,5 @@
+//! Standalone command-line entry point for Weave operations.
+
 use crate::operations::community::{
     CommunityCreationResult, CommunityModuleOptions, create_community_module,
 };
@@ -11,6 +13,7 @@ use crate::operations::project_validation::validate_project;
 use std::path::Path;
 use std::process::ExitCode;
 
+/// Runs one CLI command and reports its result through stdout or stderr.
 pub fn run_cli(arguments: &[String]) -> ExitCode {
     if arguments[0] == "--license" {
         print!("{}", include_str!("../LICENSE.txt"));
@@ -192,6 +195,7 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
     let Some(project_path) = arguments.first() else {
         return Err("Usage: Weave manage <project-dir> [module-name,...] [options]".to_owned());
     };
+
     let mut module_names = Vec::new();
     let mut with_lila = false;
     let mut copy_shader_sources = false;
@@ -202,6 +206,7 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
     let mut refresh_apply = false;
     let mut refresh_skip = Vec::new();
     let mut report_options = RunReportOptions::default();
+
     let mut arguments = arguments[1..].iter();
     while let Some(argument) = arguments.next() {
         match argument.as_str() {
@@ -250,6 +255,7 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
             value => module_names.push(value.to_owned()),
         }
     }
+
     if !run_report
         && (report_options.configuration.is_some()
             || report_options.executable.is_some()
@@ -257,6 +263,8 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
     {
         return Err("Run-report options require --run-report.".to_owned());
     }
+
+    // Refresh has its own preview and apply flow, separate from the other actions.
     if refresh_preview || refresh_apply {
         if !module_names.is_empty()
             || with_lila
@@ -308,12 +316,14 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
         }
         return Ok(());
     }
+
     if !refresh_skip.is_empty() {
         return Err("--refresh-skip requires --refresh-apply.".to_owned());
     }
     if module_names.is_empty() && !with_lila && !copy_shader_sources && !validate && !run_report {
         return Err("Usage: Weave manage <project-dir> [module-name,...] [options]".to_owned());
     }
+
     if with_lila || copy_shader_sources {
         for message in apply_project_options(
             Path::new(project_path),
@@ -330,12 +340,14 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
             println!("{message}");
         }
     }
+
     if !module_names.is_empty() {
         community_modules::add_to_project(Path::new(project_path), &module_names, |message| {
             println!("{message}")
         })
         .map_err(|error| error.to_string())?;
     }
+
     if validate {
         let cancellation = std::sync::atomic::AtomicBool::new(false);
         let result = validate_project(Path::new(project_path), &cancellation, &|line| {
@@ -346,6 +358,7 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
             return Err("Project validation completed with findings. Review the [FIX] entries above, then run `Weave manage <project-dir> --validate` again.".to_owned());
         }
     }
+
     if run_report {
         let cancellation = std::sync::atomic::AtomicBool::new(false);
         let result = run_project_report(
@@ -368,6 +381,7 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
             ));
         }
     }
+
     Ok(())
 }
 

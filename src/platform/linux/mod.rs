@@ -1,3 +1,5 @@
+//! Linux package planning, host installation, and command supervision.
+
 use crate::operations::install::{InstallError, progress::Stage};
 use std::io::{self, Read, Write};
 use std::os::fd::{AsRawFd, FromRawFd};
@@ -30,6 +32,7 @@ impl Distribution {
     }
 }
 
+/// Package names, conflicts, and commands for one channel and distribution.
 struct InstallPlan {
     distribution: Distribution,
     package: &'static str,
@@ -142,6 +145,7 @@ impl InstallPlan {
     }
 }
 
+/// Host operations used by installation and its controlled tests.
 trait InstallHost {
     fn available(&self, name: &str) -> bool;
     fn installed(&self, distro: Distribution, package: &str) -> Result<bool, String>;
@@ -252,6 +256,7 @@ impl Drop for TempCheckout {
     }
 }
 
+/// Installs and verifies the selected MayaFlux package on this host.
 pub fn install_linux(
     channel: &str,
     replace_conflict: bool,
@@ -267,6 +272,7 @@ pub fn install_linux(
     Ok(message)
 }
 
+/// Reports installed packages that conflict with the selected channel.
 pub fn check_linux_conflict(channel: &str) -> Result<Option<String>, InstallError> {
     check_linux_conflict_with_host(channel, &SystemHost)
 }
@@ -292,6 +298,7 @@ fn install_linux_with_host(
     );
     let (plan, installed_conflicts) = prepare_linux_install(channel, host)?;
     let distro = plan.distribution;
+
     log(&format!(
         "Detected distribution: {distro:?}. Selected package: {}",
         plan.package
@@ -301,6 +308,7 @@ fn install_linux_with_host(
             installed_formula: installed_conflicts.join(", "),
         });
     }
+
     Stage::Framework.report(
         "Installing the selected MayaFlux package and its native dependencies…",
         log,
@@ -310,6 +318,7 @@ fn install_linux_with_host(
     } else {
         None
     };
+
     let mut removed = Vec::new();
     for conflict in installed_conflicts {
         let command = plan.remove_command(conflict);
@@ -322,6 +331,7 @@ fn install_linux_with_host(
         })?;
         removed.push(conflict);
     }
+
     for command in plan.install_commands(checkout.as_ref().map(|value| value.0.as_path())) {
         log(&format!("Running: {}", command.join(" ")));
         let credential = if command[0] == "sudo" || command[0] == "makepkg" {
@@ -344,6 +354,7 @@ fn install_linux_with_host(
             )));
         }
     }
+
     let recovery = if removed.is_empty() {
         String::new()
     } else {
@@ -461,6 +472,7 @@ fn run_piped_command_with_limits(
 ) -> Result<(), String> {
     use std::sync::mpsc::{self, RecvTimeoutError};
 
+    // A separate process group lets a timeout stop the package command tree.
     process
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -471,6 +483,7 @@ fn run_piped_command_with_limits(
     let stdout = child.stdout.take().expect("stdout was piped");
     let stderr = child.stderr.take().expect("stderr was piped");
     let (sender, receiver) = mpsc::channel::<String>();
+
     std::thread::scope(|scope| {
         let stdout_sender = sender.clone();
         scope.spawn(move || {
@@ -483,11 +496,13 @@ fn run_piped_command_with_limits(
                 let _ = sender.send(line.to_owned());
             });
         });
+
         let mut completed = None;
         let mut last_output = Instant::now();
         let mut last_progress = Instant::now();
         let mut received_amount: Option<String> = None;
         let mut downloading = false;
+
         loop {
             match receiver.recv_timeout(Duration::from_millis(20)) {
                 Ok(line) => {
@@ -522,6 +537,7 @@ fn run_piped_command_with_limits(
                     .try_wait()
                     .map_err(|error| format!("Could not wait for {label}: {error}"))?;
             }
+
             if downloading && last_progress.elapsed() >= download_timeout
                 || !downloading && last_output.elapsed() >= command_timeout
             {
@@ -542,6 +558,7 @@ fn run_piped_command_with_limits(
                 });
             }
         }
+
         let status = completed.expect("child exited before output closed");
         if status.success() {
             Ok(())
