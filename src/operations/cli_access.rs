@@ -158,6 +158,14 @@ fn add_shell_path(original: &str, directory: &str) -> String {
 
 #[cfg(unix)]
 fn ensure_unix_path(home: &Path, directory: &str) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("PATH").is_some_and(|paths| {
+        let local_bin = home.join(".local/bin");
+        std::env::split_paths(&paths).any(|path| path == local_bin)
+    }) {
+        return Ok(());
+    }
+
     let shell_path = std::env::var_os("SHELL").unwrap_or_default();
     let shell = Path::new(&shell_path)
         .file_name()

@@ -282,6 +282,38 @@ fn cli_rejects_invalid_install_channel_without_starting_an_install() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn cli_setup_leaves_shell_file_alone_when_local_bin_is_on_path() {
+    let temporary = TestDirectory::new();
+    let local_bin = temporary.0.join(".local/bin");
+    fs::create_dir_all(&local_bin).unwrap();
+
+    let bashrc = temporary.0.join(".bashrc");
+    let original = "export USER_VALUE=yes\n";
+    fs::write(&bashrc, original).unwrap();
+
+    let result = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .arg("install-cli")
+        .env_remove("APPIMAGE")
+        .env("HOME", &temporary.0)
+        .env("SHELL", "/bin/bash")
+        .env(
+            "PATH",
+            std::env::join_paths([&local_bin, Path::new("/usr/bin")]).unwrap(),
+        )
+        .output()
+        .unwrap();
+
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(local_bin.join("Weave").is_file());
+    assert_eq!(fs::read_to_string(&bashrc).unwrap(), original);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn source_build_can_install_cli_without_reinstalling_mayaflux() {
     let temporary = TestDirectory::new();
     let result = Command::new(env!("CARGO_BIN_EXE_weave"))
