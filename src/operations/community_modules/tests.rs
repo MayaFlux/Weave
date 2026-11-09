@@ -408,6 +408,8 @@ fn utf8_bom_manifest_is_accepted_and_declared_requirements_are_reported() {
 fn all_urls_open_in_browser_and_destination_remains_pending() {
     let fixture = ProjectFixture::new(&["terrain_field"]);
     let module = fixture.module("terrain_field", r#"{"schema_version":1,"name":"terrain_field","min_version":"0.6.0","urls":[{"url":"https://example.org/data.bin","destination":"assets/data.bin","destination_root":"module"},{"url":"https://example.org/account/download"}]}"#);
+    // The fixture spelling need not match the resolved path used in diagnostics.
+    let module = module.join(".");
     let mut output = Vec::new();
     fixture.run(&["terrain_field"], &mut output).unwrap();
     assert!(!module.join("assets/data.bin").exists());
@@ -418,11 +420,17 @@ fn all_urls_open_in_browser_and_destination_remains_pending() {
             "https://example.org/account/download"
         ]
     );
-    let destination = module.join("assets").join("data.bin").display().to_string();
+    let destination = fs::canonicalize(&module)
+        .unwrap()
+        .join("assets")
+        .join("data.bin")
+        .display()
+        .to_string();
     assert!(
         output
             .iter()
-            .any(|line| line.contains(&destination) && line.contains("pending"))
+            .any(|line| line.contains(&destination) && line.contains("pending")),
+        "Expected pending destination {destination}; output: {output:?}"
     );
 }
 
