@@ -418,10 +418,11 @@ fn all_urls_open_in_browser_and_destination_remains_pending() {
             "https://example.org/account/download"
         ]
     );
+    let destination = module.join("assets").join("data.bin").display().to_string();
     assert!(
         output
             .iter()
-            .any(|line| line.contains("assets/data.bin") && line.contains("pending"))
+            .any(|line| line.contains(&destination) && line.contains("pending"))
     );
 }
 
