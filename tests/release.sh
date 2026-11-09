@@ -53,6 +53,8 @@ if GITHUB_REF=refs/tags/not-a-version bash "$SCRIPT" plan >/dev/null 2>&1; then 
 for name in "Weave-$VERSION-macOS-arm64.dmg" "Weave-$VERSION-Linux-x86_64.AppImage" "Weave-$VERSION-Windows-x64.exe"; do
     printf 'controlled fixture %s\n' "$name" > "$WORK/packages/$name"
 done
+mkdir -p "$WORK/release"
+printf 'stale release instructions\n' > "$WORK/release/release-notes.md"
 bash "$SCRIPT" assemble "$WORK/packages" "$WORK/release"
 (cd "$WORK/release" && sha256sum --check SHA256SUMS)
 grep -Fq 'Windows 10 22H2' "$WORK/release/release-notes.md"
@@ -60,6 +62,16 @@ grep -Fq '[Executable]' "$WORK/release/release-notes.md"
 grep -Fq 'Weave-windows.exe' "$WORK/release/SHA256SUMS"
 if grep -Eiq 'windows\.zip|Portable ZIP|extract the ZIP' "$WORK/release/release-notes.md"; then echo 'Obsolete Windows ZIP instructions leaked into release notes' >&2; exit 1; fi
 grep -Fq 'Open Anyway' "$WORK/release/release-notes.md"
+for feature in 'Manage Project' 'Stop and collect' 'Force stop' 'Refresh Project Files'; do
+    grep -Fq "$feature" "$WORK/release/release-notes.md"
+done
+for guide in README.md docs/community_manifest.md docs/develop.md; do
+    grep -Fq "https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_SHA/$guide" "$WORK/release/release-notes.md"
+done
+if grep -Fq 'stale release instructions' "$WORK/release/release-notes.md"; then echo 'Release assembly reused stale instructions' >&2; exit 1; fi
+GITHUB_SHA=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb bash "$SCRIPT" assemble "$WORK/packages" "$WORK/refreshed-release"
+grep -Fq '/blob/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/README.md' "$WORK/refreshed-release/release-notes.md"
+if grep -Fq "$GITHUB_SHA" "$WORK/refreshed-release/release-notes.md"; then echo 'New release notes retained the previous build commit' >&2; exit 1; fi
 if grep -Eiq '\.NET|as administrator|no CLI|legacy|pre-removal|pre-migration|former implementations' "$WORK/release/release-notes.md"; then echo 'Release notes contain unsupported instructions or historical implementation references' >&2; exit 1; fi
 
 # A rolling development build advances its tag and replaces assets as a draft,

@@ -1,28 +1,29 @@
 # Community module manifest
 
-`community.json` describes a community module and its acquisition requirements.
-It does not describe MayaFlux's own dependencies or change the established
-framework installation route. Projects remain ordinary CMake directories.
+Put `community.json` in the root of your module repository, beside
+`<module_name>.cmake` and `src/`. It describes the module, its minimum MayaFlux
+version, and any additional requirements users need to complete.
 
 The structural contract is [community.schema.json](community.schema.json)
-using JSON Schema Draft 2020-12. The shared Rust parser also checks declaration rules
-that the schema cannot express. Rust project updates use the shared parser
-before accepting a cloned community module. Community-module creation writes
-the basic metadata fields and does not execute or acquire declared requirements.
+using JSON Schema Draft 2020-12. Weave also checks declaration rules that the
+schema cannot express. Choose **Create Community Module** or run
+`Weave community <module_name>` to generate a manifest with basic metadata,
+then add the declarations your module needs.
 
-Weave opens `urls` in the user's browser when adding modules. Package declarations and
-the existing `manual_installs` and `assets` sections remain declarations for
-manual handling. Passing manifest validation alone does not establish that a
-requirement has been installed.
+When a user adds a module, Weave checks its files, manifest, and MayaFlux
+compatibility before registration in `community.cmake`.
 
-All platforms use `parse_manifest(source, expected_name)` in
-[src/operations/community_manifest.rs](../src/operations/community_manifest.rs).
-The parser receives JSON text and the expected module name. It returns
-a validated document with explicit defaults, or reports a field path and reason.
+| Declaration | What Weave does when adding the module |
+| --- | --- |
+| Metadata and `min_version` | Validates the manifest and checks the installed MayaFlux version. |
+| `urls` | Asks before opening each applicable URL and displays any destination hint. |
+| `packages` | Validates declarations and tells the user to review the manifest. |
+| `manual_installs` and `assets` | Validates declarations and leaves installation or downloads to the user. |
 
-Parsing does not access the filesystem, inspect installed packages, perform
-network operations, or execute commands. The module addition operation resolves
-URLs after validating the manifest and MayaFlux version.
+Weave does not install declared community packages, add package sources, apply
+declared environment changes, or download and extract declared assets. Include
+the necessary user instructions in your module's README. Passing manifest
+validation or opening a browser does not establish that a requirement is ready.
 
 ## Revision and compatibility
 
@@ -37,7 +38,7 @@ URLs after validating the manifest and MayaFlux version.
 
 Existing metadata-only manifests without `schema_version` remain valid. Any
 manifest containing acquisition sections must declare a schema revision.
-The current revision is `1`; `urls` is an expansion of that revision.
+The current revision is `1`, including the `urls` field.
 
 Missing acquisition sections declare no operations. Unknown fields and
 unsupported schema revisions are rejected.
@@ -47,7 +48,8 @@ or a number without a leading zero.
 
 ## URLs
 
-`urls` is one general URL declaration. Only `url` is required:
+Use the `urls` array for download pages, files, account setup, or other browser
+actions. Only `url` is required for each entry:
 
 ```json
 {
@@ -129,10 +131,10 @@ promise that a transfer yields a file or that site actions can be automated.
 }
 ```
 
-The whole manifest must validate before the active host branch produces
-operations. An absent host branch declares no packages for that host. Duplicate
-strings within one package list are invalid. Preparation may combine shared
-requirements across modules while retaining each module as an owner.
+An absent host branch declares no packages for that host. Duplicate strings
+within one package list are invalid. Weave validates every platform branch,
+even when adding the module on another OS. Users install these requirements
+themselves using your instructions.
 
 | Declaration | Accepted form |
 | ----------- | ------------- |
@@ -145,12 +147,8 @@ These fields contain literal names. They do not accept versions, options,
 paths, patterns, or command fragments. vcpkg features and triplets are not
 author-supplied command syntax in revision 1.
 
-Before offering an operation, the native manager checks its own identifier
-rules. Shape validation cannot establish that a package exists or that a
-source is trustworthy. Source additions require separate review, including
-native trust or agreement steps. Package-manager recipes may download, build,
-or execute code through that manager's normal workflow; show those semantics
-in the review.
+An accepted identifier does not establish that a package exists. Tell users
+which package manager to use and provide any required source setup instructions.
 
 ### Windows sources
 
@@ -179,22 +177,24 @@ source. An object selects another source explicitly:
 }
 ```
 
-`winget_sources` declares source additions; each addition needs user review.
+`winget_sources` describes additional sources for the user to configure.
 Supported types are `Microsoft.Rest` and `Microsoft.PreIndexed.Package`.
 
 Custom sources must be declared. The built-in `winget` and `msstore` sources
-may be referenced directly, but cannot be redeclared. If a source already
-exists under the declared name, its URL and type must match. Preparation fails
-on a mismatch and does not replace that source.
+may be referenced directly, but cannot be redeclared. Weave checks source
+references within the manifest; it does not inspect or change the user's
+configured WinGet sources.
 
 Source names and package IDs are literal ASCII identifiers, not search
 queries. Source names compare case-insensitively. Package IDs remain exact.
 
-The native community acquisition workflow handles vcpkg discovery, root
-selection, bootstrap review, and triplet selection. Authors cannot select an
-installation root, inject options, or silently request global integration.
+For vcpkg requirements, document the installation and triplet your module
+expects. Weave does not bootstrap or configure vcpkg for community modules.
 
-## Legacy manual installation and environment
+## Manual installation and environment declarations
+
+These declarations describe requirements for users to handle manually. Weave
+does not show an installation-directory picker or apply the environment values.
 
 ```json
 {
@@ -223,17 +223,15 @@ installation root, inject options, or silently request global integration.
 
 ### Verification path
 
-The user opens the URL, installs through the vendor's instructions, and selects
-the installation directory. `verify.path` is relative to that directory. The
-fixed absolute path in the initial task example is superseded by this contract.
+Document how to install the requirement and locate its installation directory.
+`verify.path` names the expected file relative to that directory. Weave validates
+the path declaration but does not check that file during module addition.
 
 Use `/` separators on every platform. Absolute paths and `.` or `..` path
-components are invalid. Native resolution must reject links that escape the
-selected directory.
+components are invalid.
 
-Verification checks for a regular file. It never executes that file and does
-not prove the installed version. Version requirements remain author
-instructions in revision 1.
+Include any required version checks in your user instructions. The presence of
+an expected file alone does not establish its version.
 
 ### Environment values
 
@@ -247,28 +245,18 @@ must specify `value`, `operation`, and `scope`.
 | `scope` | `user` or `project`. Machine-wide changes are excluded. |
 | Placeholder | `{selected_install_directory}` only. |
 
-The placeholder refers to the directory selected for that manual installation.
+The placeholder represents the installation directory described in your
+instructions. Weave does not expand it during module addition.
 
 `$HOME`, `%PATH%`, shell expressions, and other environment references remain
-literal text. For appended paths, convert `/` separators for the host and
-reject values containing its path-list separator. Preserve entry order and
-avoid duplicate entries using host path comparison rules.
+literal text in the declaration. Show users the actual values to set and the
+appropriate path separators for their OS.
 
-### Applying environment changes
+## Asset declarations
 
-User scope persists through the host's ordinary user environment mechanism.
-Project scope uses an optional, hand-editable standard CMake user preset, with
-guidance for terminals and other clients. Show any preset mutation and preserve
-existing settings. Existing terminals do not acquire persistent changes
-retroactively. MayaFlux's established environment setup stays unchanged.
-
-After verification, review the resolved values, scope, affected file or native
-setting, and any overwrites. Conflicting declarations fail preparation until
-the user resolves them. Differing scopes must not silently mask incompatible
-values. On Windows, variable names compare case-insensitively. Preserve prior
-values for recovery.
-
-## Legacy verified assets
+Asset metadata records the expected archive and destination. Users download
+and extract it themselves; Weave does not perform the operations described by
+these fields. Use `urls` as well if you want to offer a browser link.
 
 ```json
 {
@@ -303,8 +291,8 @@ replace it with the SHA-256 of the exact archive.
 `destination_root` selects the project directory or the requesting module's
 directory. It defaults to `project`. `destination` is relative to that root.
 Asset `platforms` defaults to all three platforms, and `optional` defaults to
-false. Declining an optional asset records it as skipped; declining a required
-asset leaves its requirement pending.
+false. Explain in your README whether users need the asset before building or
+running the module.
 
 Revision 1 supports ZIP data archives only.
 
@@ -315,35 +303,13 @@ Revision 1 supports ZIP data archives only.
 | `max_files` | Maximum archive entries, including directories. |
 
 Each limit is a positive integer no greater than 9007199254740991, so every
-client can preserve it exactly. The native client may reject a declared
-operation that exceeds host storage capabilities. Review these limits with the
-download details before approval.
+client can preserve it exactly. These are validated declarations; Weave does
+not enforce them against a download or extracted files.
 
-### Download and extraction
+## Validation rules
 
-Download into staging and enforce the size limit while streaming. The final
-size must match `size_bytes`, and SHA-256 must match before extraction. Keep
-HTTPS through redirects. If the origin changes, surface it for review before
-continuing. Never execute archive contents.
-
-Inspect every entry before extraction. Reject absolute paths, traversal,
-symbolic and hard links, special files, encrypted entries, duplicate or
-host-colliding names, and paths resolving outside the approved destination.
-For Windows destinations, also reject reserved names, trailing dots or spaces,
-and alternate data streams. Account for existing filesystem links. Enforce
-declared limits against extracted data, not only archive headers.
-
-Revision 1 never overwrites a destination. Publish a staged tree only when the
-destination was absent. On retry, report an existing destination and let the
-user resolve it. Failed staging contents can be removed without deleting
-pre-existing project or module content.
-
-## Native validation contract
-
-The JSON Schema establishes field shapes. Native declaration validation and
-operation preparation also have responsibilities that the schema cannot express.
-
-### When parsing a declaration
+Correct a rejected declaration using the field path and reason in Weave's
+diagnostic. The parser applies these rules in addition to the schema:
 
 - Reject duplicate JSON object keys and nonstandard numbers. Accept a leading
   UTF-8 byte-order mark. Limit object and array nesting to 64 containers.
@@ -353,31 +319,19 @@ operation preparation also have responsibilities that the schema cannot express.
 - Apply defaults explicitly. JSON Schema `default` annotations do not insert
   values into documents.
 - Match the manifest name to the requested module. Validate every branch,
-  including inactive platforms, before acquisition.
+  including inactive platforms, before registration.
 - Require unique manual installation IDs and unique asset IDs within their
   respective lists. IDs are scoped to their module.
 - Validate HTTPS URLs with a native URL parser. Require a hostname and reject
-  credentials, fragments, control characters, and invalid ports. The schema
-  pattern is not a complete URL parser. Licence and manual URLs are displayed
-  or opened, never treated as installer commands.
+  credentials, control characters, and invalid ports. Fragments are allowed
+  only in `urls` entries. The schema pattern is not a complete URL parser.
+- Require package-source references to name a built-in or declared source.
+- Reject unsafe relative paths and invalid Windows filenames in declarations
+  that apply to Windows.
 
-### When preparing operations
-
-- Check package-manager syntax, custom source references, duplicate source
-  names, built-in source collisions, and conflicts across modules. A source
-  reference must name a built-in or declared source.
-- Resolve paths against their declared roots. Check host filename rules and
-  filesystem containment. Report inaccessible paths as precondition failures.
-  Lexical path validation alone does not establish containment.
-- Validate resolved environment changes and report conflicts before applying
-  changes. Never evaluate author text as shell or process syntax.
-- Require the installed MayaFlux version to satisfy both registry and manifest
-  minimum versions. The higher minimum applies. A missing or malformed
-  installed version blocks compatibility-dependent registration with a
-  diagnostic; it does not trigger framework installation.
-- Return errors with a JSON field path, reason, affected module, and recovery
-  choice. Distinguish invalid declarations from unavailable tools, cancelled
-  review, and execution failures. Never partially accept an invalid manifest.
+The installed MayaFlux version must satisfy both the registry minimum and the
+manifest's `min_version`. If compatibility cannot be established, module
+addition reports the problem rather than installing MayaFlux automatically.
 
 Validation does not inspect module CMake as executable configuration. Authors
 must keep their CMake requirements consistent with the manifest. Existing
@@ -385,9 +339,7 @@ build-time CMake checks remain in place, and acquisition does not rewrite
 user-authored CMake.
 
 Module authors are responsible for dependencies, sources, licences, and
-compatibility. Weave displays and executes approved typed operations.
-Heuristic flags can surface external sources, downloads, large assets, or
-compiler and dynamic-library path changes. They are not a safety guarantee.
+compatibility. Keep the manifest and your installation instructions in sync.
 
 ## References
 

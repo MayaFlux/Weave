@@ -30,7 +30,11 @@ assemble() {
         [[ -s "$artifact" && ! -L "$artifact" ]] || fail "missing validated platform artifact: $artifact"
     done
     plan
+    for document in README.md docs/community_manifest.md docs/develop.md; do
+        [[ -s "$ROOT/$document" ]] || fail "missing release guide: $document"
+    done
     local download="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+    local guide="https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_SHA"
     mkdir -p "$destination"
     cp "$macos" "$destination/Weave-macos.dmg"
     cp "$linux" "$destination/Weave-linux.AppImage"
@@ -39,7 +43,7 @@ assemble() {
     cat > "$destination/release-notes.md" <<EOF
 # Weave $TAG
 
-Install MayaFlux, create projects and community modules, and update your projects.
+Install MayaFlux, create projects and community modules, and manage existing projects.
 Use the desktop app or the standalone CLI.
 
 ## Downloads
@@ -52,21 +56,48 @@ Use the desktop app or the standalone CLI.
 
 On Windows, download and open **Weave-windows.exe** as an ordinary user. Templates
 and scripts are embedded. No installer or separate Weave runtime is required.
-The same executable provides the CLI: \`Weave-windows.exe --help\`.
+The same executable provides the CLI: \`.\Weave-windows.exe --help\`.
 
-On macOS, open the DMG and copy **Weave.app** to Applications. An ad-hoc signature
-does not satisfy Gatekeeper for browser downloads. If macOS blocks this build,
-use **System Settings > Privacy & Security > Open Anyway** to approve it.
+On macOS, open the DMG and copy **Weave.app** to Applications. If macOS blocks
+this download, use **System Settings > Privacy & Security > Open Anyway** to approve it.
 The app also includes its CLI and resources.
 
-On Linux, make the AppImage executable and launch it. **Host FUSE is required.**
+On Linux, enable execution in the AppImage's file properties if needed, then open it.
+Alternatively, run \`chmod +x Weave-linux.AppImage\`, then \`./Weave-linux.AppImage\`.
+**Host FUSE is required.**
 All platforms use the host display and GPU driver. MayaFlux, Git, CMake,
 compilers and other project tools remain separate host dependencies. Host
 installation requests native authorization when needed; project and community
 operations do not require elevation.
 
-Choose a stable release for regular use or a development prerelease to try
-the latest changes. Development prereleases are refreshed with successful builds.
+## Using Weave
+
+1. Choose **Install MayaFlux**, select **Stable** or **Development**, and follow
+   the setup prompts. Leave CLI setup selected to use \`Weave\` in new terminals.
+2. Choose **Projects > Create Project**, select its name and destination, then
+   build from the project folder with \`cmake --preset release\` and
+   \`cmake --build --preset release\`.
+3. Choose **Projects > Manage Project** and select an existing project to add
+   Lila live coding, copy shader sources, add community modules, or validate it.
+   Community URLs open only after your confirmation. Complete any requested
+   browser steps or downloads yourself; Weave reports pending destinations.
+4. Use **Run & Report** after building to reproduce a problem. Choose **Stop and collect**
+   for normal shutdown or **Force stop** if the app does not respond. Attach
+   \`mayaflux_run.txt\` and the application report if it was created.
+5. Use **Refresh Project Files** to update older project scripts. Review the
+   selected files and uncheck your own code or settings before applying.
+   Replaced files are backed up under \`.weave-refresh-backups/\`.
+
+Weave development prereleases are refreshed with successful full builds.
+The MayaFlux stream is selected separately inside Weave.
+
+## Guides for this build
+
+- [User guide and platform setup]($guide/README.md)
+- [Community module manifest]($guide/docs/community_manifest.md)
+- [Building and contributing to Weave]($guide/docs/develop.md)
+
+These links use the built commit, including for rolling development releases.
 
 ## SHA256
 

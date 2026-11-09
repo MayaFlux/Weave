@@ -196,6 +196,7 @@ jobs:
       - name: Check out the exact built commit and version tags
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
           fetch-tags: true
 
