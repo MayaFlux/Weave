@@ -77,7 +77,11 @@ bash packaging/linux/scripts/verify.sh target/packaging/linux/output/Weave-0.6.0
 
 [The workflow](../.github/workflows/build.yml) runs native tests and package validation. Pushes to `main` and version tags trigger builds. Other branches, including `develop`, use workflow dispatch; its platform checkboxes allow selective artifact builds.
 
-Full successful builds publish all three platforms. Versions come from `Cargo.toml`; release tags are `v<version>` and `v<version>-dev`. Main publishes stable versions, while manual builds of other branches refresh the development prerelease and force-move its tag. Stable tags and published stable assets are preserved. Partial platform builds upload CI artifacts without publishing a release.
+Push builds and partial platform builds upload CI artifacts without publishing a release. Publishing requires a manual **Run workflow** run with all three platforms selected. Versions come from `Cargo.toml`; release tags are `v<version>` and `v<version>-dev`.
+
+To publish stable, select `main`, leave all three platforms enabled, and run the workflow. To publish a rolling development prerelease, select `develop` and all three platforms. Publishing waits for tests and package validation to pass on every platform.
+
+Stable tags and published assets are preserved by default. To correct a release without changing its version, select `main`, enable **Force re-release**, and leave all three platforms selected. After successful validation, this replaces the same stable tag, packages, checksums, and release notes with the selected main commit. A failed upload leaves the release as a draft; retry the manual run with the same option to complete it. The override is unavailable for automatic pushes, tag runs, and development branches.
 
 Test release assembly and failure handling locally without contacting GitHub:
 

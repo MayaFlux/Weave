@@ -12,6 +12,7 @@ mkdir -p "$WORK/bin" "$WORK/packages"
 export GITHUB_SHA=0123456789012345678901234567890123456789
 export GITHUB_REPOSITORY=MayaFlux/Weave
 export GITHUB_ACTIONS=true
+export GITHUB_EVENT_NAME=workflow_dispatch WEAVE_FORCE_RERELEASE=false
 export FAKE_LOG="$WORK/calls"
 export FAKE_TAG_SHA="" FAKE_RELEASE_EXISTS=0 FAKE_RELEASE_DRAFT=false FAKE_FAIL_UPLOAD=0 FAKE_LOOKUP_FAIL=0
 cat > "$WORK/bin/git" <<'EOF'
@@ -102,12 +103,53 @@ reject 'git push'
 reject 'gh release edit'
 export FAKE_LOOKUP_FAIL=0
 
-# Stable releases never move an existing version to another commit.
+# Ordinary stable releases never move an existing version to another commit.
 : > "$FAKE_LOG"
 GITHUB_REF=refs/heads/main bash "$SCRIPT" publish "$WORK/release"
 reject 'git tag'
 reject 'git push'
 reject 'gh release upload'
+
+# An explicit manual run on main can replace that same stable version.
+: > "$FAKE_LOG"
+GITHUB_REF=refs/heads/main GITHUB_EVENT_NAME=workflow_dispatch WEAVE_FORCE_RERELEASE=true bash "$SCRIPT" publish "$WORK/release"
+expect "git tag --force v$VERSION $GITHUB_SHA"
+expect "git push origin +refs/tags/v$VERSION:refs/tags/v$VERSION"
+expect '--draft=true'
+expect "gh release upload v$VERSION"
+expect '--clobber'
+expect "--notes-file $WORK/release/release-notes.md"
+expect '--prerelease=false --latest=true --draft=false'
+
+# The override cannot leak into automatic pushes, development builds or tag runs.
+for ref in refs/heads/develop "refs/tags/v$VERSION"; do
+    : > "$FAKE_LOG"
+    if GITHUB_REF="$ref" GITHUB_EVENT_NAME=workflow_dispatch WEAVE_FORCE_RERELEASE=true bash "$SCRIPT" publish "$WORK/release" >/dev/null 2>&1; then echo 'Forced stable replacement accepted outside main' >&2; exit 1; fi
+    [[ ! -s "$FAKE_LOG" ]]
+done
+: > "$FAKE_LOG"
+if GITHUB_REF=refs/heads/main GITHUB_EVENT_NAME=push WEAVE_FORCE_RERELEASE=true bash "$SCRIPT" publish "$WORK/release" >/dev/null 2>&1; then echo 'Automatic push accepted forced replacement' >&2; exit 1; fi
+[[ ! -s "$FAKE_LOG" ]]
+
+# Even without an override, automatic branch or tag pushes cannot publish.
+for ref in refs/heads/main "refs/tags/v$VERSION"; do
+    : > "$FAKE_LOG"
+    if GITHUB_REF="$ref" GITHUB_EVENT_NAME=push bash "$SCRIPT" publish "$WORK/release" >/dev/null 2>&1; then echo 'Automatic push published a release' >&2; exit 1; fi
+    [[ ! -s "$FAKE_LOG" ]]
+done
+
+export FAKE_LOOKUP_FAIL=1
+: > "$FAKE_LOG"
+if GITHUB_REF=refs/heads/main GITHUB_EVENT_NAME=workflow_dispatch WEAVE_FORCE_RERELEASE=true bash "$SCRIPT" publish "$WORK/release" >/dev/null 2>&1; then echo 'Forced release ignored failed lookup' >&2; exit 1; fi
+reject 'git tag'
+reject 'git push'
+reject 'gh release edit'
+export FAKE_LOOKUP_FAIL=0 FAKE_FAIL_UPLOAD=1
+: > "$FAKE_LOG"
+if GITHUB_REF=refs/heads/main GITHUB_EVENT_NAME=workflow_dispatch WEAVE_FORCE_RERELEASE=true bash "$SCRIPT" publish "$WORK/release" >/dev/null 2>&1; then echo 'Forced release ignored failed upload' >&2; exit 1; fi
+reject '--draft=false'
+reject 'release delete-asset'
+export FAKE_FAIL_UPLOAD=0
 
 export FAKE_TAG_SHA="" FAKE_RELEASE_EXISTS=0
 : > "$FAKE_LOG"

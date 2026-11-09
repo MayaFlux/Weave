@@ -3,6 +3,10 @@ name: Build, test, and publish Weave
 on:
   workflow_dispatch:
     inputs:
+      force_rerelease:
+        description: Replace the existing stable tag, assets and notes (main, all platforms)
+        type: boolean
+        default: false
       macos:
         description: Build, test, package, and validate Rust on macOS
         type: boolean
@@ -181,11 +185,11 @@ jobs:
 
   publish-release:
     needs: [test-release, build-rust]
-    # Selective manual builds still upload their artifacts, but never publish
-    # a release that is missing another platform's package.
+    # Publishing requires a manual run with all platforms selected. Pushes and
+    # selective manual builds only validate and upload CI artifacts.
     if: >-
       needs.test-release.result == 'success' && needs.build-rust.result == 'success' &&
-      (github.event_name != 'workflow_dispatch' || (inputs.macos && inputs.windows && inputs.linux))
+      github.event_name == 'workflow_dispatch' && inputs.macos && inputs.windows && inputs.linux
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -213,4 +217,5 @@ jobs:
       - name: Publish stable or rolling development release
         env:
           GH_TOKEN: ${{ github.token }}
+          WEAVE_FORCE_RERELEASE: ${{ inputs.force_rerelease }}
         run: bash packaging/scripts/release.sh publish "$RUNNER_TEMP/weave-release"

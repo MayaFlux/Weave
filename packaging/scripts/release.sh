@@ -19,6 +19,11 @@ plan() {
     esac
     PRERELEASE=false
     [[ "$TAG" != *-dev ]] || PRERELEASE=true
+    FORCE_RERELEASE="${WEAVE_FORCE_RERELEASE:-false}"
+    [[ "$FORCE_RERELEASE" == true || "$FORCE_RERELEASE" == false ]] || fail 'invalid force re-release option'
+    if [[ "$FORCE_RERELEASE" == true ]]; then
+        [[ "${GITHUB_EVENT_NAME:-}" == workflow_dispatch && "$GITHUB_REF" == refs/heads/main ]] || fail 'force re-release requires a manual workflow run on main'
+    fi
 }
 
 assemble() {
@@ -88,7 +93,7 @@ operations do not require elevation.
    selected files and uncheck your own code or settings before applying.
    Replaced files are backed up under \`.weave-refresh-backups/\`.
 
-Weave development prereleases are refreshed with successful full builds.
+Weave development prereleases are refreshed with successful full manual builds.
 The MayaFlux stream is selected separately inside Weave.
 
 ## Guides for this build
@@ -115,15 +120,16 @@ publish() {
     local directory="${1:?Release directory required}" tag_sha existing_draft existing_assets exists=false
     local obsolete_windows_zip=false
     [[ "${GITHUB_ACTIONS:-}" == true ]] || fail 'publishing is only run by the release job'
+    [[ "${GITHUB_EVENT_NAME:-}" == workflow_dispatch ]] || fail 'publishing requires a manual workflow run'
     plan
     for artifact in Weave-macos.dmg Weave-linux.AppImage Weave-windows.exe SHA256SUMS release-notes.md; do
         [[ -s "$directory/$artifact" && ! -L "$directory/$artifact" ]] || fail "missing release input: $artifact"
     done
     (cd "$directory" && sha256sum --check SHA256SUMS) || fail 'release asset checksum mismatch'
     tag_sha="$(git rev-parse --verify "$TAG^{commit}" 2>/dev/null || true)"
-    if [[ "$PRERELEASE" == false && -n "$tag_sha" && "$tag_sha" != "$GITHUB_SHA" ]]; then
+    if [[ "$PRERELEASE" == false && "$FORCE_RERELEASE" == false && -n "$tag_sha" && "$tag_sha" != "$GITHUB_SHA" ]]; then
         [[ "$GITHUB_REF" == refs/heads/main ]] || fail 'stable tag does not point to the built commit'
-        echo "::notice::Stable $TAG already identifies another commit. Packages are uploaded as CI artifacts; bump Cargo.toml to publish a new stable version."
+        echo "::notice::Stable $TAG already identifies another commit. Use a manual main run with Force re-release to replace this version, or bump Cargo.toml for a new version."
         return
     fi
     # Only a successful complete lookup can establish that a release is absent.
@@ -132,7 +138,7 @@ publish() {
     if [[ -n "$existing_draft" ]]; then
         [[ "$existing_draft" == true || "$existing_draft" == false ]] || fail 'unexpected release lookup response'
         exists=true
-        if [[ "$PRERELEASE" == false && "$existing_draft" == false ]]; then
+        if [[ "$PRERELEASE" == false && "$FORCE_RERELEASE" == false && "$existing_draft" == false ]]; then
             echo "Stable release $TAG is already published; preserving its assets."
             return
         fi
@@ -142,7 +148,7 @@ publish() {
         # leaves a draft that can be repaired by rerunning the same build.
         gh release edit "$TAG" --draft=true
     fi
-    if [[ "$PRERELEASE" == true ]]; then
+    if [[ "$PRERELEASE" == true || "$FORCE_RERELEASE" == true ]]; then
         git tag --force "$TAG" "$GITHUB_SHA"
         git push origin "+refs/tags/$TAG:refs/tags/$TAG"
     elif [[ -z "$tag_sha" ]]; then
