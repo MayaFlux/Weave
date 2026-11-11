@@ -39,7 +39,7 @@ On Windows, setup and project validation also check installed graphics driver ve
 
 ## Create a project
 
-Choose **Projects > Create Project**, enter a name, and select an existing destination folder. You can enable live coding with Lila, include VS Code configuration, and copy installed MayaFlux shader sources.
+Choose **Projects > Create Project**, enter a name, and select an existing destination folder. You can enable live coding with Lila, include VS Code configuration, copy installed MayaFlux shader sources, and select **Fetch MayaFlux assets**. The asset option reads the list shipped by the installed MayaFlux and places verified files under the project's `data/` directory. If fetching fails, Weave keeps the project and shows how to retry from Manage Project. The CLI equivalent is `Weave new <name> [destination] --fetch-assets`.
 
 Your project is an ordinary CMake directory. Write your code in `src/user_project.hpp`:
 
@@ -63,7 +63,7 @@ Choose **Projects > Manage Project**, then select the project folder containing 
 
 ### Add project options
 
-Select **Add Lila live coding**, **Copy MayaFlux shader sources**, or both, then choose **Apply Selected Options**. Weave skips options already applied and identical shader files. If shader files differ, review the conflicts before choosing whether to keep or replace them. Customized Lila CMake layouts that cannot be identified safely are reported for manual review. Rebuild after changing project options.
+Select **Add Lila live coding**, **Copy MayaFlux shader sources**, **Fetch MayaFlux assets**, or a combination, then choose **Apply Selected Options**. Weave skips options already applied, identical shader files, and assets that match their SHA-256. Fetching assets replaces files that differ with the versions declared by the installed MayaFlux. From the CLI, use `Weave manage <project-dir> --fetch-assets`. If shader files differ, review the conflicts before choosing whether to keep or replace them. Customized Lila CMake layouts that cannot be identified safely are reported for manual review. Rebuild after changing project options.
 
 ### Validate the project
 
@@ -93,9 +93,9 @@ Selected existing files are backed up under `.weave-refresh-backups/` before rep
 
 Choose **Projects > Manage Project**, select your project folder, and enter one or more module names under **Add Community Modules**. Weave looks them up in the [community registry](https://github.com/MayaFlux/community-sources-registry), checks their MayaFlux requirements, downloads them into `community/`, and registers them in `community.cmake`. Rebuild your project afterward.
 
-Existing module folders are checked and reused without replacing their contents. A module can request that you open a URL, such as a download page. Weave asks before each browser launch. Complete any required steps in the browser and place downloaded files at the destination shown by Weave. You can decline and open the reported link later; module registration continues, but those actions remain pending. Weave does not wait for downloads or verify that browser actions are complete.
+Existing module folders are checked and reused without replacing their contents. A module's unified `assets` list may fetch verified files from HTTPS or a pinned Git commit, or request a browser handoff. Weave asks before each browser launch. Complete any required steps in the browser and place downloaded files at the destination shown by Weave. You can decline and open the reported link later; module registration continues, but those actions remain pending. Weave does not wait for downloads or verify that browser actions are complete.
 
-A module's `community.json` may also declare packages, manual installations, environment settings, and data assets. Review those requirements and follow the module author's instructions. Weave validates these declarations but does not install those packages, apply those environment changes, or download those assets for you.
+A module's `community.json` may also declare packages, manual installations, and environment settings. Weave validates those declarations but leaves their setup to you. A failed required asset download leaves the module folder in place for retry and prevents registration. A differing existing asset file is preserved and reported while registration proceeds.
 
 ### Create a module
 

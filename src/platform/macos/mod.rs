@@ -5,21 +5,27 @@ use std::path::PathBuf;
 use std::process::Command;
 
 pub fn shader_source_root() -> Option<PathBuf> {
+    mayaflux_prefixes()
+        .into_iter()
+        .map(|prefix| prefix.join("share/MayaFlux/src/shaders"))
+        .find(|path| path.is_dir())
+}
+
+pub fn mayaflux_prefixes() -> Vec<PathBuf> {
+    let mut result = Vec::new();
     for brew in brew_candidates() {
         for formula in ["mayaflux", "mayaflux-dev"] {
-            if let Ok(output) = Command::new(&brew).args(["--prefix", formula]).output() {
-                if output.status.success() {
-                    if let Ok(prefix) = String::from_utf8(output.stdout) {
-                        let path = PathBuf::from(prefix.trim()).join("share/MayaFlux/src/shaders");
-                        if path.is_dir() {
-                            return Some(path);
-                        }
-                    }
-                }
+            if let Ok(output) = Command::new(&brew).args(["--prefix", formula]).output()
+                && output.status.success()
+                && let Ok(prefix) = String::from_utf8(output.stdout)
+            {
+                result.push(PathBuf::from(prefix.trim()));
             }
         }
     }
-    None
+    result.sort();
+    result.dedup();
+    result
 }
 
 fn brew_candidates() -> Vec<PathBuf> {

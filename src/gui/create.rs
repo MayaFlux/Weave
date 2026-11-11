@@ -120,6 +120,7 @@ pub(super) fn register(window: &MainWindow, controller: &GuiController) {
                 with_lila: window.get_with_lila(),
                 with_vscode: window.get_with_vscode(),
                 copy_shader_sources: window.get_copy_shader_sources(),
+                fetch_assets: window.get_fetch_assets(),
             };
 
             let worker = creation.clone();
@@ -233,20 +234,31 @@ pub(super) fn project_creation_outcome(
     result: Result<ProjectCreationResult, ProjectCreationError>,
 ) -> ProjectCreationOutcome {
     match result {
-        Ok(result) => match result.git_warning {
-            Some(warning) => ProjectCreationOutcome {
-                return_to_projects: true,
-                kind: ResultKind::Warning,
-                title: "Project created with a warning",
-                message: format!("Created at:\n{}\n\n{warning}", result.path.display()),
-            },
-            None => ProjectCreationOutcome {
-                return_to_projects: true,
-                kind: ResultKind::Success,
-                title: "Project created",
-                message: format!("Created at:\n{}", result.path.display()),
-            },
-        },
+        Ok(result) => {
+            let warnings = [result.git_warning, result.asset_warning]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>();
+            if !warnings.is_empty() {
+                ProjectCreationOutcome {
+                    return_to_projects: true,
+                    kind: ResultKind::Warning,
+                    title: "Project created with a warning",
+                    message: format!(
+                        "Created at:\n{}\n\n{}",
+                        result.path.display(),
+                        warnings.join("\n\n")
+                    ),
+                }
+            } else {
+                ProjectCreationOutcome {
+                    return_to_projects: true,
+                    kind: ResultKind::Success,
+                    title: "Project created",
+                    message: format!("Created at:\n{}", result.path.display()),
+                }
+            }
+        }
         Err(error) => ProjectCreationOutcome {
             return_to_projects: false,
             kind: ResultKind::Error,

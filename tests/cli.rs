@@ -81,6 +81,117 @@ fn create_manage_project(root: &Path) -> PathBuf {
     project
 }
 
+#[test]
+fn cli_fetch_assets_uses_installed_manifest_for_new_and_manage() {
+    let temporary = TestDirectory::new();
+    let installed = temporary.0.join("MayaFlux prefix");
+    let manifest = installed.join("share/MayaFlux/assets/assets.json");
+    fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+    fs::write(&manifest, r#"{"schema_version":1,"assets":[]}"#).unwrap();
+    let created = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args([
+            "new",
+            "AssetDemo",
+            temporary.0.to_str().unwrap(),
+            "--fetch-assets",
+        ])
+        .env("MAYAFLUX_ROOT", &installed)
+        .output()
+        .unwrap();
+    assert!(
+        created.status.success(),
+        "{}",
+        String::from_utf8_lossy(&created.stderr)
+    );
+    let managed = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args([
+            "manage",
+            temporary.0.join("AssetDemo").to_str().unwrap(),
+            "--fetch-assets",
+        ])
+        .env("MAYAFLUX_ROOT", &installed)
+        .output()
+        .unwrap();
+    assert!(
+        managed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&managed.stderr)
+    );
+}
+
+#[test]
+fn failed_creation_asset_fetch_keeps_project_for_manage_retry() {
+    let temporary = TestDirectory::new();
+    let installed = temporary.0.join("Missing MayaFlux assets");
+    fs::create_dir(&installed).unwrap();
+    let first = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args([
+            "new",
+            "RetryDemo",
+            temporary.0.to_str().unwrap(),
+            "--fetch-assets",
+        ])
+        .env("MAYAFLUX_ROOT", &installed)
+        .output()
+        .unwrap();
+    assert!(!first.status.success());
+    let project = temporary.0.join("RetryDemo");
+    assert!(project.join("CMakeLists.txt").is_file());
+    assert!(String::from_utf8_lossy(&first.stderr).contains("Retry in Manage Project"));
+    let manifest = installed.join("share/MayaFlux/assets/assets.json");
+    fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+    fs::write(&manifest, r#"{"schema_version":1,"assets":[]}"#).unwrap();
+    let second = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args(["manage", project.to_str().unwrap(), "--fetch-assets"])
+        .env("MAYAFLUX_ROOT", &installed)
+        .output()
+        .unwrap();
+    assert!(
+        second.status.success(),
+        "{}",
+        String::from_utf8_lossy(&second.stderr)
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_manage_fetch_repairs_differing_mayaflux_asset() {
+    let temporary = TestDirectory::new();
+    let project = create_manage_project(&temporary.0);
+    let target = project.join("data/models/LICENSE");
+    fs::create_dir_all(target.parent().unwrap()).unwrap();
+    fs::write(&target, "custom").unwrap();
+
+    let installed = temporary.0.join("MayaFlux prefix");
+    let manifest = installed.join("share/MayaFlux/assets/assets.json");
+    fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+    fs::write(
+        &manifest,
+        r#"{"schema_version":1,"assets":[{"id":"license","description":"Test notice","source":{"kind":"url","url":"https://example.org/LICENSE"},"files":[{"to":"models/LICENSE","sha256":"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824","size_bytes":5}],"license":{"spdx":"MIT","notice":"models/LICENSE"}}]}"#,
+    )
+    .unwrap();
+    let bin = temporary.0.join("fake-bin");
+    fs::create_dir(&bin).unwrap();
+    write_fake_tool(
+        &bin,
+        "curl",
+        "#!/bin/sh\nwhile [ \"$#\" -gt 0 ]; do\n  if [ \"$1\" = \"--output\" ]; then\n    shift\n    printf hello > \"$1\"\n    exit 0\n  fi\n  shift\ndone\nexit 2\n",
+    );
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let result = Command::new(env!("CARGO_BIN_EXE_weave"))
+        .args(["manage", project.to_str().unwrap(), "--fetch-assets"])
+        .env("MAYAFLUX_ROOT", &installed)
+        .env("PATH", path)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(fs::read(target).unwrap(), b"hello");
+}
+
 #[cfg(target_os = "linux")]
 fn write_fake_tool(bin: &Path, name: &str, script: &str) {
     use std::os::unix::fs::PermissionsExt;

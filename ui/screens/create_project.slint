@@ -12,6 +12,7 @@ export component CreateProjectScreen inherits VerticalBox {
     in-out property <bool> with_lila;
     in-out property <bool> with_vscode;
     in-out property <bool> copy_shader_sources;
+    in-out property <bool> fetch_assets;
 
     callback back;
     callback choose_destination;
@@ -154,6 +155,12 @@ export component CreateProjectScreen inherits VerticalBox {
                         CheckBox {
                             text: "Copy MayaFlux shader sources";
                             checked <=> root.copy_shader_sources;
+                            enabled: !root.busy;
+                        }
+
+                        CheckBox {
+                            text: "Fetch MayaFlux assets";
+                            checked <=> root.fetch_assets;
                             enabled: !root.busy;
                         }
                     }

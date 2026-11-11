@@ -32,9 +32,20 @@ pub fn parse_manifest(
     source: &str,
     expected_name: &str,
 ) -> Result<CommunityManifest, ManifestError> {
+    let mut data = parse_json_strict(source)?;
+    let minimum_version = validate_manifest(&data, expected_name)?;
+    insert_defaults(&mut data);
+
+    Ok(CommunityManifest {
+        minimum_version,
+        data,
+    })
+}
+
+pub(crate) fn parse_json_strict(source: &str) -> Result<Value, ManifestError> {
     let source = source.trim_start_matches('\u{feff}');
     let mut deserializer = serde_json::Deserializer::from_str(source);
-    let mut data = StrictJsonSeed {
+    let data = StrictJsonSeed {
         depth: 0,
         path: "$".to_owned(),
     }
@@ -44,13 +55,7 @@ pub fn parse_manifest(
     deserializer
         .end()
         .map_err(|error| parse_error(&error.to_string()))?;
-    let minimum_version = validate_manifest(&data, expected_name)?;
-    insert_defaults(&mut data);
-
-    Ok(CommunityManifest {
-        minimum_version,
-        data,
-    })
+    Ok(data)
 }
 
 fn error(path: &str, reason: impl Into<String>) -> ManifestError {
@@ -196,10 +201,15 @@ const TOP_FIELDS: &[&str] = &[
     "packages",
     "manual_installs",
     "assets",
-    "urls",
 ];
 
 fn validate_manifest(data: &Value, expected_name: &str) -> Result<String, ManifestError> {
+    if data.get("urls").is_some() {
+        return Err(error(
+            "$.urls",
+            "Move browser links into assets with source.kind set to browser",
+        ));
+    }
     let object = object(data, "$", TOP_FIELDS, &["name", "min_version"])?;
     let name = text(required(object, "name", "$")?, "$.name", true)?;
     if !valid_identifier(name) {
@@ -221,7 +231,7 @@ fn validate_manifest(data: &Value, expected_name: &str) -> Result<String, Manife
         if revision.as_u64() != Some(1) {
             return Err(error("$.schema_version", "Unsupported schema revision"));
         }
-    } else if ["packages", "manual_installs", "assets", "urls"]
+    } else if ["packages", "manual_installs", "assets"]
         .iter()
         .any(|field| object.contains_key(*field))
     {
@@ -247,11 +257,20 @@ fn validate_manifest(data: &Value, expected_name: &str) -> Result<String, Manife
         "manual_installs",
         validate_manual,
     )?;
-    validate_requirement_list(object.get("assets"), "assets", validate_asset)?;
-    if let Some(urls) = object.get("urls") {
-        for (index, value) in array(urls, "$.urls")?.iter().enumerate() {
-            validate_url_entry(value, &format!("$.urls[{index}]"))?;
+    if let Some(assets) = object.get("assets") {
+        for (index, asset) in array(assets, "$.assets")?.iter().enumerate() {
+            if asset.get("source").is_none() {
+                return Err(error(
+                    &format!("$.assets[{index}].source"),
+                    "Migrate this asset to the new source/files/license shape",
+                ));
+            }
         }
+        crate::operations::assets::parse_asset_value(
+            assets.clone(),
+            crate::operations::assets::AssetContext::Community,
+        )
+        .map_err(|asset_error| error("$.assets", asset_error.to_string()))?;
     }
     Ok(minimum_version)
 }
@@ -507,50 +526,11 @@ fn validate_url_with_fragment(
 
 /// Rechecks a module URL at the browser boundary.
 pub(crate) fn validate_runtime_url(value: &str) -> Result<(), ManifestError> {
-    validate_url_with_fragment(&Value::String(value.to_owned()), "$.urls[].url", true)
-}
-
-fn validate_url_entry(value: &Value, path: &str) -> Result<(), ManifestError> {
-    const FIELDS: &[&str] = &[
-        "url",
-        "description",
-        "destination",
-        "destination_root",
-        "platforms",
-    ];
-    let entry = object(value, path, FIELDS, &["url"])?;
-    validate_url_with_fragment(required(entry, "url", path)?, &format!("{path}.url"), true)?;
-    if let Some(value) = entry.get("description") {
-        text(value, &format!("{path}.description"), true)?;
-    }
-    let platforms = if let Some(value) = entry.get("platforms") {
-        validate_platforms(value, &format!("{path}.platforms"))?
-    } else {
-        vec!["linux".to_owned(), "macos".to_owned(), "windows".to_owned()]
-    };
-    if let Some(value) = entry.get("destination") {
-        validate_relative_path(
-            value,
-            &format!("{path}.destination"),
-            platforms.iter().any(|p| p == "windows"),
-        )?;
-    }
-    if let Some(value) = entry.get("destination_root") {
-        if !entry.contains_key("destination") {
-            return Err(error(
-                &format!("{path}.destination_root"),
-                "Destination root requires a destination",
-            ));
-        }
-        let root = text(value, &format!("{path}.destination_root"), true)?;
-        if !matches!(root, "project" | "module") {
-            return Err(error(
-                &format!("{path}.destination_root"),
-                "Unsupported destination root",
-            ));
-        }
-    }
-    Ok(())
+    validate_url_with_fragment(
+        &Value::String(value.to_owned()),
+        "$.assets[].source.url",
+        true,
+    )
 }
 
 fn validate_relative_path(value: &Value, path: &str, windows: bool) -> Result<(), ManifestError> {
@@ -880,102 +860,6 @@ fn valid_environment_value(value: &str) -> bool {
     true
 }
 
-fn validate_asset(value: &Value, path: &str) -> Result<String, ManifestError> {
-    const REQUIRED: &[&str] = &[
-        "id",
-        "url",
-        "sha256",
-        "size_bytes",
-        "license_url",
-        "destination",
-        "description",
-        "archive_format",
-        "max_extracted_size_bytes",
-        "max_files",
-    ];
-    let fields = [
-        "id",
-        "url",
-        "sha256",
-        "size_bytes",
-        "license_url",
-        "destination",
-        "description",
-        "archive_format",
-        "max_extracted_size_bytes",
-        "max_files",
-        "platforms",
-        "destination_root",
-        "optional",
-    ];
-    let asset = object(value, path, &fields, REQUIRED)?;
-    let id = text(required(asset, "id", path)?, &format!("{path}.id"), true)?;
-    if !valid_identifier(id) {
-        return Err(error(&format!("{path}.id"), "Invalid identifier"));
-    }
-    let platforms = if let Some(platforms) = asset.get("platforms") {
-        validate_platforms(platforms, &format!("{path}.platforms"))?
-    } else {
-        vec!["linux".to_owned(), "macos".to_owned(), "windows".to_owned()]
-    };
-    validate_url(required(asset, "url", path)?, &format!("{path}.url"))?;
-    validate_url(
-        required(asset, "license_url", path)?,
-        &format!("{path}.license_url"),
-    )?;
-    let checksum = text(
-        required(asset, "sha256", path)?,
-        &format!("{path}.sha256"),
-        true,
-    )?;
-    if checksum.len() != 64 || !checksum.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err(error(&format!("{path}.sha256"), "Invalid identifier"));
-    }
-    for field in ["size_bytes", "max_extracted_size_bytes", "max_files"] {
-        let number = required(asset, field, path)?.as_u64();
-        if !number.is_some_and(|number| (1..=9_007_199_254_740_991).contains(&number)) {
-            return Err(error(
-                &format!("{path}.{field}"),
-                "Integer must be between 1 and 9007199254740991",
-            ));
-        }
-    }
-    validate_relative_path(
-        required(asset, "destination", path)?,
-        &format!("{path}.destination"),
-        platforms.iter().any(|p| p == "windows"),
-    )?;
-    text(
-        required(asset, "description", path)?,
-        &format!("{path}.description"),
-        true,
-    )?;
-    if let Some(root) = asset.get("destination_root") {
-        let root = text(root, &format!("{path}.destination_root"), true)?;
-        if !matches!(root, "project" | "module") {
-            return Err(error(
-                &format!("{path}.destination_root"),
-                "Unsupported destination root",
-            ));
-        }
-    }
-    let archive_format = text(
-        required(asset, "archive_format", path)?,
-        &format!("{path}.archive_format"),
-        true,
-    )?;
-    if archive_format != "zip" {
-        return Err(error(
-            &format!("{path}.archive_format"),
-            "Unsupported archive format",
-        ));
-    }
-    if let Some(optional) = asset.get("optional") {
-        boolean(optional, &format!("{path}.optional"))?;
-    }
-    Ok(id.to_owned())
-}
-
 fn insert_defaults(data: &mut Value) {
     let object = data.as_object_mut().expect("validated top-level object");
     object.entry("schema_version").or_insert(Value::from(1));
@@ -988,9 +872,6 @@ fn insert_defaults(data: &mut Value) {
         .or_insert_with(|| Value::Array(Vec::new()));
     object
         .entry("assets")
-        .or_insert_with(|| Value::Array(Vec::new()));
-    object
-        .entry("urls")
         .or_insert_with(|| Value::Array(Vec::new()));
     if let Some(manuals) = object
         .get_mut("manual_installs")
@@ -1019,8 +900,8 @@ fn insert_defaults(data: &mut Value) {
                     .entry("platforms")
                     .or_insert_with(|| serde_json::json!(["linux", "macos", "windows"]));
                 asset
-                    .entry("destination_root")
-                    .or_insert_with(|| Value::String("project".to_owned()));
+                    .entry("root")
+                    .or_insert_with(|| Value::String("data".to_owned()));
                 asset.entry("optional").or_insert(Value::Bool(false));
             }
         }
@@ -1038,27 +919,35 @@ mod tests {
     }
 
     #[test]
-    fn general_urls_do_not_require_asset_metadata() {
-        let source = r#"{"schema_version":1,"name":"sample_module","min_version":"0.6.0","urls":[{"url":"https://example.org/weights.bin?version=2"},{"url":"https://example.org:443#files","destination":"data/model.bin","destination_root":"module","description":"Model data"}]}"#;
+    fn community_assets_use_one_source_shape_and_old_urls_require_migration() {
+        let source = r#"{"schema_version":1,"name":"sample_module","min_version":"0.6.0","assets":[{"id":"download","description":"Open provider","source":{"kind":"browser","url":"https://example.org/download#models"},"files":[{"to":"models/model.bin"}],"root":"module"}]}"#;
+        assert!(parse_manifest(source, "sample_module").is_ok());
+        let old = r#"{"schema_version":1,"name":"sample_module","min_version":"0.6.0","urls":[{"url":"https://example.org/download"}]}"#;
+        assert!(parse_manifest(old, "sample_module").is_err());
+    }
+
+    #[test]
+    fn browser_assets_do_not_require_download_metadata() {
+        let source = r#"{"schema_version":1,"name":"sample_module","min_version":"0.6.0","assets":[{"id":"first","description":"First page","source":{"kind":"browser","url":"https://example.org/weights.bin?version=2"}},{"id":"second","description":"Model data","root":"module","source":{"kind":"browser","url":"https://example.org:443#files"},"files":[{"to":"data/model.bin"}]}]}"#;
         let manifest = parse_manifest(source, "sample_module").unwrap();
-        assert_eq!(manifest.data["urls"].as_array().unwrap().len(), 2);
+        assert_eq!(manifest.data["assets"].as_array().unwrap().len(), 2);
         assert_eq!(
-            manifest.data["urls"][0]["url"],
+            manifest.data["assets"][0]["source"]["url"],
             "https://example.org/weights.bin?version=2"
         );
     }
 
     #[test]
-    fn urls_reject_unsafe_destinations_and_invalid_addresses() {
+    fn browser_assets_reject_unsafe_destinations_and_invalid_addresses() {
         for entry in [
-            r#"{"url":"http://example.org/file"}"#,
-            r#"{"url":"https://user@example.org/file"}"#,
-            r#"{"url":"https://example.org/file","destination":"../outside"}"#,
-            r#"{"url":"https://example.org/file","destination_root":"module"}"#,
-            r#"{"url":"https://example.org/file","optional":true}"#,
+            r#"{"id":"data","description":"Data","source":{"kind":"browser","url":"http://example.org/file"}}"#,
+            r#"{"id":"data","description":"Data","source":{"kind":"browser","url":"https://user@example.org/file"}}"#,
+            r#"{"id":"data","description":"Data","source":{"kind":"browser","url":"https://example.org/file"},"files":[{"to":"../outside"}]}"#,
+            r#"{"id":"data","description":"Data","root":"project","source":{"kind":"browser","url":"https://example.org/file"}}"#,
+            r#"{"id":"data","description":"Data","source":{"kind":"browser","url":"https://example.org/file"},"license":{"spdx":"MIT","notice":"LICENSE"}}"#,
         ] {
             let source = format!(
-                r#"{{"schema_version":1,"name":"sample_module","min_version":"0.6.0","urls":[{entry}]}}"#
+                r#"{{"schema_version":1,"name":"sample_module","min_version":"0.6.0","assets":[{entry}]}}"#
             );
             assert!(
                 parse_manifest(&source, "sample_module").is_err(),
@@ -1146,7 +1035,7 @@ mod tests {
         );
         assert!(parse_manifest(&nested, "sample_module").is_err());
 
-        let asset_template = r#"{"schema_version":1,"name":"sample_module","min_version":"0.5.0","assets":[{"id":"data","url":"https://example.org/data.zip","sha256":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","size_bytes":SIZE,"license_url":"https://example.org/license","destination":"assets/data","description":"Data archive","archive_format":"zip","max_extracted_size_bytes":10,"max_files":1}]}"#;
+        let asset_template = r#"{"schema_version":1,"name":"sample_module","min_version":"0.5.0","assets":[{"id":"data","description":"Data archive","source":{"kind":"git","repo":"https://example.org/data.git","ref":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"files":[{"from":"LICENSE","to":"LICENSE","size_bytes":SIZE}],"license":{"spdx":"MIT","notice":"LICENSE"}}]}"#;
         for token in ["1.0", "1e0"] {
             let source = asset_template.replace("SIZE", token);
             assert!(parse_manifest(&source, "sample_module").is_err(), "{token}");
@@ -1190,7 +1079,7 @@ mod tests {
             asset.data["assets"][0]["platforms"],
             serde_json::json!(["linux", "macos", "windows"])
         );
-        assert_eq!(asset.data["assets"][0]["destination_root"], "project");
+        assert_eq!(asset.data["assets"][0]["root"], "data");
         assert_eq!(asset.data["assets"][0]["optional"], false);
     }
 

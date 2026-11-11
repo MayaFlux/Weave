@@ -13,6 +13,7 @@ export component ManageProjectScreen inherits VerticalBox {
     in property <bool> can_copy_shader_sources;
     in-out property <bool> add_lila;
     in-out property <bool> add_shader_sources;
+    in-out property <bool> fetch_assets;
 
     callback back;
     callback add_community_modules;
@@ -111,6 +112,23 @@ export component ManageProjectScreen inherits VerticalBox {
                             }
                         }
 
+                        VerticalBox {
+                            spacing: 4px;
+                            CheckBox {
+                                text: "Fetch MayaFlux assets";
+                                checked <=> root.fetch_assets;
+                                enabled: !root.busy;
+                            }
+                            Text {
+                                text: "Uses the asset list from the installed MayaFlux. Existing files are checked before download.";
+                                color: WeaveTheme.text-secondary;
+                                font-size: WeaveTheme.font-description;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
+                                wrap: word-wrap;
+                            }
+                        }
+
                         Text {
                             text: "Lila updates the project's MayaFlux CMake integration. Existing shader files are checked before copying.";
                             color: WeaveTheme.text-muted;
@@ -123,7 +141,7 @@ export component ManageProjectScreen inherits VerticalBox {
                         AppButton {
                             text: root.busy ? "Applying…" : "Apply Selected Options";
                             primary: true;
-                            enabled: !root.busy && (root.add_lila || root.add_shader_sources);
+                            enabled: !root.busy && (root.add_lila || root.add_shader_sources || root.fetch_assets);
                             clicked => { root.apply_options(); }
                         }
                     }

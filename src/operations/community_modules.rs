@@ -6,6 +6,7 @@ mod registry;
 #[cfg(test)]
 mod tests;
 
+use crate::operations::assets::{self, AssetContext, AssetError, AssetTransport, HostTransport};
 #[cfg(test)]
 use installed::parse_installed_version;
 use installed::{installed_version, version};
@@ -95,7 +96,7 @@ fn read_manifest(path: &Path, name: &str) -> Result<([u64; 3], Value), ModuleAdd
 }
 
 /// Supplies registry, installation, and clone operations to the workflow.
-trait ModuleServices {
+trait ModuleServices: AssetTransport {
     fn registry(&self) -> Result<std::collections::HashMap<String, RegistryEntry>, ModuleAddError>;
     fn installed_version(&self) -> Result<(String, [u64; 3]), ModuleAddError>;
     fn clone_module(&self, repository: &str, destination: &Path) -> Result<(), ModuleAddError>;
@@ -106,6 +107,20 @@ trait ModuleServices {
 /// Uses the host tools and filesystem for a real module addition.
 struct LiveModuleServices<'a> {
     confirm_url: &'a dyn Fn(&str) -> bool,
+}
+
+impl AssetTransport for LiveModuleServices<'_> {
+    fn download(&self, url: &str, limit: u64) -> Result<Vec<u8>, AssetError> {
+        HostTransport.download(url, limit)
+    }
+    fn git_files(
+        &self,
+        repo: &str,
+        commit: &str,
+        paths: &[String],
+    ) -> Result<std::collections::HashMap<String, Vec<u8>>, AssetError> {
+        HostTransport.git_files(repo, commit, paths)
+    }
 }
 
 impl ModuleServices for LiveModuleServices<'_> {
@@ -261,6 +276,7 @@ fn prepare_modules(
     installed_text: &str,
     services: &impl ModuleServices,
     cloned: &mut Vec<PathBuf>,
+    preserve_clones: &mut bool,
     report: &mut impl FnMut(String),
 ) -> Result<(), ModuleAddError> {
     for name in names {
@@ -323,112 +339,48 @@ fn prepare_modules(
                 required_min[0], required_min[1], required_min[2]
             )));
         }
-        let has_requirements = manifest
+        let has_manual_requirements = manifest
             .get("packages")
             .is_some_and(|value| value.as_object().is_some_and(|items| !items.is_empty()))
             || manifest
                 .get("manual_installs")
-                .is_some_and(|value| value.as_array().is_some_and(|items| !items.is_empty()))
-            || manifest
-                .get("assets")
                 .is_some_and(|value| value.as_array().is_some_and(|items| !items.is_empty()));
-        if has_requirements {
+        if has_manual_requirements {
             report(format!(
-                "{name} declares requirements in community/{name}/community.json. Review package and legacy declarations in the manifest."
+                "{name} declares requirements in community/{name}/community.json. Review package and manual installation declarations in the manifest."
             ));
         }
-        resolve_urls(
-            &manifest,
-            name,
-            &module,
+        let assets = assets::parse_asset_value(manifest["assets"].clone(), AssetContext::Community)
+            .map_err(|error| fail(format!("Invalid assets for {name}: {error}")))?;
+        if !assets.is_empty() {
+            *preserve_clones = true;
+        }
+        let result = assets::apply_assets_with(
             community.parent().expect("community has project parent"),
+            Some(&module),
+            &assets,
+            false,
             services,
-            report,
-        )?;
-        report(format!("Validated {name}"));
-    }
-    Ok(())
-}
-
-fn resolve_urls(
-    manifest: &Value,
-    name: &str,
-    module: &Path,
-    project: &Path,
-    services: &impl ModuleServices,
-    report: &mut impl FnMut(String),
-) -> Result<(), ModuleAddError> {
-    let Some(urls) = manifest.get("urls").and_then(Value::as_array) else {
-        return Ok(());
-    };
-    for entry in urls {
-        let url = entry["url"].as_str().expect("validated URL");
-        let description = entry["description"].as_str();
-        if entry["platforms"].as_array().is_some_and(|platforms| {
-            !platforms
-                .iter()
-                .any(|platform| platform.as_str() == Some(std::env::consts::OS))
-        }) {
-            continue;
-        }
-        if let Some(relative) = entry["destination"].as_str() {
-            let root = if entry["destination_root"].as_str() == Some("module") {
-                module
-            } else {
-                project
-            };
-            let destination = root.join(relative);
-            crate::filesystem::no_links(&destination).map_err(fail)?;
-            if destination.exists() {
-                if !destination.is_file() {
-                    return Err(fail(format!(
-                        "URL destination is not a file: {}",
-                        destination.display()
-                    )));
+            &|url| {
+                if services.confirm_open_url(url) {
+                    services
+                        .open_url(url)
+                        .map(|_| true)
+                        .map_err(|error| AssetError(error.to_string()))
+                } else {
+                    Ok(false)
                 }
-                report(format!(
-                    "File already exists at {}. Review it against {url}.",
-                    destination.display()
-                ));
-                continue;
-            }
-            if !services.confirm_open_url(url) {
-                report(format!(
-                    "Browser opening declined for {url}. Place any downloaded file at {}. This remains pending.",
-                    destination.display()
-                ));
-                continue;
-            }
-            match services.open_url(url) {
-                Ok(()) => report(format!(
-                    "Handed {url} to the browser. Place the downloaded file at {}. This remains pending until then. {}",
-                    destination.display(),
-                    description.unwrap_or("")
-                )),
-                Err(error) => report(format!(
-                    "Open {url} in a browser and place the downloaded file at {}. This remains pending. {} {error}",
-                    destination.display(),
-                    description.unwrap_or("")
-                )),
-            }
-        } else {
-            if !services.confirm_open_url(url) {
-                report(format!(
-                    "Browser opening declined for {url}. Open it manually if needed by {name}; this remains pending."
-                ));
-                continue;
-            }
-            match services.open_url(url) {
-                Ok(()) => report(format!(
-                    "Handed {url} to the browser for user action. {}",
-                    description.unwrap_or("Complete any steps required by the module.")
-                )),
-                Err(error) => report(format!(
-                    "Open {url} to complete any steps required by {name}. {} {error}",
-                    description.unwrap_or("")
-                )),
-            }
+            },
+            report,
+        )
+        .map_err(|error| fail(format!("Could not fetch assets for {name}: {error}")))?;
+        if result.conflicts > 0 {
+            report(format!(
+                "{name}: {} asset file(s) differ and were kept. Module registration will continue; review them before use.",
+                result.conflicts
+            ));
         }
+        report(format!("Validated {name}"));
     }
     Ok(())
 }
@@ -471,7 +423,7 @@ fn register_modules(
         });
     }
     report(
-        "Done. Rebuild the project to include the modules. Review any pending URL actions above."
+        "Done. Rebuild the project to include the modules. Review any pending browser actions or asset warnings above."
             .to_owned(),
     );
     Ok(())
@@ -492,6 +444,7 @@ fn add_to_project_with(
     check_registry_minimum(&names, &entries, installed, &installed_text)?;
     let community_existed = community.exists();
     let mut cloned: Vec<PathBuf> = Vec::new();
+    let mut preserve_clones = false;
     let result = (|| {
         prepare_modules(
             &names,
@@ -501,12 +454,18 @@ fn add_to_project_with(
             &installed_text,
             services,
             &mut cloned,
+            &mut preserve_clones,
             &mut report,
         )?;
         register_modules(&registration, &names, &mut report)?;
         Ok(())
     })();
     if let Err(error) = result {
+        if preserve_clones {
+            return Err(fail(format!(
+                "{error}. The module and any verified files were kept for retry; run the same Add Community Modules action again."
+            )));
+        }
         let mut leftovers = Vec::new();
         for path in cloned.iter().rev() {
             if let Err(cleanup) = fs::remove_dir_all(path) {

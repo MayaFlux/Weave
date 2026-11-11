@@ -1,4 +1,5 @@
 use super::*;
+use crate::operations::assets::{AssetError, AssetTransport};
 use std::cell::{Cell, RefCell};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -42,6 +43,8 @@ struct FixtureServices {
     opened_urls: RefCell<Vec<String>>,
     open_error: Cell<bool>,
     allow_browser: Cell<bool>,
+    download_payload: RefCell<Option<Vec<u8>>>,
+    clone_manifest: RefCell<Option<String>>,
 }
 
 impl FixtureServices {
@@ -70,6 +73,8 @@ impl FixtureServices {
             opened_urls: RefCell::new(Vec::new()),
             open_error: Cell::new(false),
             allow_browser: Cell::new(true),
+            download_payload: RefCell::new(None),
+            clone_manifest: RefCell::new(None),
         }
     }
 }
@@ -104,6 +109,8 @@ impl ModuleServices for FixtureServices {
         fs::write(destination.join(format!("{name}.cmake")), "module").unwrap();
         let manifest = if self.invalid_clone.borrow().as_deref() == Some(name.as_ref()) {
             "{invalid".to_owned()
+        } else if let Some(manifest) = self.clone_manifest.borrow().as_ref() {
+            manifest.clone()
         } else {
             format!("{{\"name\":\"{name}\",\"min_version\":\"0.5.0\"}}")
         };
@@ -123,6 +130,93 @@ impl ModuleServices for FixtureServices {
     fn confirm_open_url(&self, _url: &str) -> bool {
         self.allow_browser.get()
     }
+}
+
+impl AssetTransport for FixtureServices {
+    fn download(&self, _url: &str, _limit: u64) -> Result<Vec<u8>, AssetError> {
+        self.download_payload
+            .borrow()
+            .clone()
+            .ok_or_else(|| AssetError("fixture download unavailable".to_owned()))
+    }
+    fn git_files(
+        &self,
+        _repo: &str,
+        _commit: &str,
+        _paths: &[String],
+    ) -> Result<std::collections::HashMap<String, Vec<u8>>, AssetError> {
+        Err(AssetError("fixture Git unavailable".to_owned()))
+    }
+}
+
+const REQUIRED_LICENSE_ASSET: &str = r#"{"schema_version":1,"name":"terrain_field","min_version":"0.6.0","assets":[{"id":"notice","description":"License notice","source":{"kind":"url","url":"https://example.org/LICENSE"},"files":[{"to":"licenses/LICENSE","sha256":"e5dcffe836b6ec8a58e492419b550e65fb8cbdc308503979e5dacb33ac7ea3b7","size_bytes":3}],"license":{"spdx":"MIT","notice":"licenses/LICENSE"}}]}"#;
+
+#[test]
+fn failed_required_download_keeps_clone_for_retry() {
+    let fixture = ProjectFixture::new(&["terrain_field"]);
+    *fixture.services.clone_manifest.borrow_mut() = Some(REQUIRED_LICENSE_ASSET.to_owned());
+    let first = fixture.run(&["terrain_field"], &mut Vec::new());
+    assert!(first.is_err());
+    assert!(
+        fixture
+            .directory
+            .0
+            .join("community/terrain_field/community.json")
+            .is_file()
+    );
+    assert!(!fixture.directory.0.join("community.cmake").exists());
+    *fixture.services.download_payload.borrow_mut() = Some(b"MIT".to_vec());
+    fixture.run(&["terrain_field"], &mut Vec::new()).unwrap();
+    assert_eq!(
+        fs::read(fixture.directory.0.join("data/licenses/LICENSE")).unwrap(),
+        b"MIT"
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.directory.0.join("community.cmake")).unwrap(),
+        "terrain_field\n"
+    );
+}
+
+#[test]
+fn differing_required_community_file_registers_with_warning() {
+    let fixture = ProjectFixture::new(&["terrain_field"]);
+    fixture.module("terrain_field", REQUIRED_LICENSE_ASSET);
+    fs::create_dir_all(fixture.directory.0.join("data/licenses")).unwrap();
+    fs::write(fixture.directory.0.join("data/licenses/LICENSE"), b"custom").unwrap();
+    let mut output = Vec::new();
+    fixture.run(&["terrain_field"], &mut output).unwrap();
+    assert_eq!(
+        fs::read(fixture.directory.0.join("data/licenses/LICENSE")).unwrap(),
+        b"custom"
+    );
+    assert!(
+        output
+            .iter()
+            .any(|line| line.contains("differ") && line.contains("kept"))
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.directory.0.join("community.cmake")).unwrap(),
+        "terrain_field\n"
+    );
+}
+
+#[test]
+fn browser_asset_in_unified_list_opens_when_module_is_added() {
+    let fixture = ProjectFixture::new(&["terrain_field"]);
+    fixture.module("terrain_field", r#"{"schema_version":1,"name":"terrain_field","min_version":"0.6.0","assets":[{"id":"download","description":"Open provider","source":{"kind":"browser","url":"https://example.org/download#models"},"files":[{"to":"models/model.bin"}],"root":"module"}]}"#);
+    let mut report = Vec::new();
+    add_to_project_with(
+        &fixture.directory.0,
+        &["terrain_field".to_owned()],
+        &fixture.services,
+        |line| report.push(line),
+    )
+    .unwrap();
+    assert_eq!(
+        fixture.services.opened_urls.borrow().as_slice(),
+        &["https://example.org/download#models"]
+    );
+    assert!(report.iter().any(|line| line.contains("pending")));
 }
 
 struct ProjectFixture {
@@ -407,7 +501,7 @@ fn utf8_bom_manifest_is_accepted_and_declared_requirements_are_reported() {
 #[test]
 fn all_urls_open_in_browser_and_destination_remains_pending() {
     let fixture = ProjectFixture::new(&["terrain_field"]);
-    let module = fixture.module("terrain_field", r#"{"schema_version":1,"name":"terrain_field","min_version":"0.6.0","urls":[{"url":"https://example.org/data.bin","destination":"assets/data.bin","destination_root":"module"},{"url":"https://example.org/account/download"}]}"#);
+    let module = fixture.module("terrain_field", r#"{"schema_version":1,"name":"terrain_field","min_version":"0.6.0","assets":[{"id":"data","description":"Data download","root":"module","source":{"kind":"browser","url":"https://example.org/data.bin"},"files":[{"to":"assets/data.bin"}]},{"id":"account","description":"Account page","source":{"kind":"browser","url":"https://example.org/account/download"}}]}"#);
     // The fixture spelling need not match the resolved path used in diagnostics.
     let module = module.join(".");
     let mut output = Vec::new();
@@ -437,7 +531,7 @@ fn all_urls_open_in_browser_and_destination_remains_pending() {
 #[test]
 fn existing_url_destination_is_preserved_without_browser_handoff() {
     let fixture = ProjectFixture::new(&["terrain_field"]);
-    let module = fixture.module("terrain_field", r#"{"schema_version":1,"name":"terrain_field","min_version":"0.6.0","urls":[{"url":"https://example.org/data.bin","destination":"assets/data.bin","destination_root":"module"}]}"#);
+    let module = fixture.module("terrain_field", r#"{"schema_version":1,"name":"terrain_field","min_version":"0.6.0","assets":[{"id":"data","description":"Data download","root":"module","source":{"kind":"browser","url":"https://example.org/data.bin"},"files":[{"to":"assets/data.bin"}]}]}"#);
     fs::create_dir_all(module.join("assets")).unwrap();
     fs::write(module.join("assets/data.bin"), b"existing").unwrap();
     fixture.run(&["terrain_field"], &mut Vec::new()).unwrap();
@@ -451,7 +545,7 @@ fn existing_url_destination_is_preserved_without_browser_handoff() {
 #[test]
 fn browser_failure_reports_manual_url_and_keeps_registration() {
     let fixture = ProjectFixture::new(&["terrain_field"]);
-    fixture.module("terrain_field", r#"{"schema_version":1,"name":"terrain_field","min_version":"0.6.0","urls":[{"url":"https://example.org/data","destination":"data.bin","destination_root":"module"}]}"#);
+    fixture.module("terrain_field", r#"{"schema_version":1,"name":"terrain_field","min_version":"0.6.0","assets":[{"id":"data","description":"Data download","root":"module","source":{"kind":"browser","url":"https://example.org/data"},"files":[{"to":"data.bin"}]}]}"#);
     fixture.services.open_error.set(true);
     let mut output = Vec::new();
     fixture.run(&["terrain_field"], &mut output).unwrap();
@@ -471,7 +565,7 @@ fn browser_failure_reports_manual_url_and_keeps_registration() {
 #[test]
 fn declining_browser_handoff_leaves_destination_pending() {
     let fixture = ProjectFixture::new(&["terrain_field"]);
-    let module = fixture.module("terrain_field", r#"{"schema_version":1,"name":"terrain_field","min_version":"0.6.0","urls":[{"url":"https://example.org/data","destination":"data.bin","destination_root":"module"}]}"#);
+    let module = fixture.module("terrain_field", r#"{"schema_version":1,"name":"terrain_field","min_version":"0.6.0","assets":[{"id":"data","description":"Data download","root":"module","source":{"kind":"browser","url":"https://example.org/data"},"files":[{"to":"data.bin"}]}]}"#);
     fixture.services.allow_browser.set(false);
     let mut output = Vec::new();
     fixture.run(&["terrain_field"], &mut output).unwrap();
@@ -516,7 +610,7 @@ fn browser_handoff_does_not_wait_for_launcher_process() {
 fn linked_url_destination_is_rejected_without_touching_target() {
     use std::os::unix::fs::symlink;
     let fixture = ProjectFixture::new(&["terrain_field"]);
-    let module = fixture.module("terrain_field", r#"{"schema_version":1,"name":"terrain_field","min_version":"0.6.0","urls":[{"url":"https://example.org/data","destination":"data.bin","destination_root":"module"}]}"#);
+    let module = fixture.module("terrain_field", r#"{"schema_version":1,"name":"terrain_field","min_version":"0.6.0","assets":[{"id":"data","description":"Data download","root":"module","source":{"kind":"browser","url":"https://example.org/data"},"files":[{"to":"data.bin"}]}]}"#);
     let target = fixture.directory.0.join("target.bin");
     fs::write(&target, b"original").unwrap();
     symlink(&target, module.join("data.bin")).unwrap();

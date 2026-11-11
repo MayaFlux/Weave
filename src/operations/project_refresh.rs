@@ -76,6 +76,7 @@ pub fn preview(project: &Path) -> Result<RefreshPreview, String> {
         Err(error) => return Err(format!("Could not read {}: {error}", lila_path.display())),
     };
     let options = ProjectOptions {
+        fetch_assets: false,
         with_lila,
         with_vscode: true,
         copy_shader_sources: false,

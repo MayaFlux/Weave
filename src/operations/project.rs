@@ -18,6 +18,7 @@ pub struct ProjectOptions {
     pub with_lila: bool,
     pub with_vscode: bool,
     pub copy_shader_sources: bool,
+    pub fetch_assets: bool,
 }
 
 /// Location of a created project and any nonfatal Git setup warning.
@@ -25,6 +26,7 @@ pub struct ProjectOptions {
 pub struct ProjectCreationResult {
     pub path: PathBuf,
     pub git_warning: Option<String>,
+    pub asset_warning: Option<String>,
 }
 
 impl Default for ProjectOptions {
@@ -33,6 +35,7 @@ impl Default for ProjectOptions {
             with_lila: false,
             with_vscode: true,
             copy_shader_sources: false,
+            fetch_assets: false,
         }
     }
 }
@@ -110,9 +113,21 @@ fn create_project_with_shader_root(
     }
 
     let git_warning = initialize_repository(&project_path, "project");
+    let asset_warning = if options.fetch_assets {
+        match crate::operations::assets::fetch_project_assets(&project_path, &mut |_| {}) {
+            Ok(_) => None,
+            Err(error) => Some(format!(
+                "Asset fetch failed: {error}. The project remains at {}. Retry in Manage Project.",
+                project_path.display()
+            )),
+        }
+    } else {
+        None
+    };
     Ok(ProjectCreationResult {
         path: project_path,
         git_warning,
+        asset_warning,
     })
 }
 
@@ -604,6 +619,7 @@ mod tests {
                 with_lila: true,
                 with_vscode: true,
                 copy_shader_sources: false,
+                fetch_assets: false,
             },
         )
         .unwrap()

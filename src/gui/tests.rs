@@ -138,10 +138,12 @@ fn fake_release_turns_on_the_gui_update_banner() {
 #[test]
 fn project_creation_outcome_returns_to_projects_only_after_success() {
     let success = project_creation_outcome(Ok(ProjectCreationResult {
+        asset_warning: None,
         path: PathBuf::from("created project"),
         git_warning: None,
     }));
     let warning = project_creation_outcome(Ok(ProjectCreationResult {
+        asset_warning: None,
         path: PathBuf::from("created project with warning"),
         git_warning: Some("Git could not be initialized".to_owned()),
     }));

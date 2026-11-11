@@ -16,12 +16,12 @@ compatibility before registration in `community.cmake`.
 | Declaration | What Weave does when adding the module |
 | --- | --- |
 | Metadata and `min_version` | Validates the manifest and checks the installed MayaFlux version. |
-| `urls` | Asks before opening each applicable URL and displays any destination hint. |
-| `packages` | Validates declarations and tells the user to review the manifest. |
-| `manual_installs` and `assets` | Validates declarations and leaves installation or downloads to the user. |
+| `assets` with `source.kind: browser` | Asks before opening the URL and displays destination hints. |
+| `assets` with `source.kind: url` or `git` | Fetches, verifies, and places the declared files. |
+| `packages` and `manual_installs` | Validates declarations and leaves installation to the user. |
 
-Weave does not install declared community packages, add package sources, apply
-declared environment changes, or download and extract declared assets. Include
+Weave does not install declared community packages, add package sources, or apply
+declared environment changes. Include
 the necessary user instructions in your module's README. Passing manifest
 validation or opening a browser does not establish that a requirement is ready.
 
@@ -38,7 +38,7 @@ validation or opening a browser does not establish that a requirement is ready.
 
 Existing metadata-only manifests without `schema_version` remain valid. Any
 manifest containing acquisition sections must declare a schema revision.
-The current revision is `1`, including the `urls` field.
+The current revision remains `1`. This unpublished schema now uses only the unified `assets` list. Older `urls` entries and the former ZIP-only asset shape must be migrated.
 
 Missing acquisition sections declare no operations. Unknown fields and
 unsupported schema revisions are rejected.
@@ -46,54 +46,36 @@ unsupported schema revisions are rejected.
 `min_version` has three nonnegative decimal components. Each component is `0`
 or a number without a leading zero.
 
-## URLs
+## Browser assets
 
-Use the `urls` array for download pages, files, account setup, or other browser
-actions. Only `url` is required for each entry:
+A browser asset is a page or file that needs user action, such as login or
+accepting an agreement. It lives in the same `assets` list as downloadable
+assets. Browser entries need an `id`, a `description`, and a `source` with
+`kind: browser` and an HTTPS `url`. Optional `files` give destination hints.
 
 ```json
 {
   "schema_version": 1,
   "name": "terrain_field",
   "min_version": "0.6.0",
-  "urls": [
+  "assets": [
     {
-      "url": "https://example.org/download",
-      "description": "Open the provider's download page and follow its instructions."
-    },
-    {
-      "url": "https://example.org/data/model.bin",
-      "destination": "data/model.bin",
-      "destination_root": "module"
+      "id": "provider_download",
+      "description": "Open the provider's model download page.",
+      "root": "module",
+      "source": { "kind": "browser", "url": "https://example.org/download#models" },
+      "files": [{ "to": "models/model.bin" }]
     }
   ]
 }
 ```
 
-A URL can open in the user's browser for any action the site requires. Weave
-asks for permission before each browser launch in the GUI or CLI. If the
-user declines or the browser cannot open, Weave reports the URL for manual
-use. Browser handoff lets the browser apply its site and download warnings.
-Weave continues module addition as soon as it hands the URL to the browser;
-it does not wait for the page or download. Opening a URL does not establish
-that any site action or download is complete. A URL can point to any web
-content, including a file or a page that requires user interaction.
-
-`destination` is an optional relative file path telling the user where to
-place a downloaded file. `destination_root` selects `project` (the default)
-or `module`. Weave does not write or overwrite the destination. If a file
-already exists, Weave reports it for review and does not assume its contents
-match the URL. `platforms` optionally limits resolution to `linux`, `macos`,
-and `windows`; absent means all three. Browser handoffs and missing files
-remain pending user actions while module registration proceeds.
-
-The URL must use HTTPS and contain no embedded credentials. URL fragments are
-allowed for links to pages. Weave rechecks the URL before browser handoff.
-The browser handles certificate validation and any configured protection
-against known malicious sites and downloads. Weave does not claim a malware
-verdict or treat browser launch as proof of completed user actions. A URL may
-lead to a page that needs login or other user steps. The declaration does not
-promise that a transfer yields a file or that site actions can be automated.
+Weave asks before each browser launch. A declined or failed launch is reported
+for manual use. Module registration continues while browser actions remain
+pending. Weave does not wait for the browser or verify its downloads. Browser
+URLs may contain fragments and must use HTTPS without embedded credentials.
+The destination hint is relative to the project's `data/` directory by
+default; `root: module` selects the requesting module directory.
 
 ## Package declarations
 
@@ -252,11 +234,13 @@ instructions. Weave does not expand it during module addition.
 literal text in the declaration. Show users the actual values to set and the
 appropriate path separators for their OS.
 
-## Asset declarations
+## Downloadable assets
 
-Asset metadata records the expected archive and destination. Users download
-and extract it themselves; Weave does not perform the operations described by
-these fields. Use `urls` as well if you want to offer a browser link.
+Use `source.kind: url` for an HTTPS file or ZIP archive, or `source.kind: git`
+for files at a full 40-character commit SHA. Each downloadable asset names its
+files and a licence notice that is included among them. `files[].to` is
+relative to the project's `data/` directory by default. `root: module`
+selects the requesting module directory.
 
 ```json
 {
@@ -266,45 +250,47 @@ these fields. Use `urls` as well if you want to offer a browser link.
   "assets": [
     {
       "id": "terrain_textures",
-      "url": "https://example.org/terrain-textures-v1.zip",
-      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-      "size_bytes": 428000000,
-      "license_url": "https://example.org/license",
-      "destination": "assets/terrain_textures",
-      "destination_root": "project",
-      "description": "Optional terrain texture collection.",
-      "optional": true,
-      "archive_format": "zip",
-      "max_extracted_size_bytes": 1712000000,
-      "max_files": 10000
+      "description": "Terrain texture collection.",
+      "source": {
+        "kind": "url",
+        "url": "https://example.org/terrain-textures-v1.zip",
+        "archive": "zip",
+        "max_extracted_size_bytes": 1712000000,
+        "max_files": 10000
+      },
+      "files": [
+        {
+          "from": "textures/data.bin",
+          "to": "textures/data.bin",
+          "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "size_bytes": 428000000
+        },
+        {
+          "from": "LICENSE",
+          "to": "textures/LICENSE",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size_bytes": 1200
+        }
+      ],
+      "license": { "spdx": "MIT", "notice": "textures/LICENSE" }
     }
   ]
 }
 ```
 
-The zero checksum illustrates the required 64-digit hexadecimal shape. It is
-not a verified checksum for a real download. Before publishing a module,
-replace it with the SHA-256 of the exact archive.
+These checksums illustrate the required shape and are not real file hashes.
+Replace them with the exact hashes before publishing a module. Each URL file
+needs a SHA-256 and exact `size_bytes`. A plain URL has one file without
+`from`. ZIP and Git files need `from`, the member or repository path. ZIP
+sources also require maximum expanded bytes and member count. All size limits
+are positive integers no greater than 9007199254740991.
 
-### Destination and limits
-
-`destination_root` selects the project directory or the requesting module's
-directory. It defaults to `project`. `destination` is relative to that root.
-Asset `platforms` defaults to all three platforms, and `optional` defaults to
-false. Explain in your README whether users need the asset before building or
-running the module.
-
-Revision 1 supports ZIP data archives only.
-
-| Field | Limit |
-| ----- | ----- |
-| `size_bytes` | Exact archive size and maximum download size. |
-| `max_extracted_size_bytes` | Maximum sum of uncompressed file bytes. |
-| `max_files` | Maximum archive entries, including directories. |
-
-Each limit is a positive integer no greater than 9007199254740991, so every
-client can preserve it exactly. These are validated declarations; Weave does
-not enforce them against a download or extracted files.
+Weave leaves matching files alone, downloads missing files, and preserves
+existing files whose hashes differ. It reports a conflict and still registers
+the module. A required transfer failure leaves a new module folder in place
+and stops registration; retry adding the module after addressing the cause.
+Applicable optional assets are fetched too, but their failure does not stop
+registration. `platforms` may limit an asset to `linux`, `macos`, or `windows`.
 
 ## Validation rules
 
@@ -324,7 +310,7 @@ diagnostic. The parser applies these rules in addition to the schema:
   respective lists. IDs are scoped to their module.
 - Validate HTTPS URLs with a native URL parser. Require a hostname and reject
   credentials, control characters, and invalid ports. Fragments are allowed
-  only in `urls` entries. The schema pattern is not a complete URL parser.
+  only for browser assets. The schema pattern is not a complete URL parser.
 - Require package-source references to name a built-in or declared source.
 - Reject unsafe relative paths and invalid Windows filenames in declarations
   that apply to Windows.

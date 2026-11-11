@@ -5,15 +5,32 @@
   "assets": [
     {
       "id": "terrain_textures",
-      "url": "https://example.org/terrain-textures-v1.zip",
-      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde",
-      "size_bytes": 428000000,
-      "license_url": "https://example.org/license",
-      "destination": "assets/terrain_textures",
       "description": "Terrain texture collection.",
-      "archive_format": "zip",
-      "max_extracted_size_bytes": 1712000000,
-      "max_files": 10000
+      "source": {
+        "kind": "url",
+        "url": "https://example.org/terrain-textures-v1.zip",
+        "archive": "zip",
+        "max_extracted_size_bytes": 1712000000,
+        "max_files": 10000
+      },
+      "files": [
+        {
+          "from": "textures/data.bin",
+          "to": "textures/data.bin",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size_bytes": 428000000
+        },
+        {
+          "from": "LICENSE",
+          "to": "textures/LICENSE",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size_bytes": 1200
+        }
+      ],
+      "license": {
+        "spdx": "MIT",
+        "notice": "textures/LICENSE"
+      }
     }
   ]
 }

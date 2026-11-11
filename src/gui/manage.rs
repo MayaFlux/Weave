@@ -40,6 +40,7 @@ fn register_selection(window: &MainWindow, controller: &GuiController) {
                 window.set_screen(AppScreen::ManageProject);
                 window.set_add_lila_option(false);
                 window.set_add_shader_sources_option(false);
+                window.set_fetch_assets_option(false);
                 window.set_run_report_configuration("".into());
                 window.set_run_report_executable("".into());
                 window.set_run_report_mayaflux_root("".into());

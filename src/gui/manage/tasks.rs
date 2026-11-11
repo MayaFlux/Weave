@@ -4,6 +4,7 @@ use super::super::controller::GuiController;
 use super::super::state::OperationKind;
 use super::super::view::publish_result;
 use super::report_output::{ReportOutput, format_run_report_output};
+use crate::operations::assets::fetch_project_assets;
 use crate::operations::project_options::{
     FeatureStatus, ProjectOptionError, ShaderConflictPolicy, apply_project_options,
     inspect_project_options,
@@ -70,7 +71,8 @@ pub(super) fn apply_options(
 ) {
     let with_lila = window.get_add_lila_option();
     let copy_shaders = window.get_add_shader_sources_option();
-    if !with_lila && !copy_shaders {
+    let fetch_assets = window.get_fetch_assets_option();
+    if !with_lila && !copy_shaders && !fetch_assets {
         return;
     }
 
@@ -84,12 +86,27 @@ pub(super) fn apply_options(
 
     let worker = controller.clone();
     std::thread::spawn(move || {
-        let result = apply_project_options(&project, with_lila, copy_shaders, policy);
+        let result = (|| {
+            let mut messages = if with_lila || copy_shaders {
+                apply_project_options(&project, with_lila, copy_shaders, policy)?
+            } else {
+                Vec::new()
+            };
+            if fetch_assets {
+                fetch_project_assets(&project, &mut |line| messages.push(line)).map_err(
+                    |error| {
+                        ProjectOptionError::Failure(format!("{}\n{error}", messages.join("\n")))
+                    },
+                )?;
+            }
+            Ok(messages)
+        })();
         let follow_up = worker.clone();
         worker.complete(ticket.id, move |window| match result {
             Ok(messages) => {
                 window.set_add_lila_option(false);
                 window.set_add_shader_sources_option(false);
+                window.set_fetch_assets_option(false);
                 publish_result(
                     window,
                     ResultKind::Success,

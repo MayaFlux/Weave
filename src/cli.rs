@@ -1,5 +1,6 @@
 //! Standalone command-line entry point for Weave operations.
 
+use crate::operations::assets;
 use crate::operations::community::{
     CommunityCreationResult, CommunityModuleOptions, create_community_module,
 };
@@ -112,7 +113,12 @@ pub fn run_cli(arguments: &[String]) -> ExitCode {
             if let Some(warning) = result.git_warning {
                 eprintln!("[Weave WARNING] {warning}");
             }
-            ExitCode::SUCCESS
+            if let Some(warning) = result.asset_warning {
+                eprintln!("[Weave ERROR] {warning}");
+                ExitCode::FAILURE
+            } else {
+                ExitCode::SUCCESS
+            }
         }
         Err(error) => {
             eprintln!("[Weave ERROR] {error}");
@@ -174,6 +180,7 @@ fn run_new(arguments: &[String]) -> Result<ProjectCreationResult, String> {
             "--with-lila" => options.with_lila = true,
             "--no-vscode" => options.with_vscode = false,
             "--copy-shader-sources" => options.copy_shader_sources = true,
+            "--fetch-assets" => options.fetch_assets = true,
             value if value.starts_with('-') => return Err(format!("Unknown option: {value}")),
             value if name.is_none() => name = Some(value),
             value if destination.is_none() => destination = Some(value),
@@ -199,6 +206,7 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
     let mut module_names = Vec::new();
     let mut with_lila = false;
     let mut copy_shader_sources = false;
+    let mut fetch_assets = false;
     let mut replace_shader_conflicts = false;
     let mut validate = false;
     let mut run_report = false;
@@ -220,6 +228,7 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
             ),
             "--with-lila" => with_lila = true,
             "--copy-shader-sources" => copy_shader_sources = true,
+            "--fetch-assets" => fetch_assets = true,
             "--replace-shader-conflicts" => replace_shader_conflicts = true,
             "--configuration" => {
                 report_options.configuration = Some(
@@ -269,6 +278,7 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
         if !module_names.is_empty()
             || with_lila
             || copy_shader_sources
+            || fetch_assets
             || validate
             || run_report
             || (refresh_preview && refresh_apply)
@@ -320,7 +330,13 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
     if !refresh_skip.is_empty() {
         return Err("--refresh-skip requires --refresh-apply.".to_owned());
     }
-    if module_names.is_empty() && !with_lila && !copy_shader_sources && !validate && !run_report {
+    if module_names.is_empty()
+        && !with_lila
+        && !copy_shader_sources
+        && !fetch_assets
+        && !validate
+        && !run_report
+    {
         return Err("Usage: Weave manage <project-dir> [module-name,...] [options]".to_owned());
     }
 
@@ -339,6 +355,13 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
         {
             println!("{message}");
         }
+    }
+
+    if fetch_assets {
+        assets::fetch_project_assets(Path::new(project_path), &mut |message| {
+            println!("{message}")
+        })
+        .map_err(|error| error.to_string())?;
     }
 
     if !module_names.is_empty() {
@@ -444,7 +467,7 @@ fn print_usage() {
 }
 
 fn usage_text() -> &'static str {
-    "Weave: MayaFlux project tool\n\nUsage:\n  Weave                 Open the Projects screen\n  Weave new <name> [destination] [options]\n  Weave manage <project-dir> [module-name,...] [options]\n  Weave community <module-name> [destination-dir] [options]\n  Weave install <stable|development> [--replace-conflict] [--no-cli]\n  Weave install-cli         Make the CLI available without installing MayaFlux\n  Weave --help\n  Weave --license         Show the embedded license\n  Weave --package-info    Show build and package metadata\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n\nOptions for 'manage':\n  --with-lila             Add Lila live-coding integration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n  --replace-shader-conflicts Replace same-path project shader files\n  --refresh               List missing or changed template files\n  --refresh-apply         Refresh all listed files\n  --refresh-skip <path>   Keep this file when refreshing (repeatable)\n  --validate              Run the project's validation script\n  --run-report            Run a built project and collect diagnostics\n  --configuration <name>  Select a build configuration for --run-report\n  --executable <path>     Select a custom project executable for --run-report\n  --mayaflux-root <path>  Select MayaFlux for --run-report\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila"
+    "Weave: MayaFlux project tool\n\nUsage:\n  Weave                 Open the Projects screen\n  Weave new <name> [destination] [options]\n  Weave manage <project-dir> [module-name,...] [options]\n  Weave community <module-name> [destination-dir] [options]\n  Weave install <stable|development> [--replace-conflict] [--no-cli]\n  Weave install-cli         Make the CLI available without installing MayaFlux\n  Weave --help\n  Weave --license         Show the embedded license\n  Weave --package-info    Show build and package metadata\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n  --fetch-assets          Fetch assets from installed MayaFlux\n\nOptions for 'manage':\n  --with-lila             Add Lila live-coding integration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n  --replace-shader-conflicts Replace same-path project shader files\n  --fetch-assets          Fetch assets from installed MayaFlux\n  --refresh               List missing or changed template files\n  --refresh-apply         Refresh all listed files\n  --refresh-skip <path>   Keep this file when refreshing (repeatable)\n  --validate              Run the project's validation script\n  --run-report            Run a built project and collect diagnostics\n  --configuration <name>  Select a build configuration for --run-report\n  --executable <path>     Select a custom project executable for --run-report\n  --mayaflux-root <path>  Select MayaFlux for --run-report\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila"
 }
 
 #[cfg(test)]
