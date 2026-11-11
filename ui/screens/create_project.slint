@@ -158,10 +158,21 @@ export component CreateProjectScreen inherits VerticalBox {
                             enabled: !root.busy;
                         }
 
-                        CheckBox {
-                            text: "Fetch MayaFlux assets";
-                            checked <=> root.fetch_assets;
-                            enabled: !root.busy;
+                        VerticalBox {
+                            spacing: 4px;
+                            CheckBox {
+                                text: "Fetch MayaFlux assets";
+                                checked <=> root.fetch_assets;
+                                enabled: !root.busy;
+                            }
+                            Text {
+                                text: "Downloads extra files such as model weights into the project's data folder. Downloads can be large; select this only when your project needs them.";
+                                color: WeaveTheme.text-secondary;
+                                font-size: WeaveTheme.font-description;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
+                                wrap: word-wrap;
+                            }
                         }
                     }
                 }
