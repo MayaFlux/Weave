@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "name": "vector_module",
+  "min_version": "0.5.0",
+  "assets": [
+    {
+      "id": "model_and_notice",
+      "description": "Model weights and their notice from separate hosts.",
+      "source": { "kind": "url" },
+      "files": [
+        {
+          "url": "https://models.example.org/weights.bin",
+          "to": "models/weights.bin",
+          "sha256": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+          "size_bytes": 5
+        },
+        {
+          "url": "https://notices.example.org/LICENSE",
+          "to": "models/LICENSE",
+          "sha256": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+          "size_bytes": 5
+        }
+      ],
+      "license": { "spdx": "MIT", "notice": "models/LICENSE" }
+    }
+  ]
+}

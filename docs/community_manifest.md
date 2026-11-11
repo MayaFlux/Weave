@@ -236,7 +236,7 @@ appropriate path separators for their OS.
 
 ## Downloadable assets
 
-Use `source.kind: url` for an HTTPS file or ZIP archive, or `source.kind: git`
+Use `source.kind: url` for HTTPS files or a ZIP archive, or `source.kind: git`
 for files at a full 40-character commit SHA. Each downloadable asset names its
 files and a licence notice that is included among them. `files[].to` is
 relative to the project's `data/` directory by default. `root: module`
@@ -280,8 +280,11 @@ selects the requesting module directory.
 
 These checksums illustrate the required shape and are not real file hashes.
 Replace them with the exact hashes before publishing a module. Each URL file
-needs a SHA-256 and exact `size_bytes`. A plain URL has one file without
-`from`. ZIP and Git files need `from`, the member or repository path. ZIP
+needs a SHA-256 and exact `size_bytes`. For a single HTTPS file, put `url` in
+`source` and declare one file without `from` or `url`. For several independent
+HTTPS files, use `"source": {"kind": "url"}` and put an HTTPS `url` in each
+file entry. Those URLs may have different hosts. ZIP and Git files need
+`from`, the member or repository path. ZIP
 sources also require maximum expanded bytes and member count. All size limits
 are positive integers no greater than 9007199254740991.
 

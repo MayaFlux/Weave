@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use weave::operations::assets::{
     AssetContext, AssetError, AssetTransport, apply_assets_with, parse_asset_list,
@@ -65,6 +66,62 @@ impl AssetTransport for ZipTransport {
     ) -> Result<HashMap<String, Vec<u8>>, AssetError> {
         unreachable!()
     }
+}
+
+#[derive(Default)]
+struct RecordingTransport(Mutex<Vec<String>>);
+impl AssetTransport for RecordingTransport {
+    fn download(&self, url: &str, _limit: u64) -> Result<Vec<u8>, AssetError> {
+        self.0.lock().unwrap().push(url.to_owned());
+        Ok(b"hello".to_vec())
+    }
+    fn git_files(
+        &self,
+        _repo: &str,
+        _commit: &str,
+        _paths: &[String],
+    ) -> Result<HashMap<String, Vec<u8>>, AssetError> {
+        unreachable!()
+    }
+}
+
+const MULTI_URL_ASSET: &str = r#"{"schema_version":1,"assets":[{"id":"multi","description":"Files from two hosts","source":{"kind":"url"},"files":[{"url":"https://one.example/weights","to":"models/weights.bin","sha256":"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824","size_bytes":5},{"url":"https://two.example/LICENSE","to":"models/LICENSE","sha256":"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824","size_bytes":5}],"license":{"spdx":"MIT","notice":"models/LICENSE"}}]}"#;
+
+#[test]
+fn fetches_each_file_url_from_its_declared_host() {
+    let root = Temp::new();
+    fs::write(root.0.join("CMakeLists.txt"), "project(Test)").unwrap();
+    let assets = parse_asset_list(MULTI_URL_ASSET, AssetContext::Shipped).unwrap();
+    let transport = RecordingTransport::default();
+    let result = apply_assets_with(
+        &root.0,
+        None,
+        &assets,
+        false,
+        &transport,
+        &|_| Ok(false),
+        &mut |_| {},
+    )
+    .unwrap();
+    assert_eq!(result.fetched, 2);
+    assert_eq!(
+        *transport.0.lock().unwrap(),
+        ["https://one.example/weights", "https://two.example/LICENSE"]
+    );
+}
+
+#[test]
+fn rejects_mixed_or_missing_file_urls() {
+    let mixed = MULTI_URL_ASSET.replace(
+        r#""source":{"kind":"url"}"#,
+        r#""source":{"kind":"url","url":"https://one.example/all"}"#,
+    );
+    assert!(parse_asset_list(&mixed, AssetContext::Shipped).is_err());
+    let missing = MULTI_URL_ASSET.replace(r#""url":"https://two.example/LICENSE","#, "");
+    assert!(parse_asset_list(&missing, AssetContext::Shipped).is_err());
+    let insecure =
+        MULTI_URL_ASSET.replace("https://two.example/LICENSE", "http://two.example/LICENSE");
+    assert!(parse_asset_list(&insecure, AssetContext::Shipped).is_err());
 }
 
 fn zip_asset(max_files: u64, max_expanded: u64) -> Vec<weave::operations::assets::Asset> {

@@ -1081,6 +1081,17 @@ mod tests {
         );
         assert_eq!(asset.data["assets"][0]["root"], "data");
         assert_eq!(asset.data["assets"][0]["optional"], false);
+
+        let multi_url_source =
+            fs::read_to_string(fixture_directory().join("valid-asset-multiple-urls.json")).unwrap();
+        let multi_url = parse_manifest(&multi_url_source, "vector_module").unwrap();
+        assert_eq!(
+            multi_url.data["assets"][0]["files"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
     }
 
     #[test]

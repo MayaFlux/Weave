@@ -343,7 +343,9 @@ fn fetch_files(
     let mut result = Vec::new();
     match &asset.source {
         Source::Url {
-            url, archive: None, ..
+            url: Some(url),
+            archive: None,
+            ..
         } => {
             let (file, target) = &wanted[0];
             let bytes = transport.download(url, file.size_bytes.expect("validated size"))?;
@@ -351,7 +353,19 @@ fn fetch_files(
             result.push((target.clone(), bytes));
         }
         Source::Url {
-            url,
+            url: None,
+            archive: None,
+            ..
+        } => {
+            for (file, target) in wanted {
+                let url = file.url.as_deref().expect("validated file URL");
+                let bytes = transport.download(url, file.size_bytes.expect("validated size"))?;
+                verify(file, &bytes)?;
+                result.push((target.clone(), bytes));
+            }
+        }
+        Source::Url {
+            url: Some(url),
             archive: Some(_),
             max_extracted_size_bytes,
             max_files,
@@ -422,6 +436,11 @@ fn fetch_files(
                 result.push((target.clone(), bytes.clone()));
             }
         }
+        Source::Url {
+            url: None,
+            archive: Some(_),
+            ..
+        } => unreachable!("validated ZIP source URL"),
         Source::Browser { .. } => unreachable!(),
     }
     Ok(result)

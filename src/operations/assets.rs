@@ -55,7 +55,7 @@ fn data_root() -> String {
 #[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
 pub enum Source {
     Url {
-        url: String,
+        url: Option<String>,
         archive: Option<String>,
         max_extracted_size_bytes: Option<u64>,
         max_files: Option<u64>,
@@ -74,6 +74,8 @@ pub enum Source {
 pub struct AssetFile {
     #[serde(default)]
     pub from: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
     pub to: String,
     #[serde(default)]
     pub sha256: Option<String>,
@@ -164,9 +166,12 @@ fn validate_assets(assets: &[Asset], context: AssetContext) -> Result<(), AssetE
                 max_extracted_size_bytes,
                 max_files,
             } => {
-                valid_https(url, false)?;
+                if let Some(url) = url {
+                    valid_https(url, false)?;
+                }
                 if let Some(archive) = archive {
                     if archive != "zip"
+                        || url.is_none()
                         || !valid_size(*max_extracted_size_bytes)
                         || !valid_size(*max_files)
                     {
@@ -174,10 +179,10 @@ fn validate_assets(assets: &[Asset], context: AssetContext) -> Result<(), AssetE
                     }
                 } else if max_extracted_size_bytes.is_some()
                     || max_files.is_some()
-                    || asset.files.len() != 1
+                    || (url.is_some() && asset.files.len() != 1)
                 {
                     return Err(fail(format!(
-                        "{name}: plain URL needs one file and no archive limits"
+                        "{name}: source URL needs one file and no archive limits"
                     )));
                 }
             }
@@ -225,8 +230,14 @@ fn validate_assets(assets: &[Asset], context: AssetContext) -> Result<(), AssetE
             if let Some(from) = &file.from {
                 valid_path(from)?;
             }
+            if let Some(url) = &file.url {
+                valid_https(url, false)?;
+            }
             if browser
-                && (file.from.is_some() || file.sha256.is_some() || file.size_bytes.is_some())
+                && (file.from.is_some()
+                    || file.url.is_some()
+                    || file.sha256.is_some()
+                    || file.size_bytes.is_some())
             {
                 return Err(fail(format!(
                     "{name}: browser files are destination hints only"
@@ -238,6 +249,17 @@ fn validate_assets(assets: &[Asset], context: AssetContext) -> Result<(), AssetE
                 return Err(fail(format!(
                     "{name}: URL file needs sha256 and size_bytes"
                 )));
+            }
+            let needs_url = matches!(
+                asset.source,
+                Source::Url {
+                    url: None,
+                    archive: None,
+                    ..
+                }
+            );
+            if needs_url != file.url.is_some() {
+                return Err(fail(format!("{name}: incorrect file URL for {}", file.to)));
             }
             if let Some(sha) = &file.sha256
                 && (sha.len() != 64 || !sha.bytes().all(|byte| byte.is_ascii_hexdigit()))

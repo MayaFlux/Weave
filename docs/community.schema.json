@@ -87,7 +87,7 @@
     "url_source": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "url"],
+      "required": ["kind"],
       "properties": {
         "kind": { "const": "url" },
         "url": { "$ref": "#/$defs/https_url" },
@@ -96,7 +96,7 @@
         "max_files": { "$ref": "#/$defs/positive_size" }
       },
       "dependentRequired": {
-        "archive": ["max_extracted_size_bytes", "max_files"],
+        "archive": ["url", "max_extracted_size_bytes", "max_files"],
         "max_extracted_size_bytes": ["archive"],
         "max_files": ["archive"]
       }
@@ -117,6 +117,7 @@
       "required": ["to"],
       "properties": {
         "from": { "$ref": "#/$defs/relative_path" },
+        "url": { "$ref": "#/$defs/https_url" },
         "to": { "$ref": "#/$defs/relative_path" },
         "sha256": { "$ref": "#/$defs/sha256" },
         "size_bytes": { "$ref": "#/$defs/positive_size" }
@@ -343,9 +344,20 @@
           "then": { "properties": { "files": { "items": { "required": ["sha256", "size_bytes"] } } } }
         },
         {
-          "if": { "properties": { "source": { "properties": { "kind": { "const": "url" } }, "not": { "required": ["archive"] } } } },
-          "then": { "properties": { "files": { "maxItems": 1, "items": { "not": { "required": ["from"] } } } } },
-          "else": { "properties": { "files": { "items": { "required": ["from"] } } } }
+          "if": { "properties": { "source": { "required": ["archive"] } } },
+          "then": { "properties": { "files": { "items": { "required": ["from"], "not": { "required": ["url"] } } } } }
+        },
+        {
+          "if": { "properties": { "source": { "required": ["url"], "not": { "required": ["archive"] } } } },
+          "then": { "properties": { "files": { "maxItems": 1, "items": { "not": { "anyOf": [{ "required": ["from"] }, { "required": ["url"] }] } } } } }
+        },
+        {
+          "if": { "properties": { "source": { "properties": { "kind": { "const": "url" } }, "not": { "required": ["url"] } } } },
+          "then": { "properties": { "files": { "items": { "required": ["url"], "not": { "required": ["from"] } } } } }
+        },
+        {
+          "if": { "properties": { "source": { "properties": { "kind": { "const": "git" } } } } },
+          "then": { "properties": { "files": { "items": { "required": ["from"], "not": { "required": ["url"] } } } } }
         }
       ]
     },
