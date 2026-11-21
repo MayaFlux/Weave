@@ -126,6 +126,104 @@ endif()
 
 
 # ============================================================================
+# Reflection: MF_DESCRIBE and MF_DESCRIBE_FUNCTION sidecars
+# ============================================================================
+
+get_filename_component(MAYAFLUX_PREFIX "${MayaFlux_DIR}/../../.." ABSOLUTE)
+
+set(MAYAFLUX_DESCRIBED_HEADERS "")
+set(MAYAFLUX_DESCRIBED_FUNCTION_HEADERS "")
+foreach(_header IN LISTS HEADERS)
+    if(_header MATCHES "\\.(describe|signatures)\\.[^.]+$")
+        continue()
+    endif()
+
+    file(STRINGS "${_header}" _request REGEX "^[ \t;}]*MF_DESCRIBE[ \t]*\\(" LIMIT_COUNT 1)
+    if(_request)
+        list(APPEND MAYAFLUX_DESCRIBED_HEADERS "${_header}")
+    endif()
+
+    file(STRINGS "${_header}" _request REGEX "^[ \t;}]*MF_DESCRIBE_FUNCTION[ \t]*\\(" LIMIT_COUNT 1)
+    if(_request)
+        list(APPEND MAYAFLUX_DESCRIBED_FUNCTION_HEADERS "${_header}")
+    endif()
+endforeach()
+
+if((MAYAFLUX_DESCRIBED_HEADERS OR MAYAFLUX_DESCRIBED_FUNCTION_HEADERS) AND USER_SOURCES)
+    if(NOT CMAKE_GENERATOR MATCHES "^(Ninja|.*Makefiles)$")
+        message(STATUS "Reflection sidecars are not generated with ${CMAKE_GENERATOR}: it writes no compile_commands.json")
+    else()
+        list(GET USER_SOURCES 0 _scan_unit)
+        set(_scan_flags "")
+        if(MSVC)
+            list(APPEND _scan_flags --extra-arg=-Xclang --extra-arg=-std=c++23)
+        else()
+            list(APPEND _scan_flags --extra-arg=-Wno-ignored-gch)
+        endif()
+
+        set(_sidecars "")
+
+        if(MAYAFLUX_DESCRIBED_HEADERS)
+            find_program(MAYAFLUX_REFLECT_EXECUTABLE mayaflux_reflect HINTS "${MAYAFLUX_PREFIX}/bin")
+            if(NOT MAYAFLUX_REFLECT_EXECUTABLE)
+                message(FATAL_ERROR "mayaflux_reflect not found in ${MAYAFLUX_PREFIX}/bin. Reinstall MayaFlux or set MAYAFLUX_ROOT.")
+            endif()
+            foreach(_header IN LISTS MAYAFLUX_DESCRIBED_HEADERS)
+                get_filename_component(_dir "${_header}" DIRECTORY)
+                get_filename_component(_stem "${_header}" NAME_WLE)
+                file(RELATIVE_PATH _rel "${CMAKE_SOURCE_DIR}" "${_header}")
+                set(_sidecar "${_dir}/${_stem}.describe.hpp")
+                set(_depfile "${CMAKE_BINARY_DIR}/mayaflux_reflect/${_rel}.d")
+                add_custom_command(
+                    OUTPUT "${_sidecar}"
+                    COMMAND "${MAYAFLUX_REFLECT_EXECUTABLE}" --build "${_header}"
+                        -p "${CMAKE_BINARY_DIR}"
+                        --translation-unit "${_scan_unit}"
+                        ${_scan_flags}
+                        --depfile "${_depfile}"
+                        --depfile-target "${_sidecar}"
+                    DEPENDS "${_header}"
+                    DEPFILE "${_depfile}"
+                    COMMENT "Describing ${_rel}"
+                    VERBATIM
+                )
+                list(APPEND _sidecars "${_sidecar}")
+            endforeach()
+        endif()
+
+        if(MAYAFLUX_DESCRIBED_FUNCTION_HEADERS)
+            find_program(MAYAFLUX_SIGNATURES_EXECUTABLE mayaflux_signatures HINTS "${MAYAFLUX_PREFIX}/bin")
+            if(NOT MAYAFLUX_SIGNATURES_EXECUTABLE)
+                message(FATAL_ERROR "mayaflux_signatures not found in ${MAYAFLUX_PREFIX}/bin. Reinstall MayaFlux or set MAYAFLUX_ROOT.")
+            endif()
+            foreach(_header IN LISTS MAYAFLUX_DESCRIBED_FUNCTION_HEADERS)
+                get_filename_component(_dir "${_header}" DIRECTORY)
+                get_filename_component(_stem "${_header}" NAME_WLE)
+                file(RELATIVE_PATH _rel "${CMAKE_SOURCE_DIR}" "${_header}")
+                set(_sidecar "${_dir}/${_stem}.signatures.hpp")
+                set(_depfile "${CMAKE_BINARY_DIR}/mayaflux_reflect/${_rel}.signatures.d")
+                add_custom_command(
+                    OUTPUT "${_sidecar}"
+                    COMMAND "${MAYAFLUX_SIGNATURES_EXECUTABLE}" --functions --build "${_header}"
+                        -p "${CMAKE_BINARY_DIR}"
+                        --translation-unit "${_scan_unit}"
+                        ${_scan_flags}
+                        --depfile "${_depfile}"
+                        --depfile-target "${_sidecar}"
+                    DEPENDS "${_header}"
+                    DEPFILE "${_depfile}"
+                    COMMENT "Describing functions in ${_rel}"
+                    VERBATIM
+                )
+                list(APPEND _sidecars "${_sidecar}")
+            endforeach()
+        endif()
+
+        target_sources(${PROJECT_NAME} PRIVATE ${_sidecars})
+    endif()
+endif()
+
+# ============================================================================
 # Shaders
 # ============================================================================
 include(cmake/shaders)

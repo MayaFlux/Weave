@@ -628,6 +628,8 @@ mod tests {
         let cmake = fs::read_to_string(project.join("cmake/mayaflux.cmake")).unwrap();
         assert!(cmake.contains("MayaFlux::MayaFluxHost"));
         assert!(!cmake.contains("@LILA_"));
+        assert!(cmake.contains("mayaflux_reflect"));
+        assert!(cmake.contains("mayaflux_signatures"));
         assert!(project.join(".vscode/tasks.json").is_file());
         let tasks: serde_json::Value =
             serde_json::from_slice(&fs::read(project.join(".vscode/tasks.json")).unwrap()).unwrap();
