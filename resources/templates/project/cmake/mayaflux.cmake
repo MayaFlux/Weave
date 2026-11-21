@@ -129,12 +129,14 @@ endif()
 # Reflection: MF_DESCRIBE and MF_DESCRIBE_FUNCTION sidecars
 # ============================================================================
 
+option(MAYAFLUX_REFLECT_BUILD "Generate MF_DESCRIBE and MF_DESCRIBE_FUNCTION sidecars before building" ON)
+
 get_filename_component(MAYAFLUX_PREFIX "${MayaFlux_DIR}/../../.." ABSOLUTE)
 
 set(MAYAFLUX_DESCRIBED_HEADERS "")
 set(MAYAFLUX_DESCRIBED_FUNCTION_HEADERS "")
 foreach(_header IN LISTS HEADERS)
-    if(_header MATCHES "\\.(describe|signatures)\\.[^.]+$")
+    if(NOT _header MATCHES "\\.(h|hh|hpp|hxx)$" OR _header MATCHES "\\.(describe|signatures)\\.[^.]+$")
         continue()
     endif()
 
@@ -149,7 +151,7 @@ foreach(_header IN LISTS HEADERS)
     endif()
 endforeach()
 
-if((MAYAFLUX_DESCRIBED_HEADERS OR MAYAFLUX_DESCRIBED_FUNCTION_HEADERS) AND USER_SOURCES)
+if(MAYAFLUX_REFLECT_BUILD AND (MAYAFLUX_DESCRIBED_HEADERS OR MAYAFLUX_DESCRIBED_FUNCTION_HEADERS) AND USER_SOURCES)
     if(NOT CMAKE_GENERATOR MATCHES "^(Ninja|.*Makefiles)$")
         message(STATUS "Reflection sidecars are not generated with ${CMAKE_GENERATOR}: it writes no compile_commands.json")
     else()
