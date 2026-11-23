@@ -163,7 +163,7 @@ if(MAYAFLUX_REFLECT_BUILD AND (MAYAFLUX_DESCRIBED_HEADERS OR MAYAFLUX_DESCRIBED_
             list(APPEND _scan_flags --extra-arg=-Wno-ignored-gch)
         endif()
 
-        set(_sidecars "")
+        set(_stamps "")
 
         if(MAYAFLUX_DESCRIBED_HEADERS)
             find_program(MAYAFLUX_REFLECT_EXECUTABLE mayaflux_reflect HINTS "${MAYAFLUX_PREFIX}/bin")
@@ -176,20 +176,23 @@ if(MAYAFLUX_REFLECT_BUILD AND (MAYAFLUX_DESCRIBED_HEADERS OR MAYAFLUX_DESCRIBED_
                 file(RELATIVE_PATH _rel "${CMAKE_SOURCE_DIR}" "${_header}")
                 set(_sidecar "${_dir}/${_stem}.describe.hpp")
                 set(_depfile "${CMAKE_BINARY_DIR}/mayaflux_reflect/${_rel}.d")
+                set(_stamp "${CMAKE_BINARY_DIR}/mayaflux_reflect/${_rel}.stamp")
                 add_custom_command(
-                    OUTPUT "${_sidecar}"
+                    OUTPUT "${_stamp}"
+                    BYPRODUCTS "${_sidecar}"
                     COMMAND "${MAYAFLUX_REFLECT_EXECUTABLE}" --build "${_header}"
                         -p "${CMAKE_BINARY_DIR}"
                         --translation-unit "${_scan_unit}"
                         ${_scan_flags}
                         --depfile "${_depfile}"
-                        --depfile-target "${_sidecar}"
+                        --depfile-target "${_stamp}"
+                    COMMAND ${CMAKE_COMMAND} -E touch "${_stamp}"
                     DEPENDS "${_header}"
                     DEPFILE "${_depfile}"
                     COMMENT "Describing ${_rel}"
                     VERBATIM
                 )
-                list(APPEND _sidecars "${_sidecar}")
+                list(APPEND _stamps "${_stamp}")
             endforeach()
         endif()
 
@@ -204,24 +207,28 @@ if(MAYAFLUX_REFLECT_BUILD AND (MAYAFLUX_DESCRIBED_HEADERS OR MAYAFLUX_DESCRIBED_
                 file(RELATIVE_PATH _rel "${CMAKE_SOURCE_DIR}" "${_header}")
                 set(_sidecar "${_dir}/${_stem}.signatures.hpp")
                 set(_depfile "${CMAKE_BINARY_DIR}/mayaflux_reflect/${_rel}.signatures.d")
+                set(_stamp "${CMAKE_BINARY_DIR}/mayaflux_reflect/${_rel}.signatures.stamp")
                 add_custom_command(
-                    OUTPUT "${_sidecar}"
+                    OUTPUT "${_stamp}"
+                    BYPRODUCTS "${_sidecar}"
                     COMMAND "${MAYAFLUX_SIGNATURES_EXECUTABLE}" --functions --build "${_header}"
                         -p "${CMAKE_BINARY_DIR}"
                         --translation-unit "${_scan_unit}"
                         ${_scan_flags}
                         --depfile "${_depfile}"
-                        --depfile-target "${_sidecar}"
+                        --depfile-target "${_stamp}"
+                    COMMAND ${CMAKE_COMMAND} -E touch "${_stamp}"
                     DEPENDS "${_header}"
                     DEPFILE "${_depfile}"
                     COMMENT "Describing functions in ${_rel}"
                     VERBATIM
                 )
-                list(APPEND _sidecars "${_sidecar}")
+                list(APPEND _stamps "${_stamp}")
             endforeach()
         endif()
 
-        target_sources(${PROJECT_NAME} PRIVATE ${_sidecars})
+        add_custom_target(${PROJECT_NAME}_reflect DEPENDS ${_stamps})
+        add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}_reflect)
     endif()
 endif()
 
