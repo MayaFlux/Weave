@@ -6,6 +6,7 @@ mod tasks;
 use super::controller::GuiController;
 use super::state::OperationKind;
 use super::view::publish_result;
+use crate::operations::assets;
 use crate::operations::community_modules;
 use crate::operations::project_options::ShaderConflictPolicy;
 use crate::operations::project_refresh::{self, Difference};
@@ -19,6 +20,7 @@ pub(super) fn register(window: &MainWindow, controller: &GuiController) {
     register_selection(window, controller);
     register_modules(window, controller);
     register_options(window, controller);
+    register_project_assets(window, controller);
     register_refresh(window, controller);
     register_processes(window, controller);
     register_conflicts(window, controller);
@@ -41,6 +43,7 @@ fn register_selection(window: &MainWindow, controller: &GuiController) {
                 window.set_add_lila_option(false);
                 window.set_add_shader_sources_option(false);
                 window.set_fetch_assets_option(false);
+                window.set_asset_manifest_path("".into());
                 window.set_run_report_configuration("".into());
                 window.set_run_report_executable("".into());
                 window.set_run_report_mayaflux_root("".into());
@@ -110,6 +113,85 @@ fn register_options(window: &MainWindow, controller: &GuiController) {
     window.on_apply_project_options(move || {
         options.with_window(|window| {
             tasks::apply_options(&options, window, ShaderConflictPolicy::Reject);
+        });
+    });
+}
+
+fn register_project_assets(window: &MainWindow, controller: &GuiController) {
+    let picker = controller.clone();
+    window.on_choose_asset_manifest(move || {
+        picker.with_window(|window| {
+            if window.get_busy() {
+                return;
+            }
+            let mut dialog = rfd::FileDialog::new();
+            if let Some(project) = picker.selected_project() {
+                dialog = dialog.set_directory(project);
+            }
+            if let Some(manifest) = dialog.pick_file() {
+                window.set_asset_manifest_path(manifest.display().to_string().into());
+            }
+        });
+    });
+
+    let fetch = controller.clone();
+    window.on_fetch_project_assets(move || {
+        fetch.with_window(|window| {
+            let Some(project) = fetch.selected_project() else {
+                return;
+            };
+            let input = window.get_asset_manifest_path().trim().to_owned();
+            if input.is_empty() {
+                publish_result(
+                    window,
+                    ResultKind::Error,
+                    "Could not fetch project assets",
+                    "Choose an asset manifest JSON file first.".to_owned(),
+                );
+                return;
+            }
+            let manifest = PathBuf::from(input);
+            let manifest = if manifest.is_absolute() {
+                manifest
+            } else {
+                project.join(manifest)
+            };
+            let Some(ticket) = fetch.begin(OperationKind::FetchProjectAssets) else {
+                return;
+            };
+            let worker = fetch.clone();
+            std::thread::spawn(move || {
+                let mut lines = Vec::new();
+                let outcome =
+                    assets::fetch_project_assets_from_file(&project, &manifest, &mut |line| {
+                        lines.push(line)
+                    });
+                let (kind, title, message) = match outcome {
+                    Ok(result) => {
+                        lines.push(format!(
+                            "Fetched {} file(s); {} conflict(s); {} optional failure(s).",
+                            result.fetched, result.conflicts, result.optional_failures
+                        ));
+                        let kind = if result.conflicts > 0 || result.optional_failures > 0 {
+                            ResultKind::Warning
+                        } else {
+                            ResultKind::Success
+                        };
+                        (kind, "Project assets checked", lines.join("\n"))
+                    }
+                    Err(error) => {
+                        lines.push(error.to_string());
+                        (
+                            ResultKind::Error,
+                            "Could not fetch project assets",
+                            lines.join("\n"),
+                        )
+                    }
+                };
+                worker.complete(ticket.id, move |window| {
+                    publish_result(window, kind, title, message);
+                });
+            });
         });
     });
 }

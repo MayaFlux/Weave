@@ -65,6 +65,12 @@ Choose **Projects > Manage Project**, then select the project folder containing 
 
 Select **Add Lila live coding**, **Copy MayaFlux shader sources**, **Fetch MayaFlux assets**, or a combination, then choose **Apply Selected Options**. Weave skips options already applied, identical shader files, and assets that match their SHA-256. Fetching assets replaces files that differ with the versions declared by the installed MayaFlux. From the CLI, use `Weave manage <project-dir> --fetch-assets`. If shader files differ, review the conflicts before choosing whether to keep or replace them. Customized Lila CMake layouts that cannot be identified safely are reported for manual review. Rebuild after changing project options.
 
+### Fetch project assets
+
+Use the separate **Fetch Project Assets** section in Manage Project to choose an asset manifest JSON file or type its path, then select **Fetch Project Assets**. The file uses MayaFlux's `schema_version: 1` asset-list format, with an `assets` array like the installed MayaFlux `assets.json`. Weave validates the list and fetches its HTTPS or pinned-Git files into the selected project's `data/` directory. Files with matching declared hashes are skipped; differing files are kept and reported. Existing files without a declared hash are treated as present. A required download failure can be retried with the same manifest. In the GUI, a relative manifest path is resolved from the selected project folder.
+
+The CLI equivalent is `Weave manage <project-dir> --fetch-project-assets <manifest.json>`; a relative manifest path is resolved from the CLI's current directory. This command does not use the installed MayaFlux asset list. For the asset fields and an example, see [Downloadable assets](docs/community_manifest.md#downloadable-assets); a project asset file wraps those entries in `{ "schema_version": 1, "assets": [...] }` and uses the project `data/` destination.
+
 ### Validate the project
 
 Choose **Validate Project** to check the project files, MayaFlux installation, tools, and environment. Read the diagnostics and copy the selectable output when asking for help. Follow any `[FIX]` instructions, then use **Retry**. **Cancel** stops an active check.

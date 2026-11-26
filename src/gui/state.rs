@@ -15,6 +15,7 @@ pub(super) enum OperationKind {
     AddModules,
     InspectOptions,
     ApplyOptions,
+    FetchProjectAssets,
     PreviewRefresh,
     ApplyRefresh,
     Validation,

@@ -62,6 +62,7 @@ export component MainWindow inherits Window {
     in-out property <bool> add_lila_option: false;
     in-out property <bool> add_shader_sources_option: false;
     in-out property <bool> fetch_assets_option: false;
+    in-out property <string> asset_manifest_path: "";
 
     // Manage dialogs
     in-out property <bool> shader_conflict_open: false;
@@ -135,6 +136,8 @@ export component MainWindow inherits Window {
     callback choose_manage_project();
     callback add_community_modules();
     callback apply_project_options();
+    callback choose_asset_manifest();
+    callback fetch_project_assets();
     callback validate_project();
     callback run_report();
     callback preview_project_refresh();
@@ -239,10 +242,13 @@ export component MainWindow inherits Window {
                 add_lila <=> root.add_lila_option;
                 add_shader_sources <=> root.add_shader_sources_option;
                 fetch_assets <=> root.fetch_assets_option;
+                asset_manifest_path <=> root.asset_manifest_path;
 
                 back => { root.screen = AppScreen.projects; }
                 add_community_modules => { root.add_community_modules(); }
                 apply_options => { root.apply_project_options(); }
+                choose_asset_manifest => { root.choose_asset_manifest(); }
+                fetch_project_assets => { root.fetch_project_assets(); }
                 validate_project => { root.validate_project(); }
                 run_report => { root.run_report_dialog_open = true; }
                 refresh_project => { root.preview_project_refresh(); }

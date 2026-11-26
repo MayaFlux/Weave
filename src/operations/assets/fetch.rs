@@ -33,7 +33,11 @@ impl AssetTransport for HostTransport {
     fn download(&self, url: &str, limit: u64) -> Result<Vec<u8>, AssetError> {
         let temporary = crate::filesystem::Temporary::create().map_err(fail)?;
         let target = temporary.0.join("download");
-        let output = Command::new("curl")
+        #[cfg(target_os = "windows")]
+        let curl = crate::platform::windows::process::system_directory().join("curl.exe");
+        #[cfg(not(target_os = "windows"))]
+        let curl = PathBuf::from("curl");
+        let output = Command::new(curl)
             .args([
                 "--fail",
                 "--location",

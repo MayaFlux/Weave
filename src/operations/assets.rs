@@ -417,3 +417,30 @@ pub fn fetch_project_assets(
         report,
     )
 }
+
+/// Applies a user-selected MayaFlux asset list to a project without replacing differing files.
+pub fn fetch_project_assets_from_file(
+    project: &Path,
+    manifest: &Path,
+    report: &mut impl FnMut(String),
+) -> Result<ApplyResult, AssetError> {
+    crate::filesystem::no_links(manifest).map_err(fail)?;
+    if !manifest.is_file() {
+        return Err(fail(format!(
+            "Asset manifest is not a file: {}",
+            manifest.display()
+        )));
+    }
+    let source = fs::read_to_string(manifest)
+        .map_err(|error| fail(format!("Could not read {}: {error}", manifest.display())))?;
+    let assets = parse_asset_list(&source, AssetContext::Shipped)?;
+    apply_assets_with(
+        project,
+        None,
+        &assets,
+        false,
+        &HostTransport,
+        &|_| Ok(false),
+        report,
+    )
+}

@@ -207,6 +207,7 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
     let mut with_lila = false;
     let mut copy_shader_sources = false;
     let mut fetch_assets = false;
+    let mut project_asset_manifest = None;
     let mut replace_shader_conflicts = false;
     let mut validate = false;
     let mut run_report = false;
@@ -229,6 +230,14 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
             "--with-lila" => with_lila = true,
             "--copy-shader-sources" => copy_shader_sources = true,
             "--fetch-assets" => fetch_assets = true,
+            "--fetch-project-assets" => {
+                project_asset_manifest = Some(
+                    arguments
+                        .next()
+                        .ok_or("Missing manifest path for --fetch-project-assets")?
+                        .to_owned(),
+                );
+            }
             "--replace-shader-conflicts" => replace_shader_conflicts = true,
             "--configuration" => {
                 report_options.configuration = Some(
@@ -279,6 +288,7 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
             || with_lila
             || copy_shader_sources
             || fetch_assets
+            || project_asset_manifest.is_some()
             || validate
             || run_report
             || (refresh_preview && refresh_apply)
@@ -334,6 +344,7 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
         && !with_lila
         && !copy_shader_sources
         && !fetch_assets
+        && project_asset_manifest.is_none()
         && !validate
         && !run_report
     {
@@ -361,6 +372,15 @@ fn run_manage(arguments: &[String]) -> Result<(), String> {
         assets::fetch_project_assets(Path::new(project_path), &mut |message| {
             println!("{message}")
         })
+        .map_err(|error| error.to_string())?;
+    }
+
+    if let Some(manifest) = project_asset_manifest {
+        assets::fetch_project_assets_from_file(
+            Path::new(project_path),
+            Path::new(&manifest),
+            &mut |message| println!("{message}"),
+        )
         .map_err(|error| error.to_string())?;
     }
 
@@ -468,7 +488,7 @@ fn print_usage() {
 }
 
 fn usage_text() -> &'static str {
-    "Weave: MayaFlux project tool\n\nUsage:\n  Weave                 Open the Projects screen\n  Weave new <name> [destination] [options]\n  Weave manage <project-dir> [module-name,...] [options]\n  Weave community <module-name> [destination-dir] [options]\n  Weave install <stable|development> [--replace-conflict] [--no-cli]\n  Weave install-cli         Make the CLI available without installing MayaFlux\n  Weave --help\n  Weave --license         Show the embedded license\n  Weave --package-info    Show build and package metadata\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n  --fetch-assets          Fetch assets from installed MayaFlux\n\nOptions for 'manage':\n  --with-lila             Add Lila live-coding integration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n  --replace-shader-conflicts Replace same-path project shader files\n  --fetch-assets          Fetch assets from installed MayaFlux\n  --refresh               List missing or changed template files\n  --refresh-apply         Refresh all listed files\n  --refresh-skip <path>   Keep this file when refreshing (repeatable)\n  --validate              Run the project's validation script\n  --run-report            Run a built project and collect diagnostics\n  --configuration <name>  Select a build configuration for --run-report\n  --executable <path>     Select a custom project executable for --run-report\n  --mayaflux-root <path>  Select MayaFlux for --run-report\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila\n  --with-gtest            Use GoogleTest for module tests"
+    "Weave: MayaFlux project tool\n\nUsage:\n  Weave                 Open the Projects screen\n  Weave new <name> [destination] [options]\n  Weave manage <project-dir> [module-name,...] [options]\n  Weave community <module-name> [destination-dir] [options]\n  Weave install <stable|development> [--replace-conflict] [--no-cli]\n  Weave install-cli         Make the CLI available without installing MayaFlux\n  Weave --help\n  Weave --license         Show the embedded license\n  Weave --package-info    Show build and package metadata\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n  --fetch-assets          Fetch assets from installed MayaFlux\n\nOptions for 'manage':\n  --with-lila             Add Lila live-coding integration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n  --replace-shader-conflicts Replace same-path project shader files\n  --fetch-assets          Fetch assets from installed MayaFlux\n  --fetch-project-assets <file> Fetch assets from a selected manifest\n  --refresh               List missing or changed template files\n  --refresh-apply         Refresh all listed files\n  --refresh-skip <path>   Keep this file when refreshing (repeatable)\n  --validate              Run the project's validation script\n  --run-report            Run a built project and collect diagnostics\n  --configuration <name>  Select a build configuration for --run-report\n  --executable <path>     Select a custom project executable for --run-report\n  --mayaflux-root <path>  Select MayaFlux for --run-report\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila\n  --with-gtest            Use GoogleTest for module tests"
 }
 
 #[cfg(test)]

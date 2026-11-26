@@ -14,10 +14,13 @@ export component ManageProjectScreen inherits VerticalBox {
     in-out property <bool> add_lila;
     in-out property <bool> add_shader_sources;
     in-out property <bool> fetch_assets;
+    in-out property <string> asset_manifest_path;
 
     callback back;
     callback add_community_modules;
     callback apply_options;
+    callback choose_asset_manifest;
+    callback fetch_project_assets;
     callback validate_project;
     callback run_report;
     callback refresh_project;
@@ -291,6 +294,60 @@ export component ManageProjectScreen inherits VerticalBox {
                             text: "Refresh Project Files";
                             enabled: !root.busy;
                             clicked => { root.refresh_project(); }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                width: parent.width;
+                height: asset_content.preferred-height + 32px;
+                preferred-height: self.height;
+                vertical-stretch: 0;
+                background: WeaveTheme.panel-background;
+                border-width: 1px;
+                border-color: WeaveTheme.border;
+                border-radius: 6px;
+
+                asset_content := VerticalBox {
+                    x: 22px;
+                    y: 16px;
+                    width: parent.width - 44px;
+                    height: self.preferred-height;
+                    spacing: 10px;
+
+                    Text {
+                        text: "FETCH PROJECT ASSETS";
+                        color: WeaveTheme.accent;
+                        font-size: WeaveTheme.font-tiny;
+                        font-weight: 700;
+                    }
+                    Text {
+                        text: "Choose an asset manifest JSON file for this project. Files are fetched into data/. Existing files with different contents are kept.";
+                        color: WeaveTheme.text-secondary;
+                        font-size: WeaveTheme.font-body;
+                        preferred-width: 0px;
+                        horizontal-stretch: 1;
+                        wrap: word-wrap;
+                    }
+                    HorizontalBox {
+                        spacing: 12px;
+                        HintLineEdit {
+                            text <=> root.asset_manifest_path;
+                            hint: "Path to assets.json";
+                            enabled: !root.busy;
+                            horizontal-stretch: 1;
+                        }
+                        AppButton {
+                            text: "Browse";
+                            enabled: !root.busy;
+                            clicked => { root.choose_asset_manifest(); }
+                        }
+                        AppButton {
+                            text: "Fetch Project Assets";
+                            primary: true;
+                            enabled: !root.busy && !root.asset_manifest_path.is-empty;
+                            clicked => { root.fetch_project_assets(); }
                         }
                     }
                 }
