@@ -434,6 +434,7 @@ fn run_community(arguments: &[String]) -> Result<CommunityCreationResult, String
     while let Some(argument) = arguments.next() {
         match argument.as_str() {
             "--with-lila" => options.needs_lila = true,
+            "--with-gtest" => options.use_gtest = true,
             "--description" => {
                 options.description = arguments
                     .next()
@@ -467,12 +468,12 @@ fn print_usage() {
 }
 
 fn usage_text() -> &'static str {
-    "Weave: MayaFlux project tool\n\nUsage:\n  Weave                 Open the Projects screen\n  Weave new <name> [destination] [options]\n  Weave manage <project-dir> [module-name,...] [options]\n  Weave community <module-name> [destination-dir] [options]\n  Weave install <stable|development> [--replace-conflict] [--no-cli]\n  Weave install-cli         Make the CLI available without installing MayaFlux\n  Weave --help\n  Weave --license         Show the embedded license\n  Weave --package-info    Show build and package metadata\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n  --fetch-assets          Fetch assets from installed MayaFlux\n\nOptions for 'manage':\n  --with-lila             Add Lila live-coding integration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n  --replace-shader-conflicts Replace same-path project shader files\n  --fetch-assets          Fetch assets from installed MayaFlux\n  --refresh               List missing or changed template files\n  --refresh-apply         Refresh all listed files\n  --refresh-skip <path>   Keep this file when refreshing (repeatable)\n  --validate              Run the project's validation script\n  --run-report            Run a built project and collect diagnostics\n  --configuration <name>  Select a build configuration for --run-report\n  --executable <path>     Select a custom project executable for --run-report\n  --mayaflux-root <path>  Select MayaFlux for --run-report\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila"
+    "Weave: MayaFlux project tool\n\nUsage:\n  Weave                 Open the Projects screen\n  Weave new <name> [destination] [options]\n  Weave manage <project-dir> [module-name,...] [options]\n  Weave community <module-name> [destination-dir] [options]\n  Weave install <stable|development> [--replace-conflict] [--no-cli]\n  Weave install-cli         Make the CLI available without installing MayaFlux\n  Weave --help\n  Weave --license         Show the embedded license\n  Weave --package-info    Show build and package metadata\n\nOptions for 'new':\n  --with-lila             Enable Live Coding\n  --no-vscode             Skip VS Code configuration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n  --fetch-assets          Fetch assets from installed MayaFlux\n\nOptions for 'manage':\n  --with-lila             Add Lila live-coding integration\n  --copy-shader-sources   Copy installed MayaFlux shader sources\n  --replace-shader-conflicts Replace same-path project shader files\n  --fetch-assets          Fetch assets from installed MayaFlux\n  --refresh               List missing or changed template files\n  --refresh-apply         Refresh all listed files\n  --refresh-skip <path>   Keep this file when refreshing (repeatable)\n  --validate              Run the project's validation script\n  --run-report            Run a built project and collect diagnostics\n  --configuration <name>  Select a build configuration for --run-report\n  --executable <path>     Select a custom project executable for --run-report\n  --mayaflux-root <path>  Select MayaFlux for --run-report\n\nOptions for 'community':\n  --description <text>    Module description\n  --min-version <version> Minimum MayaFlux version (default 0.5.0)\n  --with-lila             Mark the module as requiring Lila\n  --with-gtest            Use GoogleTest for module tests"
 }
 
 #[cfg(test)]
 mod tests {
-    use super::usage_text;
+    use super::{run_community, usage_text};
 
     #[test]
     fn usage_advertises_manage_instead_of_update() {
@@ -483,5 +484,38 @@ mod tests {
             usage.contains("--run-report            Run a built project and collect diagnostics")
         );
         assert!(!usage.contains("Weave update"));
+    }
+
+    #[test]
+    fn community_gtest_flag_generates_discovered_tests() {
+        let destination = std::env::temp_dir().join(format!(
+            "weave-gtest-cli-{}",
+            crate::filesystem::unique_id()
+        ));
+        std::fs::create_dir(&destination).unwrap();
+        let arguments = [
+            "audio_tools".to_owned(),
+            destination.to_string_lossy().into_owned(),
+            "--with-gtest".to_owned(),
+        ];
+        let result = run_community(&arguments);
+        let generated = result.as_ref().ok().map(|created| created.path.clone());
+        let cmake = generated
+            .as_ref()
+            .map(|path| std::fs::read_to_string(path.join("test/CMakeLists.txt")).unwrap());
+        let source = generated
+            .as_ref()
+            .map(|path| std::fs::read_to_string(path.join("test/test_audio_tools.cpp")).unwrap());
+        std::fs::remove_dir_all(&destination).unwrap();
+
+        assert!(result.is_ok(), "{result:?}");
+        let cmake = cmake.unwrap();
+        assert!(cmake.contains("find_package(GTest QUIET)"));
+        assert!(cmake.contains("FetchContent_MakeAvailable(googletest)"));
+        assert!(cmake.contains("gtest_discover_tests(test_audio_tools DISCOVERY_MODE PRE_TEST)"));
+        assert!(cmake.contains("GTest::gtest"));
+        let source = source.unwrap();
+        assert!(source.contains("#include <gtest/gtest.h>"));
+        assert!(source.contains("TEST("));
     }
 }

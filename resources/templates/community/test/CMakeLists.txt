@@ -6,6 +6,9 @@ enable_testing()
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+endif()
 
 add_compile_definitions(MAYAFLUX_PROJECT)
 
@@ -37,6 +40,11 @@ endif()
 file(GLOB_RECURSE _@MODULE_NAME@_sources CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/*.cpp"
 )
+if(NOT _@MODULE_NAME@_sources)
+    set(_@MODULE_NAME@_empty_source "${CMAKE_CURRENT_BINARY_DIR}/empty_module.cpp")
+    file(WRITE "${_@MODULE_NAME@_empty_source}" "")
+    list(APPEND _@MODULE_NAME@_sources "${_@MODULE_NAME@_empty_source}")
+endif()
 
 add_library(@MODULE_NAME@ OBJECT ${_@MODULE_NAME@_sources})
 
@@ -54,15 +62,29 @@ if(MF_NEEDS_LILA)
     target_link_libraries(@MODULE_NAME@ PUBLIC MayaFlux::MayaFluxHost)
 endif()
 
+@TEST_HARNESS_SETUP@
+
 add_executable(test_@MODULE_NAME@ 
     test_@MODULE_NAME@.cpp
     $<TARGET_OBJECTS:@MODULE_NAME@>
 )
 
 target_precompile_headers(test_@MODULE_NAME@ REUSE_FROM @MODULE_NAME@)
-target_link_libraries(test_@MODULE_NAME@ PRIVATE @MODULE_NAME@ MayaFlux::MayaFluxLib)
+target_link_libraries(test_@MODULE_NAME@ PRIVATE @MODULE_NAME@ MayaFlux::MayaFluxLib@TEST_HARNESS_LIBRARIES@)
 
-add_test(NAME @MODULE_NAME@ COMMAND test_@MODULE_NAME@)
+if(WIN32)
+    # MayaFlux's imported targets expose their DLL locations to this expression.
+    # Place them beside the executable before CTest runs or discovers tests.
+    add_custom_command(TARGET test_@MODULE_NAME@ POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+            $<TARGET_RUNTIME_DLLS:test_@MODULE_NAME@>
+            $<TARGET_FILE_DIR:test_@MODULE_NAME@>
+        COMMAND_EXPAND_LISTS
+        VERBATIM
+    )
+endif()
+
+@TEST_HARNESS_REGISTRATION@
 
 if(UNIX)
     execute_process(

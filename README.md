@@ -99,7 +99,9 @@ A module's `community.json` may also declare packages, manual installations, and
 
 ### Create a module
 
-Choose **Projects > Create Community Module**. Enter a snake_case name, description, minimum MayaFlux version, and whether the module needs Lila. Weave creates the source folder, CMake configuration, `community.json`, and a test project.
+Choose **Projects > Create Community Module**. Enter a snake_case name, description, minimum MayaFlux version, and whether the module needs Lila. Weave creates the source folder, CMake configuration, `community.json`, and a test project. The test project uses plain C++ by default. Select **Use GoogleTest for module tests** for named tests and assertions, or add `--with-gtest` to the CLI command.
+
+The GoogleTest choice uses an installed GTest package when available. Otherwise CMake downloads the pinned 1.18.0 release during configuration. An offline build needs an installed GTest package or a local source directory passed as `-DFETCHCONTENT_SOURCE_DIR_GOOGLETEST=<path>` when configuring. This choice affects the module's standalone tests, not the module when another project uses it.
 
 Build and test from the generated module folder:
 
@@ -123,7 +125,7 @@ Examples below use `Weave` as shorthand for that executable:
 
 ```sh
 Weave new AudioDemo /path/to/projects --with-lila
-Weave community audio_tools /path/to/modules --description "Audio helpers"
+Weave community audio_tools /path/to/modules --description "Audio helpers" --with-gtest
 Weave manage /path/to/AudioDemo terrain_field,audio_tools
 Weave manage /path/to/AudioDemo --with-lila --copy-shader-sources
 Weave manage /path/to/AudioDemo --copy-shader-sources --replace-shader-conflicts

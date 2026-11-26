@@ -189,6 +189,7 @@ pub(super) fn register(window: &MainWindow, controller: &GuiController) {
                 description: window.get_module_description().to_string(),
                 min_version: version,
                 needs_lila: window.get_community_needs_lila(),
+                use_gtest: window.get_community_use_gtest(),
             };
 
             let worker = community.clone();

@@ -50,6 +50,7 @@ export component MainWindow inherits Window {
     in-out property <string> module_min_version: "";
     in-out property <string> module_min_version_error: "";
     in-out property <bool> community_needs_lila: false;
+    in-out property <bool> community_use_gtest: false;
 
     // Managed project and optional features
     in-out property <string> managed_project_path: "";
@@ -274,6 +275,7 @@ export component MainWindow inherits Window {
                 destination <=> root.destination;
                 destination_error <=> root.destination_error;
                 community_needs_lila <=> root.community_needs_lila;
+                community_use_gtest <=> root.community_use_gtest;
 
                 back => { root.screen = AppScreen.projects; }
                 choose_destination => { root.choose_destination(); }

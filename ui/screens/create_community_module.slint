@@ -13,6 +13,7 @@ export component CreateCommunityModuleScreen inherits VerticalBox {
     in-out property <string> destination;
     in-out property <string> destination_error;
     in-out property <bool> community_needs_lila;
+    in-out property <bool> community_use_gtest;
 
     callback back;
     callback choose_destination;
@@ -177,6 +178,12 @@ export component CreateCommunityModuleScreen inherits VerticalBox {
                     CheckBox {
                         text: "Requires Lila live coding";
                         checked <=> root.community_needs_lila;
+                        enabled: !root.busy;
+                    }
+
+                    CheckBox {
+                        text: "Use GoogleTest for module tests";
+                        checked <=> root.community_use_gtest;
                         enabled: !root.busy;
                     }
                 }

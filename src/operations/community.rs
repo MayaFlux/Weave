@@ -11,6 +11,7 @@ pub struct CommunityModuleOptions {
     pub description: String,
     pub min_version: String,
     pub needs_lila: bool,
+    pub use_gtest: bool,
 }
 
 impl Default for CommunityModuleOptions {
@@ -19,6 +20,7 @@ impl Default for CommunityModuleOptions {
             description: String::new(),
             min_version: "0.5.0".to_owned(),
             needs_lila: false,
+            use_gtest: false,
         }
     }
 }
@@ -60,6 +62,7 @@ pub fn create_community_module(
             options.min_version.trim().to_owned()
         },
         needs_lila: options.needs_lila,
+        use_gtest: options.use_gtest,
     };
     validate_min_version(&options.min_version)?;
     let destination = resolve_destination(destination)?;
@@ -217,6 +220,33 @@ fn populate_module(
         "/resources/templates/community/test/CMakeLists.txt"
     ))
     .replace("@MODULE_NAME@", name);
+    let gtest_setup = if options.use_gtest {
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/templates/community/test/gtest_setup.cmake"
+        ))
+    } else {
+        ""
+    };
+    test_cmake = test_cmake
+        .replace("@TEST_HARNESS_SETUP@", gtest_setup)
+        .replace(
+            "@TEST_HARNESS_LIBRARIES@",
+            if options.use_gtest {
+                " GTest::gtest"
+            } else {
+                ""
+            },
+        )
+        .replace(
+            "@TEST_HARNESS_REGISTRATION@",
+            if options.use_gtest {
+                "include(GoogleTest)\ngtest_discover_tests(test_@MODULE_NAME@ DISCOVERY_MODE PRE_TEST)"
+            } else {
+                "add_test(NAME @MODULE_NAME@ COMMAND test_@MODULE_NAME@)"
+            },
+        )
+        .replace("@MODULE_NAME@", name);
     let settings = format!(
         "set(MF_MIN_VERSION \"{}\")\nset(MF_NEEDS_LILA {})",
         options.min_version,
@@ -232,8 +262,13 @@ fn populate_module(
     let root_cmake = format!(
         "cmake_minimum_required(VERSION 3.25)\nproject({name} LANGUAGES C CXX)\nenable_testing()\nadd_subdirectory(test)\n"
     );
+    let harness_readme = if options.use_gtest {
+        "The test project uses GoogleTest. CMake uses an installed GTest package when available; otherwise it downloads the pinned 1.18.0 release at configure time. Offline builds need an installed GTest package or a local source supplied through `FETCHCONTENT_SOURCE_DIR_GOOGLETEST`. On Windows, an installed GTest package must use the same MSVC DLL runtime as MayaFlux; the downloaded fallback is configured to match. Replace the skipped example test with checks for your module."
+    } else {
+        "The test project uses a plain C++ executable registered with CTest. Replace its empty main function with checks for your module."
+    };
     let readme = format!(
-        "# {name}\n\n{}\n\nAdd module implementation files under `src/` and checks in `test/test_{name}.cpp`.\n\nWith MayaFlux and its required build tools installed, configure, build, and test with:\n\n```sh\ncmake --preset release\ncmake --build --preset release\nctest --preset release\n```\n\nWhen Git is available, Weave initializes a repository and stages the generated files. Git is optional for building.\n",
+        "# {name}\n\n{}\n\nAdd module implementation files under `src/` and checks in `test/test_{name}.cpp`.\n\n{harness_readme}\n\nWith MayaFlux and its required build tools installed, configure, build, and test with:\n\n```sh\ncmake --preset release\ncmake --build --preset release\nctest --preset release\n```\n\nWhen Git is available, Weave initializes a repository and stages the generated files. Git is optional for building.\n",
         if options.description.is_empty() {
             "A MayaFlux community module."
         } else {
@@ -273,7 +308,15 @@ fn populate_module(
         ("test/CMakeLists.txt".to_owned(), test_cmake),
         (
             format!("test/test_{name}.cpp"),
-            "int main()\n{\n    return 0;\n}\n".to_owned(),
+            if options.use_gtest {
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/resources/templates/community/test/gtest_example.cpp"
+                ))
+                .to_owned()
+            } else {
+                "int main()\n{\n    return 0;\n}\n".to_owned()
+            },
         ),
     ];
 
@@ -332,6 +375,7 @@ mod tests {
                 description: "  Audio helpers  ".to_owned(),
                 min_version: " 0.6.0 ".to_owned(),
                 needs_lila: true,
+                use_gtest: false,
             },
         )
         .unwrap();
@@ -415,6 +459,7 @@ mod tests {
                 description: "  ".to_owned(),
                 min_version: "  ".to_owned(),
                 needs_lila: false,
+                use_gtest: false,
             },
         )
         .unwrap();
