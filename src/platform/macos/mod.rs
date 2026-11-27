@@ -3,6 +3,7 @@ use crate::operations::install::run_command_with_log;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub fn shader_source_root() -> Option<PathBuf> {
     mayaflux_prefixes()
@@ -494,6 +495,111 @@ mod install_tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    #[test]
+    fn installs_either_edition_when_homebrew_requires_formula_trust() {
+        for formula in ["mayaflux", "mayaflux-dev"] {
+            let (root, brew, commands) = fake_brew_requiring_trust("mayaflux/mayaflux/stb", true);
+            let lines = std::sync::Mutex::new(Vec::new());
+            install_formula_with_brew(
+                &brew,
+                formula,
+                false,
+                &|line| lines.lock().unwrap().push(line.to_owned()),
+                |_, _| Ok(()),
+            )
+            .unwrap();
+
+            let install = format!("install mayaflux/mayaflux/{formula}");
+            let commands = fs::read_to_string(commands).unwrap();
+            let changes: Vec<_> = commands
+                .lines()
+                .filter(|line| !line.starts_with("list "))
+                .collect();
+            assert_eq!(
+                changes,
+                [
+                    install.as_str(),
+                    "trust --formula mayaflux/mayaflux/stb",
+                    install.as_str()
+                ]
+            );
+            let lines = lines.into_inner().unwrap();
+            assert!(!lines.iter().any(|line| line.contains("No such keg")));
+            assert!(
+                lines
+                    .iter()
+                    .any(|line| line.contains("Refusing to load formula"))
+            );
+            let _ = fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn limits_trust_recovery_to_the_known_dependency_and_stops_if_trust_fails() {
+        for (dependency, expect_trust) in
+            [("other/tap/stb", false), ("mayaflux/mayaflux/stb", true)]
+        {
+            let (root, brew, commands) = fake_brew_requiring_trust(dependency, false);
+            let error =
+                install_formula_with_brew(&brew, "mayaflux-dev", false, &|_| {}, |_, _| Ok(()))
+                    .unwrap_err()
+                    .to_string();
+            let commands = fs::read_to_string(commands).unwrap();
+            assert_eq!(
+                commands
+                    .lines()
+                    .filter(|line| line.starts_with("install "))
+                    .count(),
+                1
+            );
+            assert_eq!(commands.contains("trust --formula"), expect_trust);
+            assert_eq!(error.contains("could not trust"), expect_trust);
+            assert!(!error.contains("Check network access"));
+            let _ = fs::remove_dir_all(root);
+        }
+    }
+
+    fn fake_brew_requiring_trust(
+        dependency: &str,
+        trust_succeeds: bool,
+    ) -> (PathBuf, PathBuf, PathBuf) {
+        let root = temp_dir();
+        fs::create_dir_all(&root).unwrap();
+        let log = root.join("commands.log");
+        let brew = root.join("brew");
+        let tap = dependency.rsplit_once('/').unwrap().0;
+        fs::write(
+            &brew,
+            format!(
+                r#"#!/bin/sh
+cd '{}'
+printf '%s\n' "$*" >> commands.log
+case "$1:$2" in
+  list:--formula)
+    if [ ! -f "$3" ]; then
+      echo "Error: No such keg: /opt/homebrew/Cellar/$3" >&2
+      exit 1
+    fi ;;
+  install:*)
+    if [ ! -f trusted ]; then
+      echo 'Error: Refusing to load formula {dependency} from untrusted tap {tap}.' >&2
+      exit 1
+    fi
+    touch "${{2##*/}}" ;;
+  trust:--formula)
+    [ "$3" = '{dependency}' ] && {} && touch trusted ;;
+  *) exit 2 ;;
+esac
+"#,
+                root.display(),
+                trust_succeeds,
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&brew, fs::Permissions::from_mode(0o755)).unwrap();
+        (root, brew, log)
+    }
+
     fn fake_brew(fail_install: bool, conflicting_installed: bool) -> (PathBuf, PathBuf, PathBuf) {
         let root = temp_dir();
         fs::create_dir_all(root.join("state")).unwrap();
@@ -667,7 +773,6 @@ fn install_formula_with_brew_at(
         formula == "mayaflux-dev" && brew_formula_installed(brew, formula, log);
     let fresh_development =
         installed_development && development_formula_payload_is_fresh(brew, formula, now, log);
-    let full_formula = format!("mayaflux/mayaflux/{formula}");
     if fresh_development {
         log(
             "The installed development formula is fresh and its required payload files are present; skipping Homebrew reinstall.",
@@ -678,15 +783,18 @@ fn install_formula_with_brew_at(
         } else {
             "install"
         };
-        log(&format!("{action} {full_formula} with Homebrew…"));
-        run_brew_with_log(brew, &[action, &full_formula], log).map_err(|error| {
-        let recovery = if removed_conflict {
-            format!(" The previous edition was removed; restore it with `{} install mayaflux/mayaflux/{conflicting}` or retry this install.", brew.display())
-        } else {
-            String::new()
-        };
-        crate::operations::install::InstallError::Failed(format!("Homebrew could not {action} {formula}: {error}\nCheck network access and retry.{recovery}"))
-        })?;
+        if let Err(error) = install_brew_formula(brew, action, formula, log) {
+            let mut message = format!(
+                "Homebrew could not {action} {formula}: {error}\nReview the Homebrew output above before retrying."
+            );
+            if removed_conflict {
+                message.push_str(&format!(
+                    "\nThe previous edition was removed. You can restore it with `{} install mayaflux/mayaflux/{conflicting}`.",
+                    brew.display()
+                ));
+            }
+            return Err(crate::operations::install::InstallError::Failed(message));
+        }
     }
     log("Verifying the installed formula…");
     if !brew_formula_installed(brew, formula, log) {
@@ -704,6 +812,39 @@ fn install_formula_with_brew_at(
     Ok(format!(
         "{formula} installed and verified with Homebrew. Your zsh environment is configured."
     ))
+}
+
+fn install_brew_formula(
+    brew: &std::path::Path,
+    action: &str,
+    formula: &str,
+    log: &(impl Fn(&str) + Sync),
+) -> Result<(), String> {
+    const STB_FORMULA: &str = "mayaflux/mayaflux/stb";
+    let trust_error = format!(
+        "Error: Refusing to load formula {STB_FORMULA} from untrusted tap mayaflux/mayaflux."
+    );
+    let full_formula = format!("mayaflux/mayaflux/{formula}");
+    log(&format!("{action} {full_formula} with Homebrew…"));
+    let arguments = [action, full_formula.as_str()];
+    let needs_trust = AtomicBool::new(false);
+    let result = run_brew_with_log(brew, &arguments, &|line| {
+        if line.trim() == trust_error {
+            needs_trust.store(true, Ordering::Relaxed);
+        }
+        log(line);
+    });
+    if result.is_ok() || !needs_trust.load(Ordering::Relaxed) {
+        return result;
+    }
+
+    log(&format!(
+        "Granting Homebrew formula trust to the MayaFlux dependency {STB_FORMULA}…"
+    ));
+    run_brew_with_log(brew, &["trust", "--formula", STB_FORMULA], log)
+        .map_err(|error| format!("Homebrew could not trust {STB_FORMULA}: {error}"))?;
+    log(&format!("Retrying Homebrew {action} for {full_formula}…"));
+    run_brew_with_log(brew, &arguments, log)
 }
 
 fn development_formula_payload_is_fresh(
@@ -917,7 +1058,9 @@ fn brew_formula_installed(
     match result {
         Ok(output) => {
             for line in String::from_utf8_lossy(&output.stderr).lines() {
-                log(line);
+                if !line.starts_with("Error: No such keg: ") {
+                    log(line);
+                }
             }
             output.status.success()
         }

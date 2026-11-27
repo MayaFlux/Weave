@@ -133,6 +133,36 @@ if [[ "$validator_output" == *'.local/bin'* ]]; then
     exit 1
 fi
 
+# Exercise the packaged install command with an isolated Homebrew and shell setup.
+INSTALL_FIXTURE="$TEMP_DIR/install-fixture"
+mkdir -p "$INSTALL_FIXTURE/bin" "$INSTALL_FIXTURE/home" "$INSTALL_FIXTURE/zdotdir"
+cat > "$INSTALL_FIXTURE/bin/brew" <<'SH'
+#!/bin/sh
+set -eu
+cd "$WEAVE_TEST_INSTALL_FIXTURE"
+case "$*" in
+    'list --formula mayaflux') exit 1 ;;
+    'list --formula mayaflux-dev') test -f installed ;;
+    'trust --formula mayaflux/mayaflux/stb') touch trusted ;;
+    'install mayaflux/mayaflux/mayaflux-dev')
+        if [ ! -f trusted ]; then
+            echo 'Error: Refusing to load formula mayaflux/mayaflux/stb from untrusted tap mayaflux/mayaflux.' >&2
+            exit 1
+        fi
+        touch installed ;;
+    '--prefix mayaflux-dev') printf '%s\n' "$WEAVE_TEST_MAYAFLUX_ROOT" ;;
+    *) exit 2 ;;
+esac
+SH
+chmod +x "$INSTALL_FIXTURE/bin/brew"
+env PATH="$INSTALL_FIXTURE/bin:/usr/bin:/bin" \
+    HOME="$INSTALL_FIXTURE/home" ZDOTDIR="$INSTALL_FIXTURE/zdotdir" \
+    WEAVE_TEST_INSTALL_FIXTURE="$INSTALL_FIXTURE" \
+    "$CLI" install development --no-cli
+[[ -f "$INSTALL_FIXTURE/trusted" && -f "$INSTALL_FIXTURE/installed" ]]
+grep -Fqs "source '$UPDATE_ROOT/env.sh'" \
+    "$INSTALL_FIXTURE/zdotdir/.zshenv" "$INSTALL_FIXTURE/home/.zshenv"
+
 # Ask Launch Services to launch the actual GUI app from the mounted DMG.
 open -n -W "$APP_BUNDLE" &
 GUI_OPEN_PID=$!
