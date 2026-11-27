@@ -135,7 +135,9 @@ get_filename_component(MAYAFLUX_PREFIX "${MayaFlux_DIR}/../../.." ABSOLUTE)
 
 set(MAYAFLUX_DESCRIBED_HEADERS "")
 set(MAYAFLUX_DESCRIBED_FUNCTION_HEADERS "")
-foreach(_header IN LISTS HEADERS)
+set(_candidates ${HEADERS})
+list(REMOVE_DUPLICATES _candidates)
+foreach(_header IN LISTS _candidates)
     if(NOT _header MATCHES "\\.(h|hh|hpp|hxx)$" OR _header MATCHES "\\.(describe|signatures)\\.[^.]+$")
         continue()
     endif()
@@ -165,67 +167,57 @@ if(MAYAFLUX_REFLECT_BUILD AND (MAYAFLUX_DESCRIBED_HEADERS OR MAYAFLUX_DESCRIBED_
 
         set(_stamps "")
 
-        if(MAYAFLUX_DESCRIBED_HEADERS)
-            find_program(MAYAFLUX_REFLECT_EXECUTABLE mayaflux_reflect HINTS "${MAYAFLUX_PREFIX}/bin")
-            if(NOT MAYAFLUX_REFLECT_EXECUTABLE)
-                message(FATAL_ERROR "mayaflux_reflect not found in ${MAYAFLUX_PREFIX}/bin. Reinstall MayaFlux or set MAYAFLUX_ROOT.")
+        foreach(_kind IN ITEMS describe signatures)
+            if(_kind STREQUAL "describe")
+                set(_headers ${MAYAFLUX_DESCRIBED_HEADERS})
+                set(_tool_name mayaflux_reflect)
+                set(_tool_var MAYAFLUX_REFLECT_EXECUTABLE)
+                set(_mode --build)
+            else()
+                set(_headers ${MAYAFLUX_DESCRIBED_FUNCTION_HEADERS})
+                set(_tool_name mayaflux_signatures)
+                set(_tool_var MAYAFLUX_SIGNATURES_EXECUTABLE)
+                set(_mode --functions --build)
             endif()
-            foreach(_header IN LISTS MAYAFLUX_DESCRIBED_HEADERS)
-                get_filename_component(_dir "${_header}" DIRECTORY)
-                get_filename_component(_stem "${_header}" NAME_WLE)
-                file(RELATIVE_PATH _rel "${CMAKE_SOURCE_DIR}" "${_header}")
-                set(_sidecar "${_dir}/${_stem}.describe.hpp")
-                set(_depfile "${CMAKE_BINARY_DIR}/mayaflux_reflect/${_rel}.d")
-                set(_stamp "${CMAKE_BINARY_DIR}/mayaflux_reflect/${_rel}.stamp")
-                add_custom_command(
-                    OUTPUT "${_stamp}"
-                    BYPRODUCTS "${_sidecar}"
-                    COMMAND "${MAYAFLUX_REFLECT_EXECUTABLE}" --build "${_header}"
-                        -p "${CMAKE_BINARY_DIR}"
-                        --translation-unit "${_scan_unit}"
-                        ${_scan_flags}
-                        --depfile "${_depfile}"
-                        --depfile-target "${_stamp}"
-                    COMMAND ${CMAKE_COMMAND} -E touch "${_stamp}"
-                    DEPENDS "${_header}"
-                    DEPFILE "${_depfile}"
-                    COMMENT "Describing ${_rel}"
-                    VERBATIM
-                )
-                list(APPEND _stamps "${_stamp}")
-            endforeach()
-        endif()
+            if(NOT _headers)
+                continue()
+            endif()
 
-        if(MAYAFLUX_DESCRIBED_FUNCTION_HEADERS)
-            find_program(MAYAFLUX_SIGNATURES_EXECUTABLE mayaflux_signatures HINTS "${MAYAFLUX_PREFIX}/bin")
-            if(NOT MAYAFLUX_SIGNATURES_EXECUTABLE)
-                message(FATAL_ERROR "mayaflux_signatures not found in ${MAYAFLUX_PREFIX}/bin. Reinstall MayaFlux or set MAYAFLUX_ROOT.")
+            find_program(${_tool_var} ${_tool_name} HINTS "${MAYAFLUX_PREFIX}/bin")
+            if(NOT ${_tool_var})
+                message(FATAL_ERROR "${_tool_name} not found in ${MAYAFLUX_PREFIX}/bin. Reinstall MayaFlux or set MAYAFLUX_ROOT.")
             endif()
-            foreach(_header IN LISTS MAYAFLUX_DESCRIBED_FUNCTION_HEADERS)
+
+            set(_sidecars "")
+            set(_listing "")
+            foreach(_header IN LISTS _headers)
                 get_filename_component(_dir "${_header}" DIRECTORY)
                 get_filename_component(_stem "${_header}" NAME_WLE)
-                file(RELATIVE_PATH _rel "${CMAKE_SOURCE_DIR}" "${_header}")
-                set(_sidecar "${_dir}/${_stem}.signatures.hpp")
-                set(_depfile "${CMAKE_BINARY_DIR}/mayaflux_reflect/${_rel}.signatures.d")
-                set(_stamp "${CMAKE_BINARY_DIR}/mayaflux_reflect/${_rel}.signatures.stamp")
-                add_custom_command(
-                    OUTPUT "${_stamp}"
-                    BYPRODUCTS "${_sidecar}"
-                    COMMAND "${MAYAFLUX_SIGNATURES_EXECUTABLE}" --functions --build "${_header}"
-                        -p "${CMAKE_BINARY_DIR}"
-                        --translation-unit "${_scan_unit}"
-                        ${_scan_flags}
-                        --depfile "${_depfile}"
-                        --depfile-target "${_stamp}"
-                    COMMAND ${CMAKE_COMMAND} -E touch "${_stamp}"
-                    DEPENDS "${_header}"
-                    DEPFILE "${_depfile}"
-                    COMMENT "Describing functions in ${_rel}"
-                    VERBATIM
-                )
-                list(APPEND _stamps "${_stamp}")
+                list(APPEND _sidecars "${_dir}/${_stem}.${_kind}.hpp")
+                get_filename_component(_absolute "${_header}" ABSOLUTE)
+                string(APPEND _listing "\"${_absolute}\"\n")
             endforeach()
-        endif()
+
+            set(_work "${CMAKE_BINARY_DIR}/mayaflux_reflect/${_kind}")
+            file(CONFIGURE OUTPUT "${_work}.rsp" CONTENT "${_listing}")
+
+            add_custom_command(
+                OUTPUT "${_work}.stamp"
+                BYPRODUCTS ${_sidecars}
+                COMMAND "${${_tool_var}}" ${_mode} "@${_work}.rsp"
+                    -p "${CMAKE_BINARY_DIR}"
+                    --translation-unit "${_scan_unit}"
+                    ${_scan_flags}
+                    --depfile "${_work}.d"
+                    --depfile-target "${_work}.stamp"
+                COMMAND ${CMAKE_COMMAND} -E touch "${_work}.stamp"
+                DEPENDS ${_headers} "${_work}.rsp" "${${_tool_var}}"
+                DEPFILE "${_work}.d"
+                COMMENT "Reflecting ${_kind} headers"
+                VERBATIM
+            )
+            list(APPEND _stamps "${_work}.stamp")
+        endforeach()
 
         add_custom_target(${PROJECT_NAME}_reflect DEPENDS ${_stamps})
         add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}_reflect)
