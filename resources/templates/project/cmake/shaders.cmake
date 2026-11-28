@@ -40,23 +40,6 @@ foreach(SHADER_FILE ${PROJECT_SHADER_FILES})
     )
 
     list(APPEND PROJECT_SHADER_OUTPUTS "${OUTPUT_FILE}")
-
-    if(SHADER_FILE MATCHES "_lit\\.frag$")
-        string(REGEX REPLACE "_lit\\.frag$" "_lit_list.frag.spv" LIST_OUTPUT "${SHADER_FILE}")
-        add_custom_command(
-            OUTPUT  "${LIST_OUTPUT}"
-            COMMAND glslc --target-env=vulkan1.4 -DMF_INFLUENCE_LIST
-                -I "${PROJECT_SHADER_DIR}"
-                -I "${PROJECT_SHADER_DIR}/include"
-                -MD -MF "${LIST_OUTPUT}.d"
-                "${SHADER_FILE}" -o "${LIST_OUTPUT}"
-            DEPENDS "${SHADER_FILE}"
-            DEPFILE "${LIST_OUTPUT}.d"
-            COMMENT "Compiling shader: ${LIST_OUTPUT}"
-            VERBATIM
-        )
-        list(APPEND PROJECT_SHADER_OUTPUTS "${LIST_OUTPUT}")
-    endif()
 endforeach()
 
 add_custom_target(compile_project_shaders DEPENDS ${PROJECT_SHADER_OUTPUTS})
