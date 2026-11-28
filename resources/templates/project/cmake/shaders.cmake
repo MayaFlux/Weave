@@ -28,7 +28,7 @@ foreach(SHADER_FILE ${PROJECT_SHADER_FILES})
 
     add_custom_command(
         OUTPUT  "${OUTPUT_FILE}"
-        COMMAND glslc --target-env=vulkan1.3
+        COMMAND glslc --target-env=vulkan1.4
             -I "${PROJECT_SHADER_DIR}"
             -I "${PROJECT_SHADER_DIR}/include"
             -MD -MF "${OUTPUT_FILE}.d"
@@ -45,7 +45,7 @@ foreach(SHADER_FILE ${PROJECT_SHADER_FILES})
         string(REGEX REPLACE "_lit\\.frag$" "_lit_list.frag.spv" LIST_OUTPUT "${SHADER_FILE}")
         add_custom_command(
             OUTPUT  "${LIST_OUTPUT}"
-            COMMAND glslc --target-env=vulkan1.3 -DMF_INFLUENCE_LIST
+            COMMAND glslc --target-env=vulkan1.4 -DMF_INFLUENCE_LIST
                 -I "${PROJECT_SHADER_DIR}"
                 -I "${PROJECT_SHADER_DIR}/include"
                 -MD -MF "${LIST_OUTPUT}.d"
